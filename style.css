@@ -753,3 +753,59 @@ button{ font-family:inherit; }
   .stock-header { flex-direction: column; align-items: stretch; }
   .stock-search-box { max-width: 100%; }
 }
+
+/* ============================================================
+   STOCK DASHBOARD STYLES
+   ============================================================ */
+.index-highlights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.index-card {
+  background: var(--bg-soft);
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--ink);
+  padding: 20px;
+  border-radius: 2px;
+}
+
+.index-card .idx-name {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+
+.index-card .idx-price {
+  font-family: var(--serif);
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+
+.index-card .idx-change {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.category-section {
+  margin-bottom: 40px;
+}
+
+.category-title {
+  font-family: var(--serif);
+  font-size: 22px;
+  border-bottom: 2px solid var(--ink);
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 620px) {
+  .index-highlights { grid-template-columns: 1fr; }
+}
