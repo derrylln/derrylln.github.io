@@ -8,12 +8,8 @@ const AUTO_REFRESH_MS = 15 * 60 * 1000;
 const OG_MAX_SCRAPES  = 3;
 
 const LS = {
-  news:   'finwire.news.v2',
-  ticker: 'finwire.ticker.v2',
-  read:   'finwire.read.v2',
-  watch:  'finwire.watch.v2',
-  lang:   'finwire.lang.v2',
-  ogimg:  'finwire.ogimg.v2'
+  news: 'finwire.news.v2', ticker: 'finwire.ticker.v2', read: 'finwire.read.v2',
+  watch: 'finwire.watch.v2', lang: 'finwire.lang.v2', ogimg: 'finwire.ogimg.v2'
 };
 
 const SOURCES = [
@@ -30,29 +26,11 @@ const TICKERS = [
   { symbol: 'IDR=X', label: 'USD/IDR' }, { symbol: 'CL=F', label: 'CRUDE OIL' }
 ];
 
-// NEW: Market Dashboard Categories
 const MARKET_CATEGORIES = [
-  {
-    title: 'Global Indices',
-    titleId: 'Indeks Global',
-    symbols: ['^JKSE', '^IXIC', '^GSPC', '^DJI'], // IHSG, NASDAQ, S&P500, Dow Jones
-    isHighlight: true
-  },
-  {
-    title: 'Indonesian Stocks (IDX)',
-    titleId: 'Saham Indonesia (IDX)',
-    symbols: ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 'GOTO.JK']
-  },
-  {
-    title: 'US Tech Stocks',
-    titleId: 'Saham Teknologi AS',
-    symbols: ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'TSLA']
-  },
-  {
-    title: 'Popular ETFs',
-    titleId: 'ETF Populer',
-    symbols: ['SPY', 'QQQ', 'VOO', 'EIDO']
-  }
+  { title: 'Global Indices', titleId: 'Indeks Global', symbols: ['^JKSE', '^IXIC', '^GSPC', '^DJI'], isHighlight: true },
+  { title: 'Indonesian Stocks (IDX)', titleId: 'Saham Indonesia (IDX)', symbols: ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 'GOTO.JK'] },
+  { title: 'US Tech Stocks', titleId: 'Saham Teknologi AS', symbols: ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'TSLA'] },
+  { title: 'Popular ETFs', titleId: 'ETF Populer', symbols: ['SPY', 'QQQ', 'VOO', 'EIDO'] }
 ];
 
 const I18N = {
@@ -60,7 +38,7 @@ const I18N = {
     tagline: 'Markets · Business · Economy', markAllRead: 'Mark all read', watchPh: 'Add watchlist keyword…',
     refresh: 'Refresh', all: 'All', unreadOnly: 'Unread only', loading: 'Fetching latest stories…',
     noArticles: 'No articles match your filters.', liveLabel: 'Live', cacheLabel: 'Cached', staleLabel: 'Offline · cached',
-    errorLabel: 'Could not load feeds. Check your connection.', updated: 'Updated', watch: 'Watch',
+    errorLabel: 'Could not load feeds.', updated: 'Updated', watch: 'Watch',
     footer: 'FINWIRE — client-side market news aggregator.', justNow: 'just now', minAgo: n => `${n}m ago`,
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
@@ -70,8 +48,8 @@ const I18N = {
   id: {
     tagline: 'Pasar · Bisnis · Ekonomi', markAllRead: 'Tandai semua dibaca', watchPh: 'Tambah kata kunci pantauan…',
     refresh: 'Muat ulang', all: 'Semua', unreadOnly: 'Belum dibaca', loading: 'Mengambil berita terbaru…',
-    noArticles: 'Tidak ada berita yang cocok dengan filter Anda.', liveLabel: 'Langsung', cacheLabel: 'Cache', staleLabel: 'Offline · cache',
-    errorLabel: 'Gagal memuat feed. Periksa koneksi Anda.', updated: 'Diperbarui', watch: 'Pantau',
+    noArticles: 'Tidak ada berita yang cocok.', liveLabel: 'Langsung', cacheLabel: 'Cache', staleLabel: 'Offline · cache',
+    errorLabel: 'Gagal memuat feed.', updated: 'Diperbarui', watch: 'Pantau',
     footer: 'FINWIRE — agregator berita pasar berbasis klien.', justNow: 'baru saja', minAgo: n => `${n}m lalu`,
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
@@ -281,7 +259,7 @@ function render() {
   if (!list.length) { if (heroEl) heroEl.innerHTML = ''; if (gridEl) gridEl.innerHTML = `<div class="empty">${esc(t.noArticles)}</div>`; return; }
   let heroIndex = list.findIndex(a => !!a.image); if (heroIndex < 0) heroIndex = 0;
   const hero = list[heroIndex]; const rest = list.slice(0, heroIndex).concat(list.slice(heroIndex + 1));
-  const side = rest.slice(0, 4), grid = rest.slice(4);
+  const side = rest.slice(0, 4), grid = rest.slice(4); // Increased side to 4
   if (heroEl) heroEl.innerHTML = `<div class="hero-main">${cardHTML(hero, 'hero')}</div><div class="hero-side">${side.map(a => cardHTML(a, 'side')).join('')}</div>`;
   if (gridEl) gridEl.innerHTML = grid.map(a => cardHTML(a, 'grid')).join('');
 }
@@ -344,6 +322,62 @@ async function fetchStockDetails(symbol) {
   } catch (e) { return null; }
 }
 
+async function fetchStockRatios(symbol) {
+  try {
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+    const raw = await fetchViaProxy(url, { timeout: 8000 });
+    const data = JSON.parse(raw);
+    const quote = data.quoteResponse.result[0];
+    if (!quote) return null;
+    
+    const fmt = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+    const fmtPct = (n) => n ? (n * 100).toFixed(2) + '%' : '—';
+    
+    let mc = quote.marketCap;
+    if (mc >= 1e12) mc = (mc / 1e12).toFixed(2) + 'T';
+    else if (mc >= 1e9) mc = (mc / 1e9).toFixed(2) + 'B';
+    else if (mc >= 1e6) mc = (mc / 1e6).toFixed(2) + 'M';
+    else mc = fmt(mc);
+
+    return {
+      marketCap: mc,
+      trailingPE: fmt(quote.trailingPE),
+      forwardPE: fmt(quote.forwardPE),
+      dividendYield: quote.dividendYield ? fmtPct(quote.dividendYield) : '—'
+    };
+  } catch (e) { return null; }
+}
+
+function generateStockRow(s) {
+  const t = I18N[state.lang];
+  const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
+  const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
+  const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
+  const fmt = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+  const fmtVol = (n) => n ? (n/1000000).toFixed(2) + 'M' : '—';
+  
+  return `
+    <tr class="stock-row" data-symbol="${esc(s.symbol)}">
+      <td class="sym">${esc(s.symbol)}</td><td>${esc(s.name)}</td>
+      <td class="num" style="font-weight:600;">${fmt(s.price)}</td>
+      <td class="num" style="font-weight:700; color:${color}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</td>
+      <td class="num">${fmtVol(s.volume)}</td><td class="num">${fmt(s.dayLow)} - ${fmt(s.dayHigh)}</td><td class="num">${fmt(s.week52Low)} - ${fmt(s.week52High)}</td>
+    </tr>
+    <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;">
+      <td colspan="7"></td>
+    </tr>`;
+}
+
+function generateTableHTML(valid) {
+  const t = I18N[state.lang];
+  return `<div class="stock-table-wrap">
+    <table class="stock-table">
+      <thead><tr><th>${t.thSym}</th><th>${t.thName}</th><th class="num">${t.thPrice}</th><th class="num">${t.thChange}</th><th class="num">${t.thVol}</th><th class="num">${t.thDay}</th><th class="num">${t.th52w}</th></tr></thead>
+      <tbody>${valid.map(s => generateStockRow(s)).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
@@ -371,26 +405,7 @@ async function loadMarketDashboard() {
       const title = state.lang === 'id' ? cat.titleId : cat.title;
       html += `<div class="category-section">
         <h2 class="category-title">${esc(title)}</h2>
-        <div class="stock-table-wrap">
-          <table class="stock-table">
-            <thead><tr><th>${t.thSym}</th><th>${t.thName}</th><th class="num">${t.thPrice}</th><th class="num">${t.thChange}</th><th class="num">${t.thVol}</th><th class="num">${t.thDay}</th><th class="num">${t.th52w}</th></tr></thead>
-            <tbody>
-              ${valid.map(s => {
-                const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
-                const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
-                const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
-                const fmt = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
-                const fmtVol = (n) => n ? (n/1000000).toFixed(2) + 'M' : '—';
-                return `<tr>
-                  <td class="sym">${esc(s.symbol)}</td><td>${esc(s.name)}</td>
-                  <td class="num" style="font-weight:600;">${fmt(s.price)}</td>
-                  <td class="num" style="font-weight:700; color:${color}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</td>
-                  <td class="num">${fmtVol(s.volume)}</td><td class="num">${fmt(s.dayLow)} - ${fmt(s.dayHigh)}</td><td class="num">${fmt(s.week52Low)} - ${fmt(s.week52High)}</td>
-                </tr>`;
-              }).join('')}
-            </tbody>
-          </table>
-        </div>
+        ${generateTableHTML(valid)}
       </div>`;
     }
   }
@@ -414,26 +429,7 @@ async function searchStocks(query) {
 
     dash.innerHTML = `<div class="category-section">
       <h2 class="category-title">${t.searchBtn}: ${esc(query)}</h2>
-      <div class="stock-table-wrap">
-        <table class="stock-table">
-          <thead><tr><th>${t.thSym}</th><th>${t.thName}</th><th class="num">${t.thPrice}</th><th class="num">${t.thChange}</th><th class="num">${t.thVol}</th><th class="num">${t.thDay}</th><th class="num">${t.th52w}</th></tr></thead>
-          <tbody>
-            ${valid.map(s => {
-              const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
-              const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
-              const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
-              const fmt = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
-              const fmtVol = (n) => n ? (n/1000000).toFixed(2) + 'M' : '—';
-              return `<tr>
-                <td class="sym">${esc(s.symbol)}</td><td>${esc(s.name)}</td>
-                <td class="num" style="font-weight:600;">${fmt(s.price)}</td>
-                <td class="num" style="font-weight:700; color:${color}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</td>
-                <td class="num">${fmtVol(s.volume)}</td><td class="num">${fmt(s.dayLow)} - ${fmt(s.dayHigh)}</td><td class="num">${fmt(s.week52Low)} - ${fmt(s.week52High)}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
+      ${generateTableHTML(valid)}
     </div>`;
   } catch (e) { dash.innerHTML = `<div class="stock-loading">${t.stockErr}</div>`; }
 }
@@ -472,6 +468,47 @@ function bindUI() {
   const searchInput = $('#stockSearchInput');
   if ($('#stockSearchBtn')) $('#stockSearchBtn').addEventListener('click', () => searchStocks(searchInput.value.trim()));
   if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchStocks(searchInput.value.trim()); } });
+
+  // --- Stock Row Expansion Logic ---
+  $('#stockDashboard').addEventListener('click', async (e) => {
+    const row = e.target.closest('.stock-row');
+    if (!row) return;
+    const symbol = row.getAttribute('data-symbol');
+    const detailRow = document.getElementById(`details-${symbol}`);
+    if (!detailRow) return;
+
+    if (detailRow.style.display === 'none') {
+      // Expand
+      detailRow.style.display = 'table-row';
+      row.classList.add('expanded');
+      
+      const td = detailRow.querySelector('td');
+      if (td.innerHTML !== '') return; // Already loaded
+
+      td.innerHTML = `<div class="details-loading">Fetching ratios...</div>`;
+      
+      const ratios = await fetchStockRatios(symbol);
+      if (ratios) {
+        td.innerHTML = `
+          <div class="stock-details-content">
+            <div class="ratio-group">
+              <div class="ratio-item"><span class="ratio-label">Market Cap</span><span class="ratio-value">${ratios.marketCap}</span></div>
+              <div class="ratio-item"><span class="ratio-label">P/E Ratio</span><span class="ratio-value">${ratios.trailingPE}</span></div>
+              <div class="ratio-item"><span class="ratio-label">Fwd P/E</span><span class="ratio-value">${ratios.forwardPE}</span></div>
+              <div class="ratio-item"><span class="ratio-label">Div Yield</span><span class="ratio-value">${ratios.dividendYield}</span></div>
+            </div>
+            <a href="https://finance.yahoo.com/quote/${esc(symbol)}/financials" target="_blank" class="btn-financials">View Official Financials ↗</a>
+          </div>
+        `;
+      } else {
+        td.innerHTML = `<div class="details-loading">Could not load ratios.</div>`;
+      }
+    } else {
+      // Collapse
+      detailRow.style.display = 'none';
+      row.classList.remove('expanded');
+    }
+  });
 
   $('#filters').addEventListener('click', (e) => {
     const chip = e.target.closest('.chip[data-filter]'); if (!chip) return;
