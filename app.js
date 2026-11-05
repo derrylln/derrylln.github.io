@@ -76,13 +76,11 @@ function stripHtml(html) { if (!html) return ''; const doc = new DOMParser().par
 
 /* CORS PROXY LAYER */
 const PROXIES = [
-  // Only use the custom Cloudflare Worker
   (u) => `https://finwire-smart-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`
 ];
-
 let preferredProxy = 0;
 async function fetchViaProxy(targetUrl, options) {
-  const opts = options || {}; const timeout = opts.timeout || 4000; const order = [];
+  const opts = options || {}; const timeout = opts.timeout || 8000; const order = [];
   for (let i = 0; i < PROXIES.length; i++) order.push((preferredProxy + i) % PROXIES.length);
   let lastError = null;
   for (let k = 0; k < order.length; k++) {
@@ -258,7 +256,7 @@ function render() {
   if (!list.length) { if (heroEl) heroEl.innerHTML = ''; if (gridEl) gridEl.innerHTML = `<div class="empty">${esc(t.noArticles)}</div>`; return; }
   let heroIndex = list.findIndex(a => !!a.image); if (heroIndex < 0) heroIndex = 0;
   const hero = list[heroIndex]; const rest = list.slice(0, heroIndex).concat(list.slice(heroIndex + 1));
-  const side = rest.slice(0, 4), grid = rest.slice(4); // Increased side to 4
+  const side = rest.slice(0, 4), grid = rest.slice(4);
   if (heroEl) heroEl.innerHTML = `<div class="hero-main">${cardHTML(hero, 'hero')}</div><div class="hero-side">${side.map(a => cardHTML(a, 'side')).join('')}</div>`;
   if (gridEl) gridEl.innerHTML = grid.map(a => cardHTML(a, 'grid')).join('');
 }
@@ -314,16 +312,16 @@ function switchView(view) {
 
 async function fetchStockDetails(symbol) {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+    // Changed to range=5d to match the working ticker
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
     const raw = await fetchViaProxy(url, { timeout: 8000 });
     const data = JSON.parse(raw);
     
-    // Check if Yahoo actually gave us data
-    if (!data.chart || !data.chart.result || !data.chart.result[0]) {
-      throw new Error('No data for ' + symbol);
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta || typeof meta.regularMarketPrice !== 'number') {
+      throw new Error('No price data');
     }
 
-    const meta = data.chart.result[0].meta;
     return { 
       symbol: meta.symbol, 
       name: meta.shortName || meta.symbol, 
@@ -344,18 +342,50 @@ async function fetchStockDetails(symbol) {
   }
 }
 
+async function fetchStockRatios(symbol) {
+  try {
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,summaryDetail,financialData`;
+    const raw = await fetchViaProxy(url, { timeout: 12000 });
+    const data = JSON.parse(raw);
+    
+    if (data.quoteSummary && data.quoteSummary.result && data.quoteSummary.result[0]) {
+      const res = data.quoteSummary.result[0];
+      const summary = res.summaryDetail || {};
+      const stats = res.defaultKeyStatistics || {};
+      const financial = res.financialData || {};
+      const getRaw = (obj) => (obj && typeof obj === 'object' && obj.raw !== undefined) ? obj.raw : obj;
+      
+      const marketCap = getRaw(summary.marketCap) || getRaw(financial.marketCap);
+      const trailingPE = getRaw(summary.trailingPE) || getRaw(stats.trailingPE);
+      const forwardPE = getRaw(summary.forwardPE) || getRaw(stats.forwardPE);
+      const dividendYield = getRaw(summary.dividendYield);
+
+      const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+      const fmtPct = (n) => (n !== undefined && n !== null) ? (Number(n) * 100).toFixed(2) + '%' : '—';
+      
+      let mcStr = '—';
+      if (marketCap) {
+        if (marketCap >= 1e12) mcStr = (marketCap / 1e12).toFixed(2) + 'T';
+        else if (marketCap >= 1e9) mcStr = (marketCap / 1e9).toFixed(2) + 'B';
+        else if (marketCap >= 1e6) mcStr = (marketCap / 1e6).toFixed(2) + 'M';
+        else mcStr = fmt(marketCap);
+      }
+      return { marketCap: mcStr, trailingPE: fmt(trailingPE), forwardPE: fmt(forwardPE), dividendYield: fmtPct(dividendYield) };
+    }
+  } catch (e) { 
+    console.warn('Ratio fetch failed', e); 
+  }
+  return null;
+}
+
 function generateStockRow(s) {
-  const t = I18N[state.lang];
-  
   if (!s.price) {
     return `
       <tr class="stock-row" data-symbol="${esc(s.symbol)}">
         <td class="sym">${esc(s.symbol)}</td><td>${esc(s.name)}</td>
         <td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
       </tr>
-      <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;">
-        <td colspan="7"></td>
-      </tr>`;
+      <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;"><td colspan="7"></td></tr>`;
   }
 
   const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
@@ -371,9 +401,7 @@ function generateStockRow(s) {
       <td class="num" style="font-weight:700; color:${color}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</td>
       <td class="num">${fmtVol(s.volume)}</td><td class="num">${fmt(s.dayLow)} - ${fmt(s.dayHigh)}</td><td class="num">${fmt(s.week52Low)} - ${fmt(s.week52High)}</td>
     </tr>
-    <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;">
-      <td colspan="7"></td>
-    </tr>`;
+    <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;"><td colspan="7"></td></tr>`;
 }
 
 function generateTableHTML(valid) {
@@ -393,20 +421,14 @@ async function loadMarketDashboard() {
   let html = '';
 
   for (const cat of MARKET_CATEGORIES) {
-    const valid = [];
-    // Fetch sequentially to avoid Yahoo rate limits
-    for (const sym of cat.symbols) {
-      const details = await fetchStockDetails(sym);
-      if (details) valid.push(details);
-      // Wait 150ms before the next request
-      await new Promise(r => setTimeout(r, 400)); 
-    }
+    // Fetch ALL symbols in this category in parallel
+    const settled = await Promise.allSettled(cat.symbols.map(sym => fetchStockDetails(sym)));
+    const valid = settled.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean);
 
     if (cat.isHighlight) {
       html += `<div class="index-highlights">`;
       html += valid.map(s => {
         if (!s.price) return `<div class="index-card"><div class="idx-name">${esc(s.symbol)}</div><div class="idx-price">—</div></div>`;
-        
         const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
         const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
         const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
@@ -419,10 +441,7 @@ async function loadMarketDashboard() {
       html += `</div>`;
     } else {
       const title = state.lang === 'id' ? cat.titleId : cat.title;
-      html += `<div class="category-section">
-        <h2 class="category-title">${esc(title)}</h2>
-        ${generateTableHTML(valid)}
-      </div>`;
+      html += `<div class="category-section"><h2 class="category-title">${esc(title)}</h2>${generateTableHTML(valid)}</div>`;
     }
   }
   dash.innerHTML = html;
@@ -443,10 +462,7 @@ async function searchStocks(query) {
     const results = await Promise.all(symbols.slice(0, 10).map(s => fetchStockDetails(s)));
     const valid = results.filter(r => r !== null);
 
-    dash.innerHTML = `<div class="category-section">
-      <h2 class="category-title">${t.searchBtn}: ${esc(query)}</h2>
-      ${generateTableHTML(valid)}
-    </div>`;
+    dash.innerHTML = `<div class="category-section"><h2 class="category-title">${t.searchBtn}: ${esc(query)}</h2>${generateTableHTML(valid)}</div>`;
   } catch (e) { dash.innerHTML = `<div class="stock-loading">${t.stockErr}</div>`; }
 }
 
@@ -494,33 +510,37 @@ function bindUI() {
     if (!detailRow) return;
 
     if (detailRow.style.display === 'none') {
-      // Expand
       detailRow.style.display = 'table-row';
       row.classList.add('expanded');
       
       const td = detailRow.querySelector('td');
-      if (td.innerHTML !== '') return; // Already loaded
+      if (td.innerHTML !== '') return;
 
       td.innerHTML = `<div class="details-loading">Fetching ratios...</div>`;
       
       const ratios = await fetchStockRatios(symbol);
+      
+      let ratioHtml = '';
       if (ratios) {
-        td.innerHTML = `
-          <div class="stock-details-content">
-            <div class="ratio-group">
-              <div class="ratio-item"><span class="ratio-label">Market Cap</span><span class="ratio-value">${ratios.marketCap}</span></div>
-              <div class="ratio-item"><span class="ratio-label">P/E Ratio</span><span class="ratio-value">${ratios.trailingPE}</span></div>
-              <div class="ratio-item"><span class="ratio-label">Fwd P/E</span><span class="ratio-value">${ratios.forwardPE}</span></div>
-              <div class="ratio-item"><span class="ratio-label">Div Yield</span><span class="ratio-value">${ratios.dividendYield}</span></div>
-            </div>
-            <a href="https://finance.yahoo.com/quote/${esc(symbol)}/financials" target="_blank" class="btn-financials">View Official Financials ↗</a>
+        ratioHtml = `
+          <div class="ratio-group">
+            <div class="ratio-item"><span class="ratio-label">Market Cap</span><span class="ratio-value">${ratios.marketCap}</span></div>
+            <div class="ratio-item"><span class="ratio-label">P/E Ratio</span><span class="ratio-value">${ratios.trailingPE}</span></div>
+            <div class="ratio-item"><span class="ratio-label">Fwd P/E</span><span class="ratio-value">${ratios.forwardPE}</span></div>
+            <div class="ratio-item"><span class="ratio-label">Div Yield</span><span class="ratio-value">${ratios.dividendYield}</span></div>
           </div>
         `;
       } else {
-        td.innerHTML = `<div class="details-loading">Could not load ratios.</div>`;
+        ratioHtml = `<div class="ratio-group" style="color:var(--muted); font-style:italic; font-size:13px;">Detailed metrics unavailable. View full report via the link.</div>`;
       }
+
+      td.innerHTML = `
+        <div class="stock-details-content">
+          ${ratioHtml}
+          <a href="https://finance.yahoo.com/quote/${esc(symbol)}/financials" target="_blank" class="btn-financials">View Official Financials ↗</a>
+        </div>
+      `;
     } else {
-      // Collapse
       detailRow.style.display = 'none';
       row.classList.remove('expanded');
     }
