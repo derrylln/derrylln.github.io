@@ -507,10 +507,11 @@ async function loadMarketDashboard() {
     </div>
   `;
 
+  // 7. Assemble Dashboard
   dash.innerHTML = `
-    <div class="sparkline-grid" style="grid-template-columns: repeat(4, 1fr);">${sparkHtml}</div>
+    <div class="sparkline-grid">${sparkHtml}</div>
     
-    <div class="dash-grid" style="align-items: start;">
+    <div class="dash-grid">
       <div>
         <div class="modern-card">
           <div class="card-title">
