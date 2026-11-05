@@ -26,7 +26,6 @@ const TICKERS = [
   { symbol: 'IDR=X', label: 'USD/IDR' }, { symbol: 'CL=F', label: 'CRUDE OIL' }
 ];
 
-// EXPANDED COVERAGE
 const INDICES = [
   { symbol: '^JKSE', name: 'IHSG' }, { symbol: '^IXIC', name: 'NASDAQ' }, 
   { symbol: '^GSPC', name: 'S&P 500' }, { symbol: '^DJI', name: 'DOW JONES' }
@@ -402,7 +401,7 @@ async function loadMarketDashboard() {
       details.pct = ((details.price - details.prevClose) / details.prevClose) * 100;
       allData[sym] = details;
     }
-    await new Promise(r => setTimeout(r, 100)); // Rate limit protection
+    await new Promise(r => setTimeout(r, 100)); 
   }
 
   // 2. Organize Data
@@ -461,25 +460,25 @@ async function loadMarketDashboard() {
     </a>`;
   }).join('');
 
-  // 5. Assemble Dashboard
+  // 5. Assemble Dashboard with align-items: start
   dash.innerHTML = `
     <div class="sparkline-grid" style="grid-template-columns: repeat(5, 1fr);">${sparkHtml}</div>
     
-    <div class="dash-grid">
+    <div class="dash-grid" style="align-items: start;">
       <div class="modern-card">
-        <div class="card-title">IHSG Market Performance <span style="color:var(--green);font-size:12px;">6 Month Trend</span></div>
+        <div class="card-title">IHSG Market Performance</div>
         <div id="mainChart"></div>
       </div>
       <div class="modern-card">
         <div class="card-title">Market Movers (IDX)</div>
-        <div class="movers-grid-4" style="grid-template-columns: 1fr; gap: 16px;">
+        <div style="display:flex; flex-direction:column; gap:16px;">
           ${generateMoversTable('Top IDX Gainers', idxGainers, 'gainers')}
           ${generateMoversTable('Top IDX Losers', idxLosers, 'losers')}
         </div>
       </div>
     </div>
 
-    <div class="dash-grid">
+    <div class="dash-grid" style="align-items: start;">
       <div class="modern-card">
         <div class="card-title">US Market Movers</div>
         <div class="movers-grid-4">
@@ -541,7 +540,6 @@ async function searchStocks(query) {
     const raw = await fetchViaProxy(url, { timeout: 8000 }); 
     const data = JSON.parse(raw);
     
-    // FIXED SEARCH ERROR HANDLING
     const quotes = data.quotes || []; 
     const symbols = quotes.filter(q => q.isYahooFinance && q.quoteType !== 'NONE').map(q => q.symbol);
     
