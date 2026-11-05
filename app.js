@@ -26,15 +26,15 @@ const SOURCES = [
     id: 'bloomberg',
     label: 'Bloomberg',
     color: '#111827',
-    // Direct official Bloomberg Markets feed
-    url: 'https://feeds.bloomberg.com/markets/news.rss'
+    url: 'https://news.google.com/rss/search?q=when:24h+site:bloomberg.com+markets&hl=en-US&gl=US&ceid=US:en',
+    useJsonApi: true // NEW
   },
   {
     id: 'reuters',
     label: 'Reuters',
     color: '#7c2d12',
-    // Direct official Reuters Business feed
-    url: 'https://feeds.reuters.com/reuters/businessNews'
+    url: 'https://news.google.com/rss/search?q=when:24h+site:reuters.com+business&hl=en-US&gl=US&ceid=US:en',
+    useJsonApi: true // NEW
   },
   {
     id: 'cnbc',
@@ -52,7 +52,8 @@ const SOURCES = [
     id: 'idn',
     label: 'IDN Financials',
     color: '#4c1d95',
-    url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id'
+    url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id',
+    useJsonApi: true // NEW
   }
 ];
 
@@ -335,12 +336,36 @@ function cleanTitle(title, node) {
   return t;
 }
 
-function parseFeed(xmlText, source) {
-  if (typeof xmlText !== 'string' || xmlText.indexOf('<') === -1) {
+function parseFeed(rawText, source) {
+  // 1. Handle the JSON API feeds (Bloomberg, Reuters, IDN)
+  if (source.useJsonApi) {
+    try {
+      const data = JSON.parse(rawText);
+      if (data.status !== 'ok' || !data.items) throw new Error('JSON API error');
+      
+      return data.items.map(item => ({
+        id: item.link,
+        title: item.title,
+        link: item.link,
+        summary: stripHtml(item.description),
+        image: item.thumbnail || (item.enclosure && item.enclosure.link) || '',
+        ts: Date.parse(item.pubDate) || Date.now(),
+        sourceId: source.id,
+        sourceLabel: source.label,
+        color: source.color
+      }));
+    } catch (e) {
+      console.warn('[FINWIRE] JSON parse error for', source.id, e);
+      return [];
+    }
+  }
+
+  // 2. Handle standard XML feeds (CNBC, Kontan)
+  if (typeof rawText !== 'string' || rawText.indexOf('<') === -1) {
     throw new Error('Not XML');
   }
 
-  const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
+  const doc = new DOMParser().parseFromString(rawText, 'text/xml');
   if (doc.getElementsByTagName('parsererror').length) {
     throw new Error('XML parse error');
   }
@@ -354,13 +379,11 @@ function parseFeed(xmlText, source) {
 
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i];
-
     const rawTitle = textOf(node, ['title']);
     const link     = linkOf(node);
     if (!rawTitle || !link) continue;
 
     const title = cleanTitle(rawTitle, node);
-
     const rawDesc = textOf(node, ['description', 'summary', 'content']);
     let summary = stripHtml(rawDesc);
     if (summary.length > 280) summary = summary.slice(0, 277).trim() + '…';
@@ -411,14 +434,24 @@ function dedupe(articles) {
 async function fetchAllNews() {
   const settled = await Promise.allSettled(
     SOURCES.map(async (source) => {
-      // Change the timeout from 16000 to 7000
-      const xml = await fetchViaProxy(source.url, { timeout: 7000 });
+      let fetchUrl = source.url;
+      
+      // If it's a Google News feed, route it through the fast rss2json API
+      if (source.useJsonApi) {
+        fetchUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+        const res = await fetch(fetchUrl);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const text = await res.text();
+        return parseFeed(text, source);
+      } 
+      
+      // For standard XML feeds, use our proxy array
+      const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); // Reduced timeout!
       return parseFeed(xml, source);
     })
   );
 
   const all = [];
-
   settled.forEach((result, i) => {
     if (result.status === 'fulfilled') {
       all.push.apply(all, result.value);
@@ -429,7 +462,7 @@ async function fetchAllNews() {
 
   if (!all.length) throw new Error('No feeds returned data');
 
-  return dedupe(all).sort((a, b) => b.ts - a.ts);   // strictly newest → oldest
+  return dedupe(all).sort((a, b) => b.ts - a.ts);
 }
 
 /* ============================================================
