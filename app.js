@@ -323,24 +323,39 @@ async function fetchStockDetails(symbol) {
 
 async function fetchStockRatios(symbol) {
   try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+    // We use v10/quoteSummary which gives us all ratios in one call
+    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,defaultKeyStatistics`;
     const raw = await fetchViaProxy(url, { timeout: 8000 });
     const data = JSON.parse(raw);
     
-    if (data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result[0]) {
-      const q = data.quoteResponse.result[0];
+    if (data.quoteSummary && data.quoteSummary.result && data.quoteSummary.result[0]) {
+      const summary = data.quoteSummary.result[0].summaryDetail || {};
+      const stats = data.quoteSummary.result[0].defaultKeyStatistics || {};
+      
+      const getRaw = (obj) => (obj && typeof obj === 'object' && obj.raw !== undefined) ? obj.raw : obj;
+      
+      const marketCap = getRaw(summary.marketCap) || getRaw(stats.enterpriseValue);
+      const trailingPE = getRaw(summary.trailingPE);
+      const forwardPE = getRaw(summary.forwardPE) || getRaw(stats.forwardPE);
+      const dividendYield = getRaw(summary.dividendYield);
+
       const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
       const fmtPct = (n) => (n !== undefined && n !== null) ? (Number(n) * 100).toFixed(2) + '%' : '—';
       
-      let mc = q.marketCap;
       let mcStr = '—';
-      if (mc) {
-        if (mc >= 1e12) mcStr = (mc / 1e12).toFixed(2) + 'T';
-        else if (mc >= 1e9) mcStr = (mc / 1e9).toFixed(2) + 'B';
-        else if (mc >= 1e6) mcStr = (mc / 1e6).toFixed(2) + 'M';
-        else mcStr = fmt(mc);
+      if (marketCap) {
+        if (marketCap >= 1e12) mcStr = (marketCap / 1e12).toFixed(2) + 'T';
+        else if (marketCap >= 1e9) mcStr = (marketCap / 1e9).toFixed(2) + 'B';
+        else if (marketCap >= 1e6) mcStr = (marketCap / 1e6).toFixed(2) + 'M';
+        else mcStr = fmt(marketCap);
       }
-      return { marketCap: mcStr, trailingPE: fmt(q.trailingPE), forwardPE: fmt(q.forwardPE), dividendYield: fmtPct(q.dividendYield) };
+      
+      return { 
+        marketCap: mcStr, 
+        trailingPE: fmt(trailingPE), 
+        forwardPE: fmt(forwardPE), 
+        dividendYield: fmtPct(dividendYield) 
+      };
     }
   } catch (e) { 
     console.warn('Ratio fetch failed', e); 
