@@ -387,7 +387,7 @@ function generateMoversTable(title, stocks, headerClass) {
   `).join('');
 
   return `
-    <div class="movers-panel">
+    <div class="movers-panel" style="margin-bottom: 16px;">
       <div class="movers-panel-header ${headerClass}">${title}</div>
       <table class="movers-table">
         <thead><tr><th>Symbol</th><th>Name</th><th style="text-align:right;">Price</th><th style="text-align:right;">Change</th></tr></thead>
@@ -527,32 +527,23 @@ async function loadMarketDashboard() {
           </div>
           <div id="sp500Chart"></div>
         </div>
-
-        ${macroPanelHtml}
       </div>
 
       <div class="modern-card">
-        <div class="card-title">Market Movers (IDX)</div>
-        <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="card-title">Market Movers</div>
+        <div class="scrollable-movers">
           ${generateMoversTable('Top IDX Gainers', idxGainers, 'gainers')}
           ${generateMoversTable('Top IDX Losers', idxLosers, 'losers')}
-        </div>
-        
-        <div class="card-title" style="margin-top: 32px;">IDX Bluechips</div>
-        <div class="stock-card-grid" style="grid-template-columns: 1fr; gap: 12px;">
-          ${buildCards(idxData)} <!-- SHOWS ALL 10 STOCKS -->
-        </div>
-      </div>
-    </div>
-
-    <div class="dash-grid" style="align-items: start; margin-top:24px;">
-      <div class="modern-card">
-        <div class="card-title">US Market Movers</div>
-        <div class="movers-grid-4">
           ${generateMoversTable('Top US Gainers', usGainers, 'gainers')}
           ${generateMoversTable('Top US Losers', usLosers, 'losers')}
         </div>
       </div>
+    </div>
+
+    <!-- Full-width separated grids below -->
+    <div style="margin-top: 32px;">
+      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">IDX Bluechips</h2>
+      <div class="stock-card-grid">${buildCards(idxData)}</div>
     </div>
 
     <div style="margin-top: 32px;">
@@ -564,6 +555,8 @@ async function loadMarketDashboard() {
       <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">Popular ETFs</h2>
       <div class="stock-card-grid">${buildCards(ETFS.map(e => allData[e.symbol]).filter(Boolean))}</div>
     </div>
+    
+    ${macroPanelHtml}
   `;
 
   if (typeof ApexCharts !== 'undefined') {
@@ -592,7 +585,6 @@ async function loadMarketDashboard() {
     });
     sp500Chart.render();
 
-    // Attach event listeners for timeframe buttons
     document.querySelectorAll('.chart-controls').forEach(control => {
       control.addEventListener('click', async (e) => {
         const btn = e.target.closest('.chart-btn');

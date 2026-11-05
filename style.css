@@ -1391,3 +1391,26 @@ button{ font-family:inherit; }
   color: #fff;
   border-color: var(--ink);
 }
+
+/* Scrollable Movers Panel */
+.scrollable-movers {
+  max-height: 680px; /* Matches the height of the two stacked charts */
+  overflow-y: auto;
+  padding-right: 8px; /* Space for scrollbar */
+}
+
+/* Custom Scrollbar for Movers */
+.scrollable-movers::-webkit-scrollbar {
+  width: 6px;
+}
+.scrollable-movers::-webkit-scrollbar-track {
+  background: var(--bg-soft);
+  border-radius: 4px;
+}
+.scrollable-movers::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+.scrollable-movers::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
