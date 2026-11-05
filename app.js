@@ -76,11 +76,10 @@ function stripHtml(html) { if (!html) return ''; const doc = new DOMParser().par
 
 /* CORS PROXY LAYER */
 const PROXIES = [
-  (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  (u) => `https://finwire-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`,
-  (u) => `https://proxy.cors.dev/?url=${encodeURIComponent(u)}`
+  // Only use the custom Cloudflare Worker
+  (u) => `https://finwire-smart-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`
 ];
+
 let preferredProxy = 0;
 async function fetchViaProxy(targetUrl, options) {
   const opts = options || {}; const timeout = opts.timeout || 4000; const order = [];
@@ -327,25 +326,26 @@ async function fetchStockRatios(symbol) {
     const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
     const raw = await fetchViaProxy(url, { timeout: 8000 });
     const data = JSON.parse(raw);
-    const quote = data.quoteResponse.result[0];
-    if (!quote) return null;
     
-    const fmt = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
-    const fmtPct = (n) => n ? (n * 100).toFixed(2) + '%' : '—';
-    
-    let mc = quote.marketCap;
-    if (mc >= 1e12) mc = (mc / 1e12).toFixed(2) + 'T';
-    else if (mc >= 1e9) mc = (mc / 1e9).toFixed(2) + 'B';
-    else if (mc >= 1e6) mc = (mc / 1e6).toFixed(2) + 'M';
-    else mc = fmt(mc);
-
-    return {
-      marketCap: mc,
-      trailingPE: fmt(quote.trailingPE),
-      forwardPE: fmt(quote.forwardPE),
-      dividendYield: quote.dividendYield ? fmtPct(quote.dividendYield) : '—'
-    };
-  } catch (e) { return null; }
+    if (data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result[0]) {
+      const q = data.quoteResponse.result[0];
+      const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+      const fmtPct = (n) => (n !== undefined && n !== null) ? (Number(n) * 100).toFixed(2) + '%' : '—';
+      
+      let mc = q.marketCap;
+      let mcStr = '—';
+      if (mc) {
+        if (mc >= 1e12) mcStr = (mc / 1e12).toFixed(2) + 'T';
+        else if (mc >= 1e9) mcStr = (mc / 1e9).toFixed(2) + 'B';
+        else if (mc >= 1e6) mcStr = (mc / 1e6).toFixed(2) + 'M';
+        else mcStr = fmt(mc);
+      }
+      return { marketCap: mcStr, trailingPE: fmt(q.trailingPE), forwardPE: fmt(q.forwardPE), dividendYield: fmtPct(q.dividendYield) };
+    }
+  } catch (e) { 
+    console.warn('Ratio fetch failed', e); 
+  }
+  return null;
 }
 
 function generateStockRow(s) {
