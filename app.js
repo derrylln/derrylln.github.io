@@ -187,7 +187,7 @@ function stripHtml(html) {
    the rest if it starts failing.
    ============================================================ */
 const PROXIES = [
-  (u) => `https://finwire-proxy.yourname.workers.dev/?url=${encodeURIComponent(u)}`
+  (u) => `https://finwire-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`
 ]; 
 
 let preferredProxy = 0;
