@@ -321,55 +321,46 @@ async function fetchStockDetails(symbol) {
   } catch (e) { return null; }
 }
 
-async function fetchStockRatios(symbol) {
+async function fetchStockDetails(symbol) {
   try {
-    // Use query2 (more lenient) and v10 (has the ratios)
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,summaryDetail,financialData`;
-    
-    // Increase timeout to 12 seconds so the Worker has time to get the Crumb
-    const raw = await fetchViaProxy(url, { timeout: 12000 });
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
+    const raw = await fetchViaProxy(url, { timeout: 8000 });
     const data = JSON.parse(raw);
-    
-    if (data.quoteSummary && data.quoteSummary.result && data.quoteSummary.result[0]) {
-      const res = data.quoteSummary.result[0];
-      const summary = res.summaryDetail || {};
-      const stats = res.defaultKeyStatistics || {};
-      const financial = res.financialData || {};
-      
-      const getRaw = (obj) => (obj && typeof obj === 'object' && obj.raw !== undefined) ? obj.raw : obj;
-      
-      // Try multiple places for Market Cap
-      const marketCap = getRaw(summary.marketCap) || getRaw(financial.marketCap);
-      const trailingPE = getRaw(summary.trailingPE) || getRaw(stats.trailingPE);
-      const forwardPE = getRaw(summary.forwardPE) || getRaw(stats.forwardPE);
-      const dividendYield = getRaw(summary.dividendYield);
-
-      const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
-      const fmtPct = (n) => (n !== undefined && n !== null) ? (Number(n) * 100).toFixed(2) + '%' : '—';
-      
-      let mcStr = '—';
-      if (marketCap) {
-        if (marketCap >= 1e12) mcStr = (marketCap / 1e12).toFixed(2) + 'T';
-        else if (marketCap >= 1e9) mcStr = (marketCap / 1e9).toFixed(2) + 'B';
-        else if (marketCap >= 1e6) mcStr = (marketCap / 1e6).toFixed(2) + 'M';
-        else mcStr = fmt(marketCap);
-      }
-      
-      return { 
-        marketCap: mcStr, 
-        trailingPE: fmt(trailingPE), 
-        forwardPE: fmt(forwardPE), 
-        dividendYield: fmtPct(dividendYield) 
-      };
-    }
+    const meta = data.chart.result[0].meta;
+    return { 
+      symbol: meta.symbol, 
+      name: meta.shortName || meta.symbol, 
+      price: meta.regularMarketPrice, 
+      prevClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice, 
+      volume: meta.regularMarketVolume, 
+      dayHigh: meta.regularMarketDayHigh, 
+      dayLow: meta.regularMarketDayLow, 
+      week52High: meta.fiftyTwoWeekHigh, 
+      week52Low: meta.fiftyTwoWeekLow 
+    };
   } catch (e) { 
-    console.warn('Ratio fetch failed for', symbol, e); 
+    // If it fails, return a fallback so the row still renders
+    return { 
+      symbol: symbol, name: symbol, price: null, prevClose: null, 
+      volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null 
+    };
   }
-  return null;
 }
 
 function generateStockRow(s) {
   const t = I18N[state.lang];
+  
+  if (!s.price) {
+    return `
+      <tr class="stock-row" data-symbol="${esc(s.symbol)}">
+        <td class="sym">${esc(s.symbol)}</td><td>${esc(s.name)}</td>
+        <td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+      </tr>
+      <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;">
+        <td colspan="7"></td>
+      </tr>`;
+  }
+
   const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
   const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
   const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
@@ -405,12 +396,20 @@ async function loadMarketDashboard() {
   let html = '';
 
   for (const cat of MARKET_CATEGORIES) {
-    const results = await Promise.all(cat.symbols.map(s => fetchStockDetails(s)));
-    const valid = results.filter(r => r !== null);
+    const valid = [];
+    // Fetch sequentially to avoid Yahoo rate limits
+    for (const sym of cat.symbols) {
+      const details = await fetchStockDetails(sym);
+      if (details) valid.push(details);
+      // Wait 150ms before the next request
+      await new Promise(r => setTimeout(r, 150)); 
+    }
 
     if (cat.isHighlight) {
       html += `<div class="index-highlights">`;
       html += valid.map(s => {
+        if (!s.price) return `<div class="index-card"><div class="idx-name">${esc(s.symbol)}</div><div class="idx-price">—</div></div>`;
+        
         const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
         const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
         const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
