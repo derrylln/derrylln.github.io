@@ -1047,7 +1047,7 @@ function init() {
   const savedWatch = loadJSON(LS.watch, null);
   state.watch = Array.isArray(savedWatch)
     ? savedWatch
-    : ['IHSG', 'BBCA', 'Fed', 'inflasi'];
+    : []; // Changed this to an empty array
 
   bindUI();
   renderFilters();
