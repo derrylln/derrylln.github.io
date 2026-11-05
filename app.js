@@ -187,14 +187,14 @@ function stripHtml(html) {
    the rest if it starts failing.
    ============================================================ */
 const PROXIES = [
-  // allorigins "get" -> JSON envelope { contents: "..." }
-  (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`,
-  // allorigins "raw" -> raw body
-  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  // codetabs -> raw body
+  // 1. Try corsproxy.io first (usually fast for finance data)
+  (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
+  // 2. Try codetabs
   (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-  // corsproxy.io -> raw body
-  (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
+  // 3. Try thingproxy (good backup)
+  (u) => `https://thingproxy.freeboard.io/fetch/${u}`,
+  // 4. Fallback to allorigins
+  (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`
 ];
 
 let preferredProxy = 0;
