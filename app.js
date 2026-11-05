@@ -26,13 +26,15 @@ const SOURCES = [
     id: 'bloomberg',
     label: 'Bloomberg',
     color: '#111827',
-    url: 'https://news.google.com/rss/search?q=when:24h+site:bloomberg.com+markets&hl=en-US&gl=US&ceid=US:en'
+    // Swapped Google News for a direct Bloomberg feed
+    url: 'https://feeds.bloomberg.com/markets/news.rss'
   },
   {
     id: 'reuters',
     label: 'Reuters',
     color: '#7c2d12',
-    url: 'https://news.google.com/rss/search?q=when:24h+site:reuters.com+business&hl=en-US&gl=US&ceid=US:en'
+    // Swapped Google News for a working Reuters mirror feed
+    url: 'https://wtf.roflcopter.fr/rss-bridge/?action=display&bridge=Reuters&feed=markets&format=Mrss'
   },
   {
     id: 'cnbc',
@@ -188,8 +190,12 @@ function stripHtml(html) {
    ============================================================ */
 const PROXIES = [
   (u) => `https://finwire-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`,
-  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-  (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
+  // 2. CORS.dev (No API key required, handles XML)
+  (u) => `https://proxy.cors.dev/?url=${encodeURIComponent(u)}`,
+  // 3. CodeTabs (Great for raw feeds)
+  (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
+  // 4. AllOrigins (Raw endpoint)
+  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
 ];
 
 let preferredProxy = 0;
