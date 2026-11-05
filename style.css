@@ -1089,3 +1089,124 @@ button{ font-family:inherit; }
 @media (max-width: 820px) {
   .movers-grid { grid-template-columns: 1fr; }
 }
+
+/* ============================================================
+   EXECUTIVE MARKET DASHBOARD
+   ============================================================ */
+.dashboard-section {
+  margin-bottom: 40px;
+}
+
+/* Executive Summary Grid */
+.exec-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.exec-card {
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-top: 3px solid var(--ink);
+  padding: 16px;
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.exec-card.macro { border-top-color: #6b7280; } /* Grey for macro/fx */
+
+.exec-name {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+.exec-price {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.exec-change {
+  font-size: 13px;
+  font-weight: 600;
+}
+.exec-change.up { color: var(--green); }
+.exec-change.down { color: var(--red); }
+
+/* Market Movers Tables */
+.movers-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.movers-panel {
+  border: 1px solid var(--rule);
+  background: #fff;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.movers-panel-header {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-bottom: 1px solid var(--rule);
+}
+.movers-panel-header.gainers { color: var(--green); background: #f2fcf6; border-top: 3px solid var(--green); }
+.movers-panel-header.losers { color: var(--red); background: #fff5f5; border-top: 3px solid var(--red); }
+.movers-panel-header.active { color: var(--ink); background: var(--bg-soft); border-top: 3px solid var(--ink); }
+
+.movers-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.movers-table th {
+  text-align: left;
+  font-size: 10px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.movers-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule-2);
+  font-size: 13px;
+}
+.movers-table tr:last-child td { border-bottom: none; }
+.movers-table tr:hover { background: var(--bg-soft); }
+
+.sym-cell { display: flex; flex-direction: column; gap: 4px; }
+.sym-code { font-weight: 800; color: var(--ink); font-size: 13px; }
+.sym-badge {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 4px;
+  border-radius: 2px;
+  width: fit-content;
+}
+.badge-idx { background: #e0e7ff; color: #3730a3; }
+.badge-us { background: #f3f4f6; color: #374151; }
+
+.pct-up { color: var(--green); font-weight: 700; text-align: right; }
+.pct-down { color: var(--red); font-weight: 700; text-align: right; }
+.vol-text { color: var(--muted); font-size: 11px; text-align: right; }
+.price-text { font-weight: 600; text-align: right; }
+
+@media (max-width: 820px) {
+  .movers-grid { grid-template-columns: 1fr; }
+  .exec-summary-grid { grid-template-columns: repeat(2, 1fr); }
+}

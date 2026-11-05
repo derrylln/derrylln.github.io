@@ -28,6 +28,7 @@ const TICKERS = [
 
 const MARKET_CATEGORIES = [
   { title: 'Global Indices', titleId: 'Indeks Global', symbols: ['^JKSE', '^IXIC', '^GSPC', '^DJI'], isHighlight: true },
+  { title: 'Macro & FX', titleId: 'Makro & Valas', symbols: ['IDR=X', 'GC=F', 'CL=F', '^TNX'], isHighlight: true, isMacro: true },
   { title: 'Indonesian Stocks (IDX)', titleId: 'Saham Indonesia (IDX)', symbols: ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 'GOTO.JK'] },
   { title: 'US Tech Stocks', titleId: 'Saham Teknologi AS', symbols: ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'TSLA'] },
   { title: 'Popular ETFs', titleId: 'ETF Populer', symbols: ['SPY', 'QQQ', 'VOO', 'EIDO'] }
@@ -403,10 +404,11 @@ async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
 
-  let html = '';
   let allFetchedStocks = []; 
-  let indicesHtml = '';
+  let execSummaryHtml = '';
+  let detailTablesHtml = '';
 
+  // 1. Fetch Data
   for (const cat of MARKET_CATEGORIES) {
     const valid = [];
     for (const sym of cat.symbols) {
@@ -414,7 +416,7 @@ async function loadMarketDashboard() {
       if (details) {
         valid.push(details);
         
-        // Add to the global pool for Movers calculation (excluding indices)
+        // Add to movers pool (only for actual equities/ETFs, not indices/macro)
         if (!cat.isHighlight && details.price) {
           details.pct = ((details.price - details.prevClose) / details.prevClose) * 100;
           details.market = sym.endsWith('.JK') ? 'IDX' : 'US';
@@ -424,39 +426,43 @@ async function loadMarketDashboard() {
       await new Promise(r => setTimeout(r, 100)); 
     }
 
+    // 2. Build Executive Summary Cards
     if (cat.isHighlight) {
-      indicesHtml += `<div class="index-highlights">`;
-      indicesHtml += valid.map(s => {
-        if (!s.price) return `<div class="index-card"><div class="idx-name">${esc(s.symbol)}</div><div class="idx-price">—</div></div>`;
-        
-        const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
+      execSummaryHtml += valid.map(s => {
+        if (!s.price) return '';
+        const change = s.price - s.prevClose; 
+        const pct = (change / s.prevClose) * 100;
         const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
-        const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
-        return `<div class="index-card">
-          <div class="idx-name">${esc(s.name)}</div>
-          <div class="idx-price">${s.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-          <div class="idx-change" style="color:${color}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</div>
+        
+        // Format ticker names for the cards
+        let displayName = s.name || s.symbol;
+        if (s.symbol === 'IDR=X') displayName = 'USD/IDR';
+        if (s.symbol === 'GC=F') displayName = 'Gold';
+        if (s.symbol === 'CL=F') displayName = 'Crude Oil';
+        if (s.symbol === '^TNX') displayName = 'US 10Y Yield';
+        if (s.symbol === '^JKSE') displayName = 'IHSG';
+        if (s.symbol === '^IXIC') displayName = 'NASDAQ';
+        
+        return `<div class="exec-card ${cat.isMacro ? 'macro' : ''}">
+          <div class="exec-name">${esc(displayName)}</div>
+          <div class="exec-price">${s.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+          <div class="exec-change ${dir}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</div>
         </div>`;
       }).join('');
-      indicesHtml += `</div>`;
-    } else {
+    } 
+    // 3. Build Detail Tables (IDX, US, ETFs)
+    else {
       const title = state.lang === 'id' ? cat.titleId : cat.title;
-      html += `<div class="category-section"><h2 class="category-title">${esc(title)}</h2>${generateTableHTML(valid)}</div>`;
+      detailTablesHtml += `<div class="category-section"><h2 class="category-title">${esc(title)}</h2>${generateTableHTML(valid)}</div>`;
     }
   }
 
-  // --- Calculate Pro Dashboard Metrics ---
-  let dashboardHtml = '';
+  // 4. Calculate Market Movers
+  let moversHtml = '';
   if (allFetchedStocks.length > 0) {
-    const total = allFetchedStocks.length;
-    const upCount = allFetchedStocks.filter(s => s.pct > 0).length;
-    const downCount = allFetchedStocks.filter(s => s.pct < 0).length;
-    const upPct = total > 0 ? (upCount / total) * 100 : 50;
-    const downPct = total > 0 ? (downCount / total) * 100 : 50;
-
     const sortedByPct = [...allFetchedStocks].sort((a, b) => b.pct - a.pct);
     const topGainers = sortedByPct.slice(0, 5);
-    const topLosers = sortedByPct.slice(-5).reverse(); // Bottom 5
+    const topLosers = sortedByPct.slice(-5).reverse();
     const mostActive = [...allFetchedStocks].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
 
     const fmtP = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
@@ -492,26 +498,13 @@ async function loadMarketDashboard() {
       </tr>
     `).join('');
 
-    dashboardHtml = `
-      <div class="category-section dashboard-overview">
-        <h2 class="category-title">Market Overview</h2>
-        
-        <div class="breadth-container">
-          <div class="breadth-header">
-            <span>Advancing: <span style="color:var(--green)">${upCount}</span></span>
-            <span>Declining: <span style="color:var(--red)">${downCount}</span></span>
-          </div>
-          <div class="breadth-bar">
-            <div class="breadth-fill-up" style="width: ${upPct}%;"></div>
-            <div class="breadth-fill-down" style="width: ${downPct}%;"></div>
-          </div>
-        </div>
-
+    moversHtml = `
+      <div class="dashboard-section">
+        <h2 class="category-title">Market Leadership</h2>
         <div class="movers-grid">
           ${generateMoversTable('Top 5 Gainers', topGainers, 'gainers', 'pct-up')}
           ${generateMoversTable('Top 5 Losers', topLosers, 'losers', 'pct-down')}
         </div>
-
         <div class="movers-grid" style="grid-template-columns: 1fr;">
           <div class="movers-panel">
             <div class="movers-panel-header active">Most Active (By Volume)</div>
@@ -525,8 +518,17 @@ async function loadMarketDashboard() {
     `;
   }
 
-  // Inject Dashboard right after Indices
-  dash.innerHTML = indicesHtml + dashboardHtml + html;
+  // 5. Assemble Final Layout
+  dash.innerHTML = `
+    <div class="dashboard-section">
+      <h2 class="category-title">Executive Summary</h2>
+      <div class="exec-summary-grid">
+        ${execSummaryHtml}
+      </div>
+    </div>
+    ${moversHtml}
+    ${detailTablesHtml}
+  `;
 }
 
 async function searchStocks(query) {
