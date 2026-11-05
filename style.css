@@ -375,11 +375,11 @@ button{ font-family:inherit; }
 .hero:empty{ display:none; }
 
 .hero-main{ min-width:0; }
-.hero-side{
-  display:grid;
-  grid-template-rows:1fr 1fr;
-  gap:var(--gap);
-  min-width:0;
+.hero-side {
+  display: flex;           /* Changed from grid */
+  flex-direction: column;  /* Stacks items from top to bottom */
+  gap: var(--gap);
+  min-width: 0;
 }
 
 /* ============================================================
@@ -499,13 +499,19 @@ button{ font-family:inherit; }
 /* --- side card (horizontal) --- */
 .card.side {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr); /* slightly smaller image column */
+  grid-template-columns: 110px minmax(0, 1fr);
   gap: 14px;
   align-content: start;
+  align-items: start;      /* ADD THIS - stops the image from stretching vertically */
   min-width: 0;
-  word-wrap: break-word; /* ADD THIS - stops text overflow */
+  word-wrap: break-word;
 }
-.card.side .thumb{ aspect-ratio:1/1; height:100%; }
+.card.side .thumb {
+  width: 110px;            /* Force exact width */
+  height: 110px;           /* Force exact height */
+  aspect-ratio: 1/1;
+  /* Removed height: 100%; which was causing the stretching */
+}
 .card.side .headline{ font-size:16.5px; line-height:1.22; }
 .card.side .summary{ display:none; }
 .card.side .meta{ margin-bottom:6px; font-size:9.5px; }
