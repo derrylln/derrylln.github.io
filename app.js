@@ -203,8 +203,8 @@ let preferredProxy = 0;
 
 async function fetchViaProxy(targetUrl, options) {
   const opts    = options || {};
-  const timeout = opts.timeout || 15000;
-
+  const timeout = opts.timeout || 4000; // Changed from 15000 to 4000
+  
   const order = [];
   for (let i = 0; i < PROXIES.length; i++) {
     order.push((preferredProxy + i) % PROXIES.length);
@@ -432,37 +432,47 @@ function dedupe(articles) {
 }
 
 async function fetchAllNews() {
-  const settled = await Promise.allSettled(
+  let newArticlesFound = false;
+
+  // We don't use Promise.all here. We fire them all at once, and update the UI as they finish.
+  await Promise.allSettled(
     SOURCES.map(async (source) => {
-      let fetchUrl = source.url;
-      
-      // If it's a Google News feed, route it through the fast rss2json API
-      if (source.useJsonApi) {
-        fetchUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
-        const res = await fetch(fetchUrl);
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const text = await res.text();
-        return parseFeed(text, source);
-      } 
-      
-      // For standard XML feeds, use our proxy array
-      const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); // Reduced timeout!
-      return parseFeed(xml, source);
+      try {
+        let fetchUrl = source.url;
+        let items = [];
+
+        if (source.useJsonApi) {
+          fetchUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+          const res = await fetch(fetchUrl);
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const text = await res.text();
+          items = parseFeed(text, source);
+        } else {
+          const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 });
+          items = parseFeed(xml, source);
+        }
+
+        if (items.length > 0) {
+          // Merge new items with existing state, deduplicate, and sort
+          const combined = dedupe([...items, ...state.articles]);
+          state.articles = combined.sort((a, b) => b.ts - a.ts);
+          newArticlesFound = true;
+          
+          // Instantly re-render the page with the new data for this specific source
+          render();
+          
+          // Fire off the background image scraper for just these new items
+          enrichImages(items); 
+        }
+      } catch (err) {
+        console.warn('[FINWIRE] feed failed:', source.id, err.message);
+      }
     })
   );
 
-  const all = [];
-  settled.forEach((result, i) => {
-    if (result.status === 'fulfilled') {
-      all.push.apply(all, result.value);
-    } else {
-      console.warn('[FINWIRE] feed failed:', SOURCES[i].id, result.reason && result.reason.message);
-    }
-  });
-
-  if (!all.length) throw new Error('No feeds returned data');
-
-  return dedupe(all).sort((a, b) => b.ts - a.ts);
+  if (!newArticlesFound && state.articles.length === 0) {
+    throw new Error('No feeds returned data');
+  }
 }
 
 /* ============================================================
@@ -510,41 +520,42 @@ async function scrapeOgImage(articleUrl) {
 }
 
 async function enrichImages(articles) {
+  // Only try to scrape the 3 most recent articles missing images to prevent network lag
   const candidates = articles
     .filter(a => !a.image)
-    .slice(0, OG_MAX_SCRAPES);
+    .slice(0, 3); 
 
-  if (!candidates.length) return false;
+  if (!candidates.length) return;
 
-  const queue = candidates.slice();
-  let changed = false;
+  for (let article of candidates) {
+    // Set a strict 4-second timeout for the scrape
+    const img = await scrapeOgImage(article.link);
+    
+    if (img) {
+      article.image = img;
+      // Update the cache
+      const cached = loadJSON(LS.news, null);
+      if (cached && cached.articles) {
+        const cachedArticle = cached.articles.find(a => a.link === article.link);
+        if (cachedArticle) cachedArticle.image = img;
+        saveJSON(LS.news, cached);
+      }
 
-  async function worker() {
-    while (queue.length) {
-      const article = queue.shift();
-      const img = await scrapeOgImage(article.link);
-      if (img) {
-        article.image = img;
-        changed = true;
+      // Update the DOM directly without a full re-render
+      const card = document.querySelector(`.card[data-url="${article.link}"]`);
+      if (card) {
+        const thumb = card.querySelector('.thumb');
+        if (thumb && !thumb.querySelector('img')) {
+          const imgEl = document.createElement('img');
+          imgEl.src = img;
+          imgEl.loading = 'lazy';
+          imgEl.referrerPolicy = 'no-referrer';
+          imgEl.onerror = function() { this.remove(); };
+          thumb.appendChild(imgEl);
+        }
       }
     }
   }
-
-  const workers = [];
-  for (let i = 0; i < OG_CONCURRENCY; i++) workers.push(worker());
-  await Promise.all(workers);
-
-  // Keep the og cache bounded.
-  const keys = Object.keys(ogCache);
-  if (keys.length > 400) {
-    const trimmed = {};
-    keys.slice(-300).forEach(k => { trimmed[k] = ogCache[k]; });
-    Object.keys(ogCache).forEach(k => { delete ogCache[k]; });
-    Object.keys(trimmed).forEach(k => { ogCache[k] = trimmed[k]; });
-  }
-
-  saveJSON(LS.ogimg, ogCache);
-  return changed;
 }
 
 /* ============================================================
@@ -864,7 +875,7 @@ function persistWatch() {
 async function loadNews(force) {
   const cached = loadJSON(LS.news, null);
   
-  // 1. INSTANTLY load from cache (even if expired) so the user sees data immediately
+  // 1. Instantly render cached data if it exists (makes the page feel instant)
   if (cached && cached.articles && cached.articles.length > 0) {
     state.articles = cached.articles;
     state.lastTs = cached.ts;
@@ -872,60 +883,24 @@ async function loadNews(force) {
     render();
     updateStatusLabel('cached', cached.ts);
     
-    // If it's fresh, we stop here and don't fetch.
+    // If cache is fresh and we aren't forcing, stop here.
     if (!force && (Date.now() - cached.ts) < CACHE_TTL) return;
   } else {
-    // Only show loading if we have NO cache at all
     updateStatusLabel('loading');
   }
 
   // 2. Fetch fresh data in the background
   try {
-    const articles = await fetchAllNews();
+    await fetchAllNews();
     
-    // Check if data actually changed before re-rendering to prevent visual flicker
-    const hasChanged = JSON.stringify(articles) !== JSON.stringify(state.articles);
-
-    state.articles = articles;
     state.lastTs = Date.now();
     state.lastKind = 'live';
-
-    saveJSON(LS.news, { ts: Date.now(), articles: articles });
+    saveJSON(LS.news, { ts: Date.now(), articles: state.articles });
     
-    if (hasChanged) {
-      render();
-    }
     updateStatusLabel('live', state.lastTs);
-
-    // 3. Scrape missing images silently in the background
-    enrichImages(articles).then(changed => {
-      if (!changed) return;
-      saveJSON(LS.news, { ts: Date.now(), articles: articles });
-      
-      // Update ONLY the images directly in the DOM instead of re-rendering the whole page
-      articles.forEach(a => {
-        if (a.image) {
-          const card = document.querySelector(`.card[data-url="${a.link}"]`);
-          if (card) {
-            const thumb = card.querySelector('.thumb');
-            if (thumb && !thumb.querySelector('img')) {
-              const img = document.createElement('img');
-              img.src = a.image;
-              img.loading = 'lazy';
-              img.referrerPolicy = 'no-referrer';
-              img.onerror = function() { this.remove(); };
-              thumb.appendChild(img);
-            }
-          }
-        }
-      });
-    }).catch(() => {});
-
   } catch (err) {
     console.warn('[FINWIRE] news load failed:', err);
-    if (!cached) {
-      state.articles = [];
-      render();
+    if (!cached || !cached.articles || cached.articles.length === 0) {
       updateStatusLabel('error');
     }
   }
