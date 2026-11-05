@@ -26,15 +26,15 @@ const SOURCES = [
     id: 'bloomberg',
     label: 'Bloomberg',
     color: '#111827',
-    // Swapped Google News for a direct Bloomberg feed
+    // Direct official Bloomberg Markets feed
     url: 'https://feeds.bloomberg.com/markets/news.rss'
   },
   {
     id: 'reuters',
     label: 'Reuters',
     color: '#7c2d12',
-    // Swapped Google News for a working Reuters mirror feed
-    url: 'https://wtf.roflcopter.fr/rss-bridge/?action=display&bridge=Reuters&feed=markets&format=Mrss'
+    // Direct official Reuters Business feed
+    url: 'https://feeds.reuters.com/reuters/businessNews'
   },
   {
     id: 'cnbc',
@@ -189,15 +189,15 @@ function stripHtml(html) {
    the rest if it starts failing.
    ============================================================ */
 const PROXIES = [
-  (u) => `https://finwire-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`,
-  // 2. CORS.dev (No API key required, handles XML)
-  (u) => `https://proxy.cors.dev/?url=${encodeURIComponent(u)}`,
-  // 3. CodeTabs (Great for raw feeds)
+  // 1. CodeTabs (Best for raw XML, handles redirects well)
   (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-  // 4. AllOrigins (Raw endpoint)
-  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
+  // 2. AllOrigins (Raw endpoint)
+  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  // 3. Your Cloudflare Worker (Good fallback)
+  (u) => `https://finwire-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`,
+  // 4. cors.dev (New, no API key)
+  (u) => `https://proxy.cors.dev/?url=${encodeURIComponent(u)}`
 ];
-
 let preferredProxy = 0;
 
 async function fetchViaProxy(targetUrl, options) {
