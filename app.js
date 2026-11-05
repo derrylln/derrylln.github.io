@@ -1,13 +1,16 @@
 /* ============================================================
-   FINWIRE — COMPLETE CLIENT-SIDE APP
+   FINWIRE — client-side financial news aggregator
    ============================================================ */
 'use strict';
 
-const CACHE_TTL = 15 * 60 * 1000;
+const CACHE_TTL       = 15 * 60 * 1000;
 const AUTO_REFRESH_MS = 15 * 60 * 1000;
-const OG_MAX_SCRAPES = 3;
+const OG_MAX_SCRAPES  = 3;
 
-const LS = { news: 'fw.news', ticker: 'fw.ticker', read: 'fw.read', watch: 'fw.watch', lang: 'fw.lang' };
+const LS = {
+  news: 'finwire.news.v2', ticker: 'finwire.ticker.v2', read: 'finwire.read.v2',
+  watch: 'finwire.watch.v2', lang: 'finwire.lang.v2', ogimg: 'finwire.ogimg.v2'
+};
 
 const SOURCES = [
   { id: 'bloomberg', label: 'Bloomberg', color: '#111827', url: 'https://news.google.com/rss/search?q=when:24h+site:bloomberg.com+markets&hl=en-US&gl=US&ceid=US:en', useJsonApi: true },
@@ -23,6 +26,14 @@ const TICKERS = [
   { symbol: 'IDR=X', label: 'USD/IDR' }, { symbol: 'CL=F', label: 'CRUDE OIL' }
 ];
 
+const MARKET_CATEGORIES = [
+  { title: 'Global Indices', titleId: 'Indeks Global', symbols: ['^JKSE', '^IXIC', '^GSPC', '^DJI'], isHighlight: true },
+  { title: 'Macro & FX', titleId: 'Makro & Valas', symbols: ['IDR=X', 'GC=F', 'CL=F', '^TNX'], isHighlight: true, isMacro: true },
+  { title: 'Indonesian Stocks (IDX)', titleId: 'Saham Indonesia (IDX)', symbols: ['BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'TLKM.JK', 'ASII.JK', 'GOTO.JK'] },
+  { title: 'US Tech Stocks', titleId: 'Saham Teknologi AS', symbols: ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'TSLA'] },
+  { title: 'Popular ETFs', titleId: 'ETF Populer', symbols: ['SPY', 'QQQ', 'VOO', 'EIDO'] }
+];
+
 const I18N = {
   en: {
     tagline: 'Markets · Business · Economy', markAllRead: 'Mark all read', watchPh: 'Add watchlist keyword…',
@@ -32,7 +43,8 @@ const I18N = {
     footer: 'FINWIRE — client-side market news aggregator.', justNow: 'just now', minAgo: n => `${n}m ago`,
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
-    stockLoading: 'Fetching market data…'
+    thSym: 'Symbol', thName: 'Name', thPrice: 'Price', thChange: 'Change', thVol: 'Volume', thDay: 'Day Range', th52w: '52-Week Range',
+    stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.'
   },
   id: {
     tagline: 'Pasar · Bisnis · Ekonomi', markAllRead: 'Tandai semua dibaca', watchPh: 'Tambah kata kunci pantauan…',
@@ -42,11 +54,12 @@ const I18N = {
     footer: 'FINWIRE — agregator berita pasar berbasis klien.', justNow: 'baru saja', minAgo: n => `${n}m lalu`,
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
-    stockLoading: 'Memuat data pasar…'
+    thSym: 'Simbol', thName: 'Nama', thPrice: 'Harga', thChange: 'Perubahan', thVol: 'Volume', thDay: 'Rentang Harian', th52w: 'Rentang 52-Minggu',
+    stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.'
   }
 };
 
-const state = { articles: [], ticker: [], filter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0 };
+const state = { articles: [], ticker: [], filter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, loading: false };
 
 const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.prototype.slice.call(root.querySelectorAll(sel));
@@ -62,21 +75,29 @@ function timeAgo(ts, lang) {
 }
 function stripHtml(html) { if (!html) return ''; const doc = new DOMParser().parseFromString(String(html), 'text/html'); doc.querySelectorAll('script, style, noscript').forEach(n => n.remove()); return (doc.body.textContent || '').replace(/\s+/g, ' ').trim(); }
 
-/* --- PROXY --- */
-const PROXIES = [(u) => `https://finwire-smart-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`];
+/* CORS PROXY LAYER */
+const PROXIES = [
+  (u) => `https://finwire-smart-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`
+];
+let preferredProxy = 0;
 async function fetchViaProxy(targetUrl, options) {
-  const opts = options || {}; const timeout = opts.timeout || 8000;
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeout);
-  try {
-    const res = await fetch(PROXIES[0](targetUrl), { signal: controller.signal, method: 'GET', headers: { 'Accept': '*/*' }, redirect: 'follow', credentials: 'omit', mode: 'cors' });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    let text = await res.text(); if (!text || text.length < 30) throw new Error('Empty response');
-    if (text.trim().charAt(0) === '{') { try { const parsed = JSON.parse(text); if (parsed && typeof parsed.contents === 'string' && parsed.contents.length) text = parsed.contents; } catch (e) {} }
-    return text;
-  } finally { clearTimeout(timer); }
+  const opts = options || {}; const timeout = opts.timeout || 8000; const order = [];
+  for (let i = 0; i < PROXIES.length; i++) order.push((preferredProxy + i) % PROXIES.length);
+  let lastError = null;
+  for (let k = 0; k < order.length; k++) {
+    const idx = order[k]; const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeout);
+    try {
+      const res = await fetch(PROXIES[idx](targetUrl), { signal: controller.signal, method: 'GET', headers: { 'Accept': '*/*' }, redirect: 'follow', credentials: 'omit', mode: 'cors' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      let text = await res.text(); if (!text || text.length < 30) throw new Error('Empty response');
+      if (text.trim().charAt(0) === '{') { try { const parsed = JSON.parse(text); if (parsed && typeof parsed.contents === 'string' && parsed.contents.length) text = parsed.contents; } catch (e) {} }
+      preferredProxy = idx; return text;
+    } catch (err) { lastError = err; } finally { clearTimeout(timer); }
+  }
+  throw lastError || new Error('All CORS proxies failed');
 }
 
-/* --- NEWS LOGIC --- */
+/* RSS & NEWS LOGIC */
 function firstTag(node, names) { for (let i = 0; i < names.length; i++) { const list = node.getElementsByTagName(names[i]); if (list && list.length) return list[0]; } return null; }
 function textOf(node, names) { const el = firstTag(node, names); if (!el) return ''; return (el.textContent || '').trim(); }
 function linkOf(node) { const el = firstTag(node, ['link']); if (!el) return ''; const href = el.getAttribute && el.getAttribute('href'); if (href && href.trim()) return href.trim(); return (el.textContent || '').trim(); }
@@ -130,25 +151,26 @@ async function fetchAllNews() {
         const res = await fetch(fetchUrl); if (!res.ok) throw new Error('HTTP ' + res.status);
         items = parseFeed(await res.text(), source);
       } else {
-        const xml = await fetchViaProxy(fetchUrl, { timeout: 8000 }); items = parseFeed(xml, source);
+        const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); items = parseFeed(xml, source);
       }
       if (items.length > 0) {
         state.articles = dedupe([...items, ...state.articles]).sort((a, b) => b.ts - a.ts);
-        newArticlesFound = true; renderNews(); enrichImages(items);
+        newArticlesFound = true; render(); enrichImages(items);
       }
     } catch (err) { console.warn('[FINWIRE] feed failed:', source.id, err.message); }
   }));
+  if (!newArticlesFound && state.articles.length === 0) throw new Error('No feeds returned data');
 }
 
-/* --- NEWS RENDERING --- */
-const ogCache = loadJSON('fw.ogimg', {});
+/* IMAGE SCRAPING */
+const ogCache = loadJSON(LS.ogimg, {});
 function isJunkImage(url) { return /google\.com|gstatic|googleusercontent|ggpht\.com|doubleclick|feedburner|gravatar|placeholder/i.test(url) || /^data:/i.test(url); }
 async function scrapeOgImage(articleUrl) {
   if (Object.prototype.hasOwnProperty.call(ogCache, articleUrl)) return ogCache[articleUrl];
   let found = '';
   try {
     const html = await fetchViaProxy(articleUrl, { timeout: 6000 });
-    const patterns = [ /<meta[^>]+(?:property|name)\s*=\s*["']og:image(?::url|:secure_url)?["'][^>]*content\s*=\s*["']([^"']+)["']/i, /<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]*(?:property|name)\s*=\s*["']og:image(?::url|:secure_url)?["']/i ];
+    const patterns = [ /<meta[^>]+(?:property|name)\s*=\s*["']og:image(?::url|:secure_url)?["'][^>]*content\s*=\s*["']([^"']+)["']/i, /<meta[^>]+content\s*=\s*["']([^"']+)["'][^>]*(?:property|name)\s*=\s*["']og:image(?::url|:secure_url)?["']/i, /<meta[^>]+(?:property|name)\s*=\s*["']twitter:image(?::src)?["'][^>]*content\s*=\s*["']([^"']+)["']/i ];
     for (let i = 0; i < patterns.length; i++) { const m = html.match(patterns[i]); if (m && m[1]) { found = m[1]; break; } }
     if (found) { try { found = new URL(found, articleUrl).href; } catch (e) { found = ''; } if (found && isJunkImage(found)) found = ''; }
   } catch (e) { found = ''; }
@@ -159,14 +181,53 @@ async function enrichImages(articles) {
   for (let article of candidates) {
     const img = await scrapeOgImage(article.link);
     if (img) {
-      article.image = img;
+      article.image = img; const cached = loadJSON(LS.news, null);
+      if (cached && cached.articles) { const ca = cached.articles.find(a => a.link === article.link); if (ca) ca.image = img; saveJSON(LS.news, cached); }
       const card = document.querySelector(`.card[data-url="${article.link}"]`);
-      if (card) { const thumb = card.querySelector('.thumb'); if (thumb && !thumb.querySelector('img')) { const imgEl = document.createElement('img'); imgEl.src = img; imgEl.loading = 'lazy'; imgEl.onerror = function() { this.remove(); }; thumb.appendChild(imgEl); } }
+      if (card) { const thumb = card.querySelector('.thumb'); if (thumb && !thumb.querySelector('img')) { const imgEl = document.createElement('img'); imgEl.src = img; imgEl.loading = 'lazy'; imgEl.referrerPolicy = 'no-referrer'; imgEl.onerror = function() { this.remove(); }; thumb.appendChild(imgEl); } }
     }
   }
 }
 
-function matchWatch(article) { if (!state.watch.length) return false; const haystack = (article.title + ' ' + article.summary).toLowerCase(); return state.watch.some(kw => kw && haystack.indexOf(kw.toLowerCase()) !== -1); }
+/* TICKER & NEWS RENDERING */
+async function fetchTicker() {
+  const settled = await Promise.allSettled(TICKERS.map(async (t) => {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t.symbol)}?interval=1d&range=5d`;
+    const raw = await fetchViaProxy(url, { timeout: 6000 }); const data = JSON.parse(raw);
+    const meta = data?.chart?.result?.[0]?.meta; if (!meta || typeof meta.regularMarketPrice !== 'number') throw new Error('No price');
+    const price = meta.regularMarketPrice; const prev = meta.chartPreviousClose || meta.previousClose || price;
+    return { label: t.label, symbol: t.symbol, price: price, change: prev ? ((price - prev) / prev) * 100 : 0 };
+  }));
+  const cached = loadJSON(LS.ticker, null); const cachedMap = {};
+  if (cached?.items) cached.items.forEach(it => { cachedMap[it.symbol] = it; });
+  return settled.map((res, i) => res.status === 'fulfilled' ? res.value : (cachedMap[TICKERS[i].symbol] || { label: TICKERS[i].label, symbol: TICKERS[i].symbol, price: null, change: null }));
+}
+
+function renderTicker(items) {
+  const track = $('#tickerTrack'); if (!track || !items || !items.length) return;
+  const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
+  const unit = items.map(t => {
+    let priceTxt = typeof t.price === 'number' ? t.price.toLocaleString(locale, { minimumFractionDigits: 0, maximumFractionDigits: t.price >= 1000 ? 2 : 4 }) : '—';
+    let changeTxt = '—', dir = 'flat';
+    if (typeof t.change === 'number' && isFinite(t.change)) {
+      dir = t.change > 0 ? 'up' : (t.change < 0 ? 'down' : 'flat');
+      changeTxt = (dir === 'up' ? '▲ ' : dir === 'down' ? '▼ ' : '') + Math.abs(t.change).toFixed(2) + '%';
+    }
+    return `<span class="tk"><span class="tk-sym">${esc(t.label)}</span><span class="tk-price">${esc(priceTxt)}</span><span class="tk-chg ${dir}">${esc(changeTxt)}</span></span>`;
+  }).join('');
+  track.style.animation = 'none'; track.innerHTML = unit;
+  const singleWidth = track.scrollWidth || 1, viewport = window.innerWidth || 1280; let reps = 1;
+  while (singleWidth * reps < viewport * 1.6 && reps < 24) reps++;
+  track.innerHTML = unit.repeat(reps) + unit.repeat(reps);
+  track.style.animationDuration = Math.max(35, reps * items.length * 5) + 's';
+  void track.offsetWidth; track.style.animation = '';
+}
+
+function matchWatch(article) {
+  if (!state.watch.length) return false;
+  const haystack = (article.title + ' ' + article.summary).toLowerCase();
+  return state.watch.some(kw => kw && haystack.indexOf(kw.toLowerCase()) !== -1);
+}
 
 function cardHTML(article, variant) {
   const t = I18N[state.lang]; const isRead = state.read.has(article.link); const isHit = matchWatch(article);
@@ -191,7 +252,7 @@ function currentArticles() {
   return list;
 }
 
-function renderNews() {
+function render() {
   const heroEl = $('#hero'), gridEl = $('#grid'), t = I18N[state.lang]; const list = currentArticles();
   if (!list.length) { if (heroEl) heroEl.innerHTML = ''; if (gridEl) gridEl.innerHTML = `<div class="empty">${esc(t.noArticles)}</div>`; return; }
   let heroIndex = list.findIndex(a => !!a.image); if (heroIndex < 0) heroIndex = 0;
@@ -201,137 +262,20 @@ function renderNews() {
   if (gridEl) gridEl.innerHTML = grid.map(a => cardHTML(a, 'grid')).join('');
 }
 
-async function fetchTicker() {
-  const settled = await Promise.allSettled(TICKERS.map(async (t) => {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t.symbol)}?interval=1d&range=5d`;
-    const raw = await fetchViaProxy(url, { timeout: 6000 }); const data = JSON.parse(raw);
-    const meta = data?.chart?.result?.[0]?.meta; if (!meta || typeof meta.regularMarketPrice !== 'number') throw new Error('No price');
-    const price = meta.regularMarketPrice; const prev = meta.chartPreviousClose || meta.previousClose || price;
-    return { label: t.label, symbol: t.symbol, price: price, change: prev ? ((price - prev) / prev) * 100 : 0 };
-  }));
-  return settled.map((res, i) => res.status === 'fulfilled' ? res.value : { label: TICKERS[i].label, symbol: TICKERS[i].symbol, price: null, change: null });
+function refreshTimes() {
+  $$('.ago[data-ts]').forEach(el => { const ts = parseInt(el.getAttribute('data-ts'), 10); if (!isNaN(ts)) el.textContent = timeAgo(ts, state.lang); });
+  if (state.lastTs) updateStatusLabel(state.lastKind || 'live', state.lastTs);
 }
 
-function renderTicker(items) {
-  const track = $('#tickerTrack'); if (!track || !items || !items.length) return;
-  const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
-  const unit = items.map(t => {
-    let priceTxt = typeof t.price === 'number' ? t.price.toLocaleString(locale, { maximumFractionDigits: 2 }) : '—';
-    let changeTxt = '—', dir = 'flat';
-    if (typeof t.change === 'number' && isFinite(t.change)) {
-      dir = t.change > 0 ? 'up' : (t.change < 0 ? 'down' : 'flat');
-      changeTxt = (dir === 'up' ? '▲ ' : dir === 'down' ? '▼ ' : '') + Math.abs(t.change).toFixed(2) + '%';
-    }
-    return `<span class="tk"><span class="tk-sym">${esc(t.label)}</span><span class="tk-price">${esc(priceTxt)}</span><span class="tk-chg ${dir}">${esc(changeTxt)}</span></span>`;
-  }).join('');
-  track.innerHTML = unit.repeat(4);
+function updateStatusLabel(kind, ts) {
+  const el = $('#status'); if (!el) return; const t = I18N[state.lang];
+  if (kind === 'loading') { el.className = 'status loading'; el.textContent = t.loading; return; }
+  if (kind === 'error') { el.className = 'status stale'; el.innerHTML = `<span class="dot stale"></span>${esc(t.errorLabel)}`; return; }
+  const label = kind === 'live' ? t.liveLabel : (kind === 'cached' ? t.cacheLabel : t.staleLabel);
+  el.className = `status ${kind}`;
+  el.innerHTML = `<span class="dot ${kind}"></span>${esc(label)} · ${esc(t.updated)} ${esc(timeAgo(ts, state.lang))} · ${esc(t.stories(state.articles.length))}`;
 }
 
-/* --- DASHBOARD & CHART LOGIC --- */
-async function fetchStockDetails(symbol) {
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
-    const raw = await fetchViaProxy(url);
-    const data = JSON.parse(raw);
-    const meta = data?.chart?.result?.[0]?.meta;
-    if (!meta) throw new Error('No data');
-    return { symbol: meta.symbol, name: meta.shortName || meta.symbol, price: meta.regularMarketPrice, prevClose: meta.chartPreviousClose || meta.regularMarketPrice };
-  } catch (e) { return null; }
-}
-
-async function fetchHistory(symbol, range = '1mo') {
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`;
-    const raw = await fetchViaProxy(url);
-    const data = JSON.parse(raw);
-    const result = data?.chart?.result?.[0];
-    if (!result) return [];
-    const timestamps = result.timestamp || [];
-    const quotes = result.indicators.quote[0].close || [];
-    return timestamps.map((ts, i) => ({ x: new Date(ts * 1000).getTime(), y: quotes[i] })).filter(p => p.y !== null);
-  } catch (e) { return []; }
-}
-
-async function loadMarketDashboard() {
-  const dash = $('#stockDashboard');
-  if (!dash) return;
-  dash.innerHTML = '<div style="text-align:center;padding:40px;color:#666;">Loading terminal data...</div>';
-
-  const sumSymbols = [{ s: '^JKSE', n: 'IHSG' }, { s: '^GSPC', n: 'S&P 500' }, { s: 'IDR=X', n: 'USD/IDR' }, { s: 'GC=F', n: 'Gold' }];
-  const summaryData = await Promise.all(sumSymbols.map(async x => {
-    const hist = await fetchHistory(x.s, '1mo');
-    const price = hist.length ? hist[hist.length - 1].y : 0;
-    const prev = hist.length > 1 ? hist[hist.length - 2].y : price;
-    return { name: x.n, symbol: x.s, price, change: prev ? ((price - prev) / prev) * 100 : 0, spark: hist };
-  }));
-
-  const mainChartData = await fetchHistory('^JKSE', '6mo');
-
-  const moversRaw = await Promise.all(['BBCA.JK', 'BBRI.JK', 'GOTO.JK', 'AAPL', 'TSLA', 'NVDA'].map(fetchStockDetails));
-  const movers = moversRaw.filter(Boolean).map(s => { s.pct = ((s.price - s.prevClose) / s.prevClose) * 100; return s; }).sort((a, b) => b.pct - a.pct);
-
-  const idxSymbols = ['BMRI.JK', 'TLKM.JK', 'ASII.JK', 'AMRT.JK'];
-  const idxStocks = (await Promise.all(idxSymbols.map(fetchStockDetails))).filter(Boolean).map(s => { s.pct = ((s.price - s.prevClose) / s.prevClose) * 100; return s; });
-
-  dash.innerHTML = `
-    <div class="sparkline-grid" id="sparkGrid"></div>
-    <div class="dash-grid">
-      <div class="modern-card">
-        <div class="card-title">IHSG Market Performance <span style="color:var(--green);font-size:12px;">6 Month Trend</span></div>
-        <div id="mainChart"></div>
-      </div>
-      <div class="modern-card">
-        <div class="card-title">Market Movers</div>
-        <div class="movers-list" id="moversList"></div>
-      </div>
-    </div>
-    <div style="margin-top: 32px;">
-      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">IDX Bluechips</h2>
-      <div class="stock-card-grid" id="idxGrid"></div>
-    </div>
-  `;
-
-  $('#sparkGrid').innerHTML = summaryData.map(d => `
-    <div class="spark-card">
-      <div class="spark-header"><span class="spark-name">${d.name}</span><span class="spark-chg ${d.change >= 0 ? 'up' : 'down'}">${d.change >= 0 ? '▲' : '▼'} ${Math.abs(d.change).toFixed(2)}%</span></div>
-      <div class="spark-val">${d.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>
-      <div id="spark-${d.symbol.replace('^', '').replace('=', '')}"></div>
-    </div>
-  `).join('');
-
-  if (typeof ApexCharts !== 'undefined') {
-    summaryData.forEach(d => {
-      new ApexCharts(document.querySelector(`#spark-${d.symbol.replace('^', '').replace('=', '')}`), {
-        series: [{ data: d.spark.map(p => p.y) }], chart: { type: 'area', height: 50, sparkline: { enabled: true } },
-        stroke: { curve: 'smooth', width: 2 }, colors: [d.change >= 0 ? '#0a8f4a' : '#d10a11'],
-        fill: { type: 'gradient', gradient: { opacityFrom: 0.4, opacityTo: 0 } }, tooltip: { enabled: false }
-      }).render();
-    });
-
-    new ApexCharts(document.querySelector("#mainChart"), {
-      series: [{ name: 'IHSG', data: mainChartData }], chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'Inter' },
-      colors: ['#d10a11'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0 } },
-      dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 3 },
-      xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: '#f1f3f5', strokeDashArray: 4 }
-    }).render();
-  }
-
-  $('#moversList').innerHTML = movers.slice(0, 5).map(s => `
-    <div class="mover-item">
-      <div><div class="mover-sym">${s.symbol.replace('.JK', '')}</div><div class="mover-name">${s.name}</div></div>
-      <div style="text-align:right;"><div class="mover-price">${s.price.toLocaleString('en-US')}</div><div class="mover-pct ${s.pct >= 0 ? 'up' : 'down'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</div></div>
-    </div>
-  `).join('');
-
-  $('#idxGrid').innerHTML = idxStocks.map(s => `
-    <a href="https://finance.yahoo.com/quote/${s.symbol}" target="_blank" class="stock-card">
-      <div class="sc-header"><div><div class="sc-sym">${s.symbol.replace('.JK', '')}</div><div class="sc-name">${s.name}</div></div><div class="sc-chg ${s.pct >= 0 ? 'up' : 'down'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</div></div>
-      <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
-    </a>
-  `).join('');
-}
-
-/* --- FILTERS, UI BINDING & INIT --- */
 function renderFilters() {
   const bar = $('#filters'); if (!bar) return; const t = I18N[state.lang];
   const sourceChips = SOURCES.map(s => `<button type="button" class="chip${state.filter === s.id ? ' active' : ''}" data-filter="${esc(s.id)}">${esc(s.label)}</button>`).join('');
@@ -352,9 +296,10 @@ function applyLang() {
   $$('[data-i18n]').forEach(el => { const key = el.getAttribute('data-i18n'); if (t[key]) el.textContent = t[key]; });
   $$('[data-i18n-ph]').forEach(el => { const key = el.getAttribute('data-i18n-ph'); if (t[key]) el.setAttribute('placeholder', t[key]); });
   $$('.lang-toggle button').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-lang') === state.lang));
-  renderFilters(); renderNews();
+  renderFilters(); renderTicker(state.ticker); render(); refreshTimes();
 }
 
+/* MARKET DASHBOARD LOGIC */
 function switchView(view) {
   if (view === 'news') {
     $('#newsView').style.display = 'block'; $('#stocksView').style.display = 'none'; $('#filters').style.display = 'block';
@@ -362,20 +307,240 @@ function switchView(view) {
   } else {
     $('#newsView').style.display = 'none'; $('#stocksView').style.display = 'block'; $('#filters').style.display = 'none';
     $('#navNews').classList.remove('active'); $('#navStocks').classList.add('active');
-    if (!$('#stockDashboard').children.length) loadMarketDashboard();
+    
+    // 1. Instantly load cached dashboard if it exists
+    const cachedDash = localStorage.getItem('finwire.dashboard_html');
+    if (cachedDash) {
+      $('#stockDashboard').innerHTML = cachedDash;
+    } else if (!$('#stockDashboard').children.length) {
+      loadMarketDashboard();
+    }
+
+    // 2. Fetch fresh data in the background to update the cache
+    loadMarketDashboard();
   }
 }
 
+async function fetchStockDetails(symbol) {
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+    const raw = await fetchViaProxy(url, { timeout: 8000 });
+    const data = JSON.parse(raw);
+    
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta || typeof meta.regularMarketPrice !== 'number') throw new Error('No price data');
+
+    return { 
+      symbol: meta.symbol, 
+      name: meta.shortName || meta.symbol, 
+      price: meta.regularMarketPrice, 
+      prevClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice, 
+      volume: meta.regularMarketVolume, 
+      dayHigh: meta.regularMarketDayHigh, 
+      dayLow: meta.regularMarketDayLow, 
+      week52High: meta.fiftyTwoWeekHigh, 
+      week52Low: meta.fiftyTwoWeekLow 
+    };
+  } catch (e) { 
+    console.warn("Failed to fetch", symbol, e.message);
+    return { symbol: symbol, name: symbol, price: null, prevClose: null, volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null };
+  }
+}
+
+async function fetchStockRatios(symbol) {
+  try {
+    // ATTEMPTING v6 ENDPOINT AS REQUESTED
+    const url = `https://query1.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+    const raw = await fetchViaProxy(url, { timeout: 8000 });
+    const data = JSON.parse(raw);
+    
+    if (data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result[0]) {
+      const q = data.quoteResponse.result[0];
+      const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+      const fmtPct = (n) => (n !== undefined && n !== null) ? (Number(n) * 100).toFixed(2) + '%' : '—';
+      
+      let mcStr = '—';
+      if (q.marketCap) {
+        if (q.marketCap >= 1e12) mcStr = (q.marketCap / 1e12).toFixed(2) + 'T';
+        else if (q.marketCap >= 1e9) mcStr = (q.marketCap / 1e9).toFixed(2) + 'B';
+        else if (q.marketCap >= 1e6) mcStr = (q.marketCap / 1e6).toFixed(2) + 'M';
+        else mcStr = fmt(q.marketCap);
+      }
+      return { marketCap: mcStr, trailingPE: fmt(q.trailingPE), forwardPE: fmt(q.forwardPE), dividendYield: q.dividendYield ? fmtPct(q.dividendYield) : '—' };
+    }
+  } catch (e) { 
+    console.warn('Ratio fetch failed', e); 
+  }
+  return null;
+}
+
+function generateStockRow(s) {
+  if (!s.price) {
+    return `
+      <tr class="stock-row" data-symbol="${esc(s.symbol)}">
+        <td class="sym">${esc(s.symbol)}</td><td>${esc(s.name)}</td>
+        <td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
+      </tr>
+      <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;"><td colspan="7"></td></tr>`;
+  }
+
+  const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
+  const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
+  const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
+  const fmt = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+  const fmtVol = (n) => n ? (n/1000000).toFixed(2) + 'M' : '—';
+  
+  return `
+    <tr class="stock-row" data-symbol="${esc(s.symbol)}">
+      <td class="sym">${esc(s.symbol)}</td><td>${esc(s.name)}</td>
+      <td class="num" style="font-weight:600;">${fmt(s.price)}</td>
+      <td class="num" style="font-weight:700; color:${color}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</td>
+      <td class="num">${fmtVol(s.volume)}</td><td class="num">${fmt(s.dayLow)} - ${fmt(s.dayHigh)}</td><td class="num">${fmt(s.week52Low)} - ${fmt(s.week52High)}</td>
+    </tr>
+    <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;"><td colspan="7"></td></tr>`;
+}
+
+function generateTableHTML(valid) {
+  const t = I18N[state.lang];
+  return `<div class="stock-table-wrap">
+    <table class="stock-table">
+      <thead><tr><th>${t.thSym}</th><th>${t.thName}</th><th class="num">${t.thPrice}</th><th class="num">${t.thChange}</th><th class="num">${t.thVol}</th><th class="num">${t.thDay}</th><th class="num">${t.th52w}</th></tr></thead>
+      <tbody>${valid.map(s => generateStockRow(s)).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
+async function loadMarketDashboard() {
+  const dash = $('#stockDashboard'); const t = I18N[state.lang];
+  
+  // Only show loading text if there is no cached data
+  if (!dash.innerHTML || dash.innerHTML.includes('stock-loading')) {
+    dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
+  }
+
+  let allFetchedStocks = []; 
+  let execSummaryHtml = '';
+  let detailSectionsHtml = '';
+
+  // Fetch all data sequentially
+  for (const cat of MARKET_CATEGORIES) {
+    const valid = [];
+    for (const sym of cat.symbols) {
+      const details = await fetchStockDetails(sym);
+      if (details) {
+        valid.push(details);
+        if (!cat.isHighlight && details.price) {
+          details.pct = ((details.price - details.prevClose) / details.prevClose) * 100;
+          details.market = sym.endsWith('.JK') ? 'IDX' : 'US';
+          allFetchedStocks.push(details);
+        }
+      }
+      await new Promise(r => setTimeout(r, 100)); 
+    }
+
+    if (cat.isHighlight) {
+      execSummaryHtml += valid.map(s => {
+        if (!s.price) return '';
+        const change = s.price - s.prevClose; 
+        const pct = (change / s.prevClose) * 100;
+        const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
+        
+        let displayName = s.name || s.symbol;
+        if (s.symbol === 'IDR=X') displayName = 'USD/IDR Rate';
+        if (s.symbol === '^JKSE') displayName = 'IHSG';
+        
+        return `<div class="exec-card">
+          <div class="exec-name">${esc(displayName)}</div>
+          <div class="exec-price">${s.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+          <div class="exec-change ${dir}">${change > 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%</div>
+        </div>`;
+      }).join('');
+    } else {
+      // Build Clean Grid Cards instead of massive tables
+      const title = state.lang === 'id' ? cat.titleId : cat.title;
+      const cards = valid.map(s => {
+        if (!s.price) return '';
+        const isUp = s.pct >= 0;
+        return `<a href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank" class="stock-card">
+          <div class="sc-header">
+            <div>
+              <div class="sc-sym">${esc(s.symbol.replace('.JK', ''))}</div>
+              <div class="sc-name">${esc(s.name)}</div>
+            </div>
+            <div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div>
+          </div>
+          <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
+        </a>`;
+      }).join('');
+      
+      detailSectionsHtml += `<div class="category-section">
+        <h2 class="category-title">${esc(title)}</h2>
+        <div class="stock-card-grid">${cards}</div>
+      </div>`;
+    }
+  }
+
+  // Build Top Movers Strip
+  let moversHtml = '';
+  if (allFetchedStocks.length > 0) {
+    const sorted = [...allFetchedStocks].sort((a, b) => b.pct - a.pct);
+    const gainers = sorted.slice(0, 3);
+    const losers = sorted.slice(-3).reverse();
+
+    moversHtml = `<div class="movers-strip">
+      <span class="title">▲ Top Gainers:</span>
+      ${gainers.map(s => `<a href="https://finance.yahoo.com/quote/${s.symbol}" target="_blank">${s.symbol.replace('.JK', '')} <span class="val-up">+${s.pct.toFixed(2)}%</span></a>`).join('')}
+      <span class="title" style="margin-left: 20px;">▼ Top Losers:</span>
+      ${losers.map(s => `<a href="https://finance.yahoo.com/quote/${s.symbol}" target="_blank">${s.symbol.replace('.JK', '')} <span class="val-down">${s.pct.toFixed(2)}%</span></a>`).join('')}
+    </div>`;
+  }
+
+  // Assemble final HTML and save to cache
+  const finalHtml = `
+    <div class="exec-summary-grid">${execSummaryHtml}</div>
+    ${moversHtml}
+    ${detailSectionsHtml}
+  `;
+  
+  dash.innerHTML = finalHtml;
+  localStorage.setItem('finwire.dashboard_html', finalHtml); // <--- THE CACHE
+}
+
+async function searchStocks(query) {
+  if (!query) { loadMarketDashboard(); return; }
+  const dash = $('#stockDashboard'); const t = I18N[state.lang];
+  dash.innerHTML = `<div class="stock-loading">${t.stockSearch}</div>`;
+
+  try {
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}`;
+    const raw = await fetchViaProxy(url, { timeout: 8000 }); const data = JSON.parse(raw);
+    const quotes = data.quotes || []; const symbols = quotes.filter(q => q.isYahooFinance && q.quoteType !== 'NONE').map(q => q.symbol);
+    
+    if (symbols.length === 0) { dash.innerHTML = `<div class="stock-loading">${t.stockNoRes}</div>`; return; }
+    
+    const results = [];
+    for (const s of symbols.slice(0, 10)) {
+      results.push(await fetchStockDetails(s));
+      await new Promise(r => setTimeout(r, 100));
+    }
+    const valid = results.filter(r => r !== null);
+
+    dash.innerHTML = `<div class="category-section"><h2 class="category-title">${t.searchBtn}: ${esc(query)}</h2>${generateTableHTML(valid)}</div>`;
+  } catch (e) { dash.innerHTML = `<div class="stock-loading">${t.stockErr}</div>`; }
+}
+
+/* DATA LOADING & BINDING */
 async function loadNews(force) {
   const cached = loadJSON(LS.news, null);
   if (cached && cached.articles && cached.articles.length > 0) {
-    state.articles = cached.articles; state.lastTs = cached.ts;
-    renderNews();
+    state.articles = cached.articles; state.lastTs = cached.ts; state.lastKind = 'cached';
+    render(); updateStatusLabel('cached', cached.ts);
     if (!force && (Date.now() - cached.ts) < CACHE_TTL) return;
-  }
+  } else { updateStatusLabel('loading'); }
   try {
-    await fetchAllNews(); saveJSON(LS.news, { ts: Date.now(), articles: state.articles });
-  } catch (err) { }
+    await fetchAllNews(); state.lastTs = Date.now(); state.lastKind = 'live';
+    saveJSON(LS.news, { ts: Date.now(), articles: state.articles }); updateStatusLabel('live', state.lastTs);
+  } catch (err) { if (!cached || !cached.articles) updateStatusLabel('error'); }
 }
 
 async function loadTicker(force) {
@@ -386,46 +551,97 @@ async function loadTicker(force) {
   } catch (err) { if (cached && cached.items) { state.ticker = cached.items; renderTicker(state.ticker); } }
 }
 
-function init() {
-  const savedLang = localStorage.getItem(LS.lang); state.lang = (savedLang === 'id' || savedLang === 'en') ? savedLang : 'en';
-  const savedRead = loadJSON(LS.read, []); state.read = new Set(Array.isArray(savedRead) ? savedRead : []);
-  const savedWatch = loadJSON(LS.watch, null); state.watch = Array.isArray(savedWatch) ? savedWatch : [];
+async function loadAll(force) {
+  if (state.loading) return; state.loading = true;
+  try { await Promise.all([loadNews(force), loadTicker(force)]); } finally { state.loading = false; }
+}
 
-  $('#navNews')?.addEventListener('click', () => switchView('news'));
-  $('#navStocks')?.addEventListener('click', () => switchView('stocks'));
+function bindUI() {
+  if ($('#navNews')) $('#navNews').addEventListener('click', () => switchView('news'));
+  if ($('#navStocks')) $('#navStocks').addEventListener('click', () => switchView('stocks'));
+  
+  const searchInput = $('#stockSearchInput');
+  if ($('#stockSearchBtn')) $('#stockSearchBtn').addEventListener('click', () => searchStocks(searchInput.value.trim()));
+  if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchStocks(searchInput.value.trim()); } });
+
+  // --- Stock Row Expansion Logic ---
+  $('#stockDashboard').addEventListener('click', async (e) => {
+    const row = e.target.closest('.stock-row');
+    if (!row) return;
+    const symbol = row.getAttribute('data-symbol');
+    const detailRow = document.getElementById(`details-${symbol}`);
+    if (!detailRow) return;
+
+    if (detailRow.style.display === 'none') {
+      detailRow.style.display = 'table-row';
+      row.classList.add('expanded');
+      
+      const td = detailRow.querySelector('td');
+      if (td.innerHTML !== '') return;
+
+      td.innerHTML = `<div class="details-loading">Fetching ratios...</div>`;
+      
+      const ratios = await fetchStockRatios(symbol);
+      
+      let ratioHtml = '';
+      if (ratios) {
+        ratioHtml = `
+          <div class="ratio-group">
+            <div class="ratio-item"><span class="ratio-label">Market Cap</span><span class="ratio-value">${ratios.marketCap}</span></div>
+            <div class="ratio-item"><span class="ratio-label">P/E Ratio</span><span class="ratio-value">${ratios.trailingPE}</span></div>
+            <div class="ratio-item"><span class="ratio-label">Fwd P/E</span><span class="ratio-value">${ratios.forwardPE}</span></div>
+            <div class="ratio-item"><span class="ratio-label">Div Yield</span><span class="ratio-value">${ratios.dividendYield}</span></div>
+          </div>
+        `;
+      } else {
+        ratioHtml = `<div class="ratio-group" style="color:var(--muted); font-style:italic; font-size:13px;">Detailed metrics unavailable. View full report via the link.</div>`;
+      }
+
+      td.innerHTML = `
+        <div class="stock-details-content">
+          ${ratioHtml}
+          <a href="https://finance.yahoo.com/quote/${esc(symbol)}/financials" target="_blank" class="btn-financials">View Official Financials ↗</a>
+        </div>
+      `;
+    } else {
+      detailRow.style.display = 'none';
+      row.classList.remove('expanded');
+    }
+  });
 
   $('#filters').addEventListener('click', (e) => {
     const chip = e.target.closest('.chip[data-filter]'); if (!chip) return;
     state.filter = chip.getAttribute('data-filter');
-    $$('#filters .chip').forEach(c => c.classList.toggle('active', c === chip)); renderNews();
+    $$('#filters .chip').forEach(c => c.classList.toggle('active', c === chip)); render();
   });
 
-  $('#filters').addEventListener('change', (e) => { if (e.target && e.target.id === 'unreadToggle') { state.unreadOnly = e.target.checked; renderNews(); } });
+  $('#filters').addEventListener('change', (e) => { if (e.target && e.target.id === 'unreadToggle') { state.unreadOnly = e.target.checked; render(); } });
 
   $$('.lang-toggle button').forEach(btn => {
     btn.addEventListener('click', () => {
       if (btn.getAttribute('data-lang') === state.lang) return;
       state.lang = btn.getAttribute('data-lang'); localStorage.setItem(LS.lang, state.lang);
-      applyLang();
+      applyLang(); if ($('#stocksView').style.display !== 'none') loadMarketDashboard();
+      if (state.lastTs) updateStatusLabel(state.lastKind || 'live', state.lastTs);
     });
   });
 
-  $('#markAllRead')?.addEventListener('click', () => { currentArticles().forEach(a => state.read.add(a.link)); saveJSON(LS.read, Array.from(state.read).slice(-1000)); renderNews(); });
-  $('#refreshBtn')?.addEventListener('click', () => { loadNews(true); loadTicker(true); loadMarketDashboard(); });
+  $('#markAllRead').addEventListener('click', () => { currentArticles().forEach(a => state.read.add(a.link)); saveJSON(LS.read, Array.from(state.read).slice(-1000)); render(); refreshTimes(); });
+  $('#refreshBtn').addEventListener('click', () => loadAll(true));
 
   const input = $('#watchInput');
   const addKeyword = () => {
     const raw = (input.value || '').trim(); if (!raw) return;
-    if (!state.watch.some(k => k.toLowerCase() === raw.toLowerCase())) { state.watch.push(raw); saveJSON(LS.watch, state.watch); renderWatchChips(); renderNews(); }
+    if (!state.watch.some(k => k.toLowerCase() === raw.toLowerCase())) { state.watch.push(raw); saveJSON(LS.watch, state.watch); renderWatchChips(); render(); }
     input.value = '';
   };
-  $('#watchAdd')?.addEventListener('click', addKeyword);
-  input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addKeyword(); } });
+  $('#watchAdd').addEventListener('click', addKeyword);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addKeyword(); } });
 
-  $('#watchChips')?.addEventListener('click', (e) => {
+  $('#watchChips').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-remove-watch]'); if (!btn) return;
     const idx = parseInt(btn.getAttribute('data-remove-watch'), 10);
-    if (!isNaN(idx)) { state.watch.splice(idx, 1); saveJSON(LS.watch, state.watch); renderWatchChips(); renderNews(); }
+    if (!isNaN(idx)) { state.watch.splice(idx, 1); saveJSON(LS.watch, state.watch); renderWatchChips(); render(); }
   });
 
   document.addEventListener('click', (e) => {
@@ -436,13 +652,25 @@ function init() {
     const dot = card.querySelector('.unread-dot'); if (dot) dot.remove();
   });
 
-  renderFilters();
-  renderWatchChips();
-  applyLang();
-  
-  loadNews(false);
-  loadTicker(false);
-  loadMarketDashboard();
+  let resizeTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderTicker(state.ticker), 350); });
+  setInterval(refreshTimes, 60 * 1000);
 }
 
-document.addEventListener('DOMContentLoaded', init);
+function init() {
+  const savedLang = localStorage.getItem(LS.lang); state.lang = (savedLang === 'id' || savedLang === 'en') ? savedLang : 'en';
+  const savedRead = loadJSON(LS.read, []); state.read = new Set(Array.isArray(savedRead) ? savedRead : []);
+  const savedWatch = loadJSON(LS.watch, null); state.watch = Array.isArray(savedWatch) ? savedWatch : [];
+
+  bindUI(); renderFilters(); renderWatchChips(); applyLang(); loadAll(false);
+  setInterval(() => loadAll(true), AUTO_REFRESH_MS);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      const cached = loadJSON(LS.news, null);
+      if (!cached || (Date.now() - cached.ts) >= CACHE_TTL) loadAll(false); else refreshTimes();
+    }
+  });
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
