@@ -323,19 +323,24 @@ async function fetchStockDetails(symbol) {
 
 async function fetchStockRatios(symbol) {
   try {
-    // We use v10/quoteSummary which gives us all ratios in one call
-    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=summaryDetail,defaultKeyStatistics`;
-    const raw = await fetchViaProxy(url, { timeout: 8000 });
+    // Use query2 (more lenient) and v10 (has the ratios)
+    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,summaryDetail,financialData`;
+    
+    // Increase timeout to 12 seconds so the Worker has time to get the Crumb
+    const raw = await fetchViaProxy(url, { timeout: 12000 });
     const data = JSON.parse(raw);
     
     if (data.quoteSummary && data.quoteSummary.result && data.quoteSummary.result[0]) {
-      const summary = data.quoteSummary.result[0].summaryDetail || {};
-      const stats = data.quoteSummary.result[0].defaultKeyStatistics || {};
+      const res = data.quoteSummary.result[0];
+      const summary = res.summaryDetail || {};
+      const stats = res.defaultKeyStatistics || {};
+      const financial = res.financialData || {};
       
       const getRaw = (obj) => (obj && typeof obj === 'object' && obj.raw !== undefined) ? obj.raw : obj;
       
-      const marketCap = getRaw(summary.marketCap) || getRaw(stats.enterpriseValue);
-      const trailingPE = getRaw(summary.trailingPE);
+      // Try multiple places for Market Cap
+      const marketCap = getRaw(summary.marketCap) || getRaw(financial.marketCap);
+      const trailingPE = getRaw(summary.trailingPE) || getRaw(stats.trailingPE);
       const forwardPE = getRaw(summary.forwardPE) || getRaw(stats.forwardPE);
       const dividendYield = getRaw(summary.dividendYield);
 
@@ -358,7 +363,7 @@ async function fetchStockRatios(symbol) {
       };
     }
   } catch (e) { 
-    console.warn('Ratio fetch failed', e); 
+    console.warn('Ratio fetch failed for', symbol, e); 
   }
   return null;
 }
