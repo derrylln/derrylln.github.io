@@ -26,6 +26,40 @@ const TICKERS = [
   { symbol: 'IDR=X', label: 'USD/IDR' }, { symbol: 'CL=F', label: 'CRUDE OIL' }
 ];
 
+// EXPANDED COVERAGE
+const INDICES = [
+  { symbol: '^JKSE', name: 'IHSG' }, { symbol: '^IXIC', name: 'NASDAQ' }, 
+  { symbol: '^GSPC', name: 'S&P 500' }, { symbol: '^DJI', name: 'DOW JONES' }
+];
+
+const MACRO = [
+  { symbol: 'IDR=X', name: 'USD/IDR' }, { symbol: 'GC=F', name: 'Gold' }, 
+  { symbol: 'CL=F', name: 'Crude Oil' }, { symbol: '^TNX', name: '10Y Yield' }, 
+  { symbol: 'BTC-USD', name: 'Bitcoin' }
+];
+
+const IDX_STOCKS = [
+  { symbol: 'BBCA.JK', name: 'Bank Central Asia' }, { symbol: 'BBRI.JK', name: 'Bank Rakyat Indonesia' },
+  { symbol: 'BMRI.JK', name: 'Bank Mandiri' }, { symbol: 'TLKM.JK', name: 'Telkom Indonesia' },
+  { symbol: 'ASII.JK', name: 'Astra International' }, { symbol: 'GOTO.JK', name: 'GoTo Gojek Tokopedia' },
+  { symbol: 'AMRT.JK', name: 'Sumber Alfaria Trijaya' }, { symbol: 'BRPT.JK', name: 'Barito Pacific' },
+  { symbol: 'ANTM.JK', name: 'Aneka Tambang' }, { symbol: 'ICBP.JK', name: 'Indofood CBP' }
+];
+
+const US_STOCKS = [
+  { symbol: 'AAPL', name: 'Apple Inc.' }, { symbol: 'MSFT', name: 'Microsoft Corp.' },
+  { symbol: 'NVDA', name: 'NVIDIA Corp.' }, { symbol: 'GOOGL', name: 'Alphabet Inc.' },
+  { symbol: 'AMZN', name: 'Amazon.com Inc.' }, { symbol: 'TSLA', name: 'Tesla Inc.' },
+  { symbol: 'META', name: 'Meta Platforms' }, { symbol: 'AMD', name: 'Advanced Micro Devices' },
+  { symbol: 'NFLX', name: 'Netflix Inc.' }, { symbol: 'JPM', name: 'JPMorgan Chase' }
+];
+
+const ETFS = [
+  { symbol: 'SPY', name: 'SPDR S&P 500 ETF' }, { symbol: 'QQQ', name: 'Invesco QQQ Trust' },
+  { symbol: 'VOO', name: 'Vanguard S&P 500' }, { symbol: 'EIDO', name: 'iShares MSCI Indonesia' },
+  { symbol: 'ARKK', name: 'ARK Innovation ETF' }
+];
+
 const I18N = {
   en: {
     tagline: 'Markets · Business · Economy', markAllRead: 'Mark all read', watchPh: 'Add watchlist keyword…',
@@ -35,7 +69,6 @@ const I18N = {
     footer: 'FINWIRE — client-side market news aggregator.', justNow: 'just now', minAgo: n => `${n}m ago`,
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
-    thSym: 'Symbol', thName: 'Name', thPrice: 'Price', thChange: 'Change', thVol: 'Volume', thDay: 'Day Range', th52w: '52-Week Range',
     stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.'
   },
   id: {
@@ -46,7 +79,6 @@ const I18N = {
     footer: 'FINWIRE — agregator berita pasar berbasis klien.', justNow: 'baru saja', minAgo: n => `${n}m lalu`,
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
-    thSym: 'Simbol', thName: 'Nama', thPrice: 'Harga', thChange: 'Perubahan', thVol: 'Volume', thDay: 'Rentang Harian', th52w: 'Rentang 52-Minggu',
     stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.'
   }
 };
@@ -334,57 +366,158 @@ async function fetchHistory(symbol, range = '1mo') {
   } catch (e) { return []; }
 }
 
+function generateMoversTable(title, stocks, headerClass) {
+  if (!stocks.length) return '';
+  const rows = stocks.map(s => `
+    <tr>
+      <td style="font-weight:800; color:var(--ink);">${esc(s.symbol.replace('.JK', ''))}</td>
+      <td style="color:var(--muted); font-size:11px;">${esc(s.name)}</td>
+      <td style="text-align:right; font-weight:600;">${s.price.toLocaleString('en-US')}</td>
+      <td style="text-align:right; font-weight:700; color:${s.pct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</td>
+    </tr>
+  `).join('');
+
+  return `
+    <div class="movers-panel">
+      <div class="movers-panel-header ${headerClass}">${title}</div>
+      <table class="movers-table">
+        <thead><tr><th>Symbol</th><th>Name</th><th style="text-align:right;">Price</th><th style="text-align:right;">Change</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
 
-  const sumSymbols = [{ s: '^JKSE', n: 'IHSG' }, { s: '^GSPC', n: 'S&P 500' }, { s: 'IDR=X', n: 'USD/IDR' }, { s: 'GC=F', n: 'Gold' }];
+  // 1. Fetch all data
+  const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), ...MACRO.map(x=>x.symbol), ...IDX_STOCKS.map(x=>x.symbol), ...US_STOCKS.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
+  const allData = {};
+
+  for (const sym of allSymbols) {
+    const details = await fetchStockDetails(sym);
+    if (details && details.price) {
+      details.pct = ((details.price - details.prevClose) / details.prevClose) * 100;
+      allData[sym] = details;
+    }
+    await new Promise(r => setTimeout(r, 100)); // Rate limit protection
+  }
+
+  // 2. Organize Data
+  const idxData = IDX_STOCKS.map(s => allData[s.symbol]).filter(Boolean);
+  const usData = US_STOCKS.map(s => allData[s.symbol]).filter(Boolean);
+  
+  // Top Movers
+  const idxSorted = [...idxData].sort((a, b) => b.pct - a.pct);
+  const usSorted = [...usData].sort((a, b) => b.pct - a.pct);
+
+  const idxGainers = idxSorted.slice(0, 3);
+  const idxLosers = idxSorted.slice(-3).reverse();
+  const usGainers = usSorted.slice(0, 3);
+  const usLosers = usSorted.slice(-3).reverse();
+
+  // 3. Build Sparkline HTML
+  const sumSymbols = [
+    ...INDICES.map(x => ({...x, type: 'index'})), 
+    ...MACRO.map(x => ({...x, type: 'macro'}))
+  ];
   const summaryData = await Promise.all(sumSymbols.map(async x => {
-    const hist = await fetchHistory(x.s, '1mo');
-    const price = hist.length ? hist[hist.length - 1].y : 0;
-    const prev = hist.length > 1 ? hist[hist.length - 2].y : price;
-    return { name: x.n, symbol: x.s, price, change: prev ? ((price - prev) / prev) * 100 : 0, spark: hist };
+    const hist = await fetchHistory(x.symbol, '1mo');
+    return { ...x, data: allData[x.symbol], spark: hist };
   }));
+
+  const sparkHtml = summaryData.map(d => {
+    if (!d.data) return '';
+    const isUp = d.data.pct >= 0;
+    return `
+      <div class="spark-card">
+        <div class="spark-header">
+          <span class="spark-name">${d.name}</span>
+          <span class="spark-chg ${isUp ? 'up' : 'down'}">${isUp ? '▲' : '▼'} ${Math.abs(d.data.pct).toFixed(2)}%</span>
+        </div>
+        <div class="spark-val">${d.data.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>
+        <div id="spark-${d.symbol.replace('^', '').replace('=', '')}"></div>
+      </div>
+    `;
+  }).join('');
 
   const mainChartData = await fetchHistory('^JKSE', '6mo');
 
-  const moversRaw = await Promise.all(['BBCA.JK', 'BBRI.JK', 'GOTO.JK', 'AAPL', 'TSLA', 'NVDA'].map(fetchStockDetails));
-  const movers = moversRaw.filter(Boolean).map(s => { s.pct = ((s.price - s.prevClose) / s.prevClose) * 100; return s; }).sort((a, b) => b.pct - a.pct);
+  // 4. Build Cards HTML
+  const buildCards = (list) => list.map(s => {
+    if (!s) return '';
+    const isUp = s.pct >= 0;
+    return `<a href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank" class="stock-card">
+      <div class="sc-header">
+        <div>
+          <div class="sc-sym">${esc(s.symbol.replace('.JK', ''))}</div>
+          <div class="sc-name">${esc(s.name)}</div>
+        </div>
+        <div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div>
+      </div>
+      <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
+    </a>`;
+  }).join('');
 
-  const idxSymbols = ['BMRI.JK', 'TLKM.JK', 'ASII.JK', 'AMRT.JK'];
-  const idxStocks = (await Promise.all(idxSymbols.map(fetchStockDetails))).filter(Boolean).map(s => { s.pct = ((s.price - s.prevClose) / s.prevClose) * 100; return s; });
-
+  // 5. Assemble Dashboard
   dash.innerHTML = `
-    <div class="sparkline-grid" id="sparkGrid"></div>
+    <div class="sparkline-grid" style="grid-template-columns: repeat(5, 1fr);">${sparkHtml}</div>
+    
     <div class="dash-grid">
       <div class="modern-card">
         <div class="card-title">IHSG Market Performance <span style="color:var(--green);font-size:12px;">6 Month Trend</span></div>
         <div id="mainChart"></div>
       </div>
       <div class="modern-card">
-        <div class="card-title">Market Movers</div>
-        <div class="movers-list" id="moversList"></div>
+        <div class="card-title">Market Movers (IDX)</div>
+        <div class="movers-grid-4" style="grid-template-columns: 1fr; gap: 16px;">
+          ${generateMoversTable('Top IDX Gainers', idxGainers, 'gainers')}
+          ${generateMoversTable('Top IDX Losers', idxLosers, 'losers')}
+        </div>
       </div>
     </div>
+
+    <div class="dash-grid">
+      <div class="modern-card">
+        <div class="card-title">US Market Movers</div>
+        <div class="movers-grid-4">
+          ${generateMoversTable('Top US Gainers', usGainers, 'gainers')}
+          ${generateMoversTable('Top US Losers', usLosers, 'losers')}
+        </div>
+      </div>
+      <div class="modern-card">
+        <div class="card-title">IDX Bluechips</div>
+        <div class="stock-card-grid" style="grid-template-columns: 1fr; gap: 12px;">
+          ${buildCards(idxData.slice(0, 5))}
+        </div>
+      </div>
+    </div>
+
     <div style="margin-top: 32px;">
-      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">IDX Bluechips</h2>
-      <div class="stock-card-grid" id="idxGrid"></div>
+      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">US Tech Giants</h2>
+      <div class="stock-card-grid">${buildCards(usData)}</div>
+    </div>
+
+    <div style="margin-top: 32px;">
+      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">Popular ETFs</h2>
+      <div class="stock-card-grid">${buildCards(ETFS.map(e => allData[e.symbol]).filter(Boolean))}</div>
+    </div>
+
+    <div style="margin-top: 32px;">
+      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">More IDX Stocks</h2>
+      <div class="stock-card-grid">${buildCards(idxData.slice(5))}</div>
     </div>
   `;
 
-  $('#sparkGrid').innerHTML = summaryData.map(d => `
-    <div class="spark-card">
-      <div class="spark-header"><span class="spark-name">${d.name}</span><span class="spark-chg ${d.change >= 0 ? 'up' : 'down'}">${d.change >= 0 ? '▲' : '▼'} ${Math.abs(d.change).toFixed(2)}%</span></div>
-      <div class="spark-val">${d.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>
-      <div id="spark-${d.symbol.replace('^', '').replace('=', '')}"></div>
-    </div>
-  `).join('');
-
+  // Render Charts
   if (typeof ApexCharts !== 'undefined') {
     summaryData.forEach(d => {
+      if (!d.data) return;
       new ApexCharts(document.querySelector(`#spark-${d.symbol.replace('^', '').replace('=', '')}`), {
         series: [{ data: d.spark.map(p => p.y) }], chart: { type: 'area', height: 50, sparkline: { enabled: true } },
-        stroke: { curve: 'smooth', width: 2 }, colors: [d.change >= 0 ? '#0a8f4a' : '#d10a11'],
+        stroke: { curve: 'smooth', width: 2 }, colors: [d.data.pct >= 0 ? '#0a8f4a' : '#d10a11'],
         fill: { type: 'gradient', gradient: { opacityFrom: 0.4, opacityTo: 0 } }, tooltip: { enabled: false }
       }).render();
     });
@@ -396,20 +529,6 @@ async function loadMarketDashboard() {
       xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: '#f1f3f5', strokeDashArray: 4 }
     }).render();
   }
-
-  $('#moversList').innerHTML = movers.slice(0, 5).map(s => `
-    <div class="mover-item">
-      <div><div class="mover-sym">${s.symbol.replace('.JK', '')}</div><div class="mover-name">${s.name}</div></div>
-      <div style="text-align:right;"><div class="mover-price">${s.price.toLocaleString('en-US')}</div><div class="mover-pct ${s.pct >= 0 ? 'up' : 'down'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</div></div>
-    </div>
-  `).join('');
-
-  $('#idxGrid').innerHTML = idxStocks.map(s => `
-    <a href="https://finance.yahoo.com/quote/${s.symbol}" target="_blank" class="stock-card">
-      <div class="sc-header"><div><div class="sc-sym">${s.symbol.replace('.JK', '')}</div><div class="sc-name">${s.name}</div></div><div class="sc-chg ${s.pct >= 0 ? 'up' : 'down'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</div></div>
-      <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
-    </a>
-  `).join('');
 }
 
 async function searchStocks(query) {
@@ -419,10 +538,17 @@ async function searchStocks(query) {
 
   try {
     const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}`;
-    const raw = await fetchViaProxy(url, { timeout: 8000 }); const data = JSON.parse(raw);
-    const quotes = data.quotes || []; const symbols = quotes.filter(q => q.isYahooFinance && q.quoteType !== 'NONE').map(q => q.symbol);
+    const raw = await fetchViaProxy(url, { timeout: 8000 }); 
+    const data = JSON.parse(raw);
     
-    if (symbols.length === 0) { dash.innerHTML = `<div class="stock-loading">${t.stockNoRes}</div>`; return; }
+    // FIXED SEARCH ERROR HANDLING
+    const quotes = data.quotes || []; 
+    const symbols = quotes.filter(q => q.isYahooFinance && q.quoteType !== 'NONE').map(q => q.symbol);
+    
+    if (symbols.length === 0) { 
+      dash.innerHTML = `<div class="stock-loading">No results found for "${esc(query)}". Try a valid ticker (e.g., AAPL, BBCA.JK).</div>`; 
+      return; 
+    }
     
     const results = [];
     for (const s of symbols.slice(0, 10)) {
@@ -432,7 +558,7 @@ async function searchStocks(query) {
     const valid = results.filter(r => r !== null && r.price);
 
     dash.innerHTML = `<div class="category-section">
-      <h2 class="category-title">${t.searchBtn}: ${esc(query)}</h2>
+      <h2 class="category-title">Search Results for "${esc(query)}"</h2>
       <div class="stock-card-grid">
         ${valid.map(s => {
           const isUp = s.pct >= 0;
@@ -443,7 +569,9 @@ async function searchStocks(query) {
         }).join('')}
       </div>
     </div>`;
-  } catch (e) { dash.innerHTML = `<div class="stock-loading">${t.stockErr}</div>`; }
+  } catch (e) { 
+    dash.innerHTML = `<div class="stock-loading">Search failed. Please check your connection and try a valid ticker.</div>`; 
+  }
 }
 
 /* DATA LOADING & BINDING */
