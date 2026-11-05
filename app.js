@@ -316,16 +316,13 @@ async function fetchStockDetails(symbol) {
   try {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
     const raw = await fetchViaProxy(url, { timeout: 8000 });
-    const data = JSON.parse(raw); const meta = data.chart.result[0].meta;
-    return { symbol: meta.symbol, name: meta.shortName || meta.symbol, price: meta.regularMarketPrice, prevClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice, volume: meta.regularMarketVolume, dayHigh: meta.regularMarketDayHigh, dayLow: meta.regularMarketDayLow, week52High: meta.fiftyTwoWeekHigh, week52Low: meta.fiftyTwoWeekLow };
-  } catch (e) { return null; }
-}
-
-async function fetchStockDetails(symbol) {
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=1d`;
-    const raw = await fetchViaProxy(url, { timeout: 8000 });
     const data = JSON.parse(raw);
+    
+    // Check if Yahoo actually gave us data
+    if (!data.chart || !data.chart.result || !data.chart.result[0]) {
+      throw new Error('No data for ' + symbol);
+    }
+
     const meta = data.chart.result[0].meta;
     return { 
       symbol: meta.symbol, 
@@ -339,7 +336,7 @@ async function fetchStockDetails(symbol) {
       week52Low: meta.fiftyTwoWeekLow 
     };
   } catch (e) { 
-    // If it fails, return a fallback so the row still renders
+    console.warn("Failed to fetch", symbol, e.message);
     return { 
       symbol: symbol, name: symbol, price: null, prevClose: null, 
       volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null 
@@ -402,7 +399,7 @@ async function loadMarketDashboard() {
       const details = await fetchStockDetails(sym);
       if (details) valid.push(details);
       // Wait 150ms before the next request
-      await new Promise(r => setTimeout(r, 150)); 
+      await new Promise(r => setTimeout(r, 400)); 
     }
 
     if (cat.isHighlight) {
