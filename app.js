@@ -50,9 +50,9 @@ const I18N = {
 
 const state = { articles: [], ticker: [], filter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, loading: false };
 
-const $ = s => document.querySelector(s);
-const $$ = s => Array.from(document.querySelectorAll(s));
-const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $  = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.prototype.slice.call(root.querySelectorAll(sel));
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function loadJSON(key, fallback) { try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; } catch (e) { return fallback; } }
 function saveJSON(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (e) { return false; } }
@@ -322,7 +322,30 @@ async function loadMarketDashboard() {
   `).join('');
 }
 
-/* --- UI BINDINGS & INIT --- */
+/* --- FILTERS & UI BINDING --- */
+function renderFilters() {
+  const bar = $('#filters'); if (!bar) return; const t = I18N[state.lang];
+  const sourceChips = SOURCES.map(s => `<button type="button" class="chip${state.filter === s.id ? ' active' : ''}" data-filter="${esc(s.id)}">${esc(s.label)}</button>`).join('');
+  bar.innerHTML = `<div class="filters-inner">
+    <button type="button" class="chip${state.filter === 'all' ? ' active' : ''}" data-filter="all">${esc(t.all)}</button>
+    ${sourceChips}<span class="spacer"></span>
+    <label class="switch"><input type="checkbox" id="unreadToggle"${state.unreadOnly ? ' checked' : ''}><span>${esc(t.unreadOnly)}</span></label>
+  </div>`;
+}
+
+function renderWatchChips() {
+  const el = $('#watchChips'); if (!el) return;
+  el.innerHTML = state.watch.map((kw, i) => `<span class="chip-watch">${esc(kw)}<button type="button" data-remove-watch="${i}" aria-label="Remove ${esc(kw)}">×</button></span>`).join('');
+}
+
+function applyLang() {
+  const t = I18N[state.lang]; document.documentElement.lang = state.lang;
+  $$('[data-i18n]').forEach(el => { const key = el.getAttribute('data-i18n'); if (t[key]) el.textContent = t[key]; });
+  $$('[data-i18n-ph]').forEach(el => { const key = el.getAttribute('data-i18n-ph'); if (t[key]) el.setAttribute('placeholder', t[key]); });
+  $$('.lang-toggle button').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-lang') === state.lang));
+  renderFilters(); renderNews();
+}
+
 function switchView(view) {
   if (view === 'news') {
     $('#newsView').style.display = 'block'; $('#stocksView').style.display = 'none'; $('#filters').style.display = 'block';
@@ -334,16 +357,62 @@ function switchView(view) {
   }
 }
 
+function bindUI() {
+  $('#navNews')?.addEventListener('click', () => switchView('news'));
+  $('#navStocks')?.addEventListener('click', () => switchView('stocks'));
+
+  $('#filters').addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip[data-filter]'); if (!chip) return;
+    state.filter = chip.getAttribute('data-filter');
+    $$('#filters .chip').forEach(c => c.classList.toggle('active', c === chip)); renderNews();
+  });
+
+  $('#filters').addEventListener('change', (e) => { if (e.target && e.target.id === 'unreadToggle') { state.unreadOnly = e.target.checked; renderNews(); } });
+
+  $$('.lang-toggle button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.getAttribute('data-lang') === state.lang) return;
+      state.lang = btn.getAttribute('data-lang'); localStorage.setItem(LS.lang, state.lang);
+      applyLang();
+    });
+  });
+
+  $('#markAllRead').addEventListener('click', () => { currentArticles().forEach(a => state.read.add(a.link)); saveJSON(LS.read, Array.from(state.read).slice(-1000)); renderNews(); });
+  $('#refreshBtn').addEventListener('click', () => { loadNews(true); loadMarketDashboard(); });
+
+  const input = $('#watchInput');
+  const addKeyword = () => {
+    const raw = (input.value || '').trim(); if (!raw) return;
+    if (!state.watch.some(k => k.toLowerCase() === raw.toLowerCase())) { state.watch.push(raw); saveJSON(LS.watch, state.watch); renderWatchChips(); renderNews(); }
+    input.value = '';
+  };
+  $('#watchAdd')?.addEventListener('click', addKeyword);
+  input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addKeyword(); } });
+
+  $('#watchChips')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-remove-watch]'); if (!btn) return;
+    const idx = parseInt(btn.getAttribute('data-remove-watch'), 10);
+    if (!isNaN(idx)) { state.watch.splice(idx, 1); saveJSON(LS.watch, state.watch); renderWatchChips(); renderNews(); }
+  });
+
+  document.addEventListener('click', (e) => {
+    const card = e.target.closest('a.card'); if (!card) return;
+    const url = card.getAttribute('data-url'); if (!url || state.read.has(url)) return;
+    state.read.add(url); saveJSON(LS.read, Array.from(state.read).slice(-1000));
+    card.classList.remove('unread'); card.classList.add('read');
+    const dot = card.querySelector('.unread-dot'); if (dot) dot.remove();
+  });
+}
+
 async function loadNews(force) {
   const cached = loadJSON(LS.news, null);
   if (cached && cached.articles && cached.articles.length > 0) {
-    state.articles = cached.articles; state.lastTs = cached.ts; state.lastKind = 'cached';
+    state.articles = cached.articles; state.lastTs = cached.ts;
     renderNews();
     if (!force && (Date.now() - cached.ts) < CACHE_TTL) return;
   }
   try {
-    await fetchAllNews(); state.lastTs = Date.now(); state.lastKind = 'live';
-    saveJSON(LS.news, { ts: Date.now(), articles: state.articles });
+    await fetchAllNews(); saveJSON(LS.news, { ts: Date.now(), articles: state.articles });
   } catch (err) { }
 }
 
@@ -352,9 +421,11 @@ function init() {
   const savedRead = loadJSON(LS.read, []); state.read = new Set(Array.isArray(savedRead) ? savedRead : []);
   const savedWatch = loadJSON(LS.watch, null); state.watch = Array.isArray(savedWatch) ? savedWatch : [];
 
-  $('#navNews')?.addEventListener('click', () => switchView('news'));
-  $('#navStocks')?.addEventListener('click', () => switchView('stocks'));
-
+  bindUI();
+  renderFilters();
+  renderWatchChips();
+  applyLang();
+  
   loadNews(false);
   loadMarketDashboard();
 }
