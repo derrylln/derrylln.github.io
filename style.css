@@ -633,3 +633,123 @@ button{ font-family:inherit; }
   .ticker-track{ animation:none !important; }
   .thumb img{ transition:none !important; }
 }
+
+/* ============================================================
+   MAIN NAVIGATION & STOCK PAGE
+   ============================================================ */
+.main-nav {
+  display: flex;
+  gap: 4px;
+  margin-left: 20px;
+}
+
+.nav-btn {
+  background: transparent;
+  border: none;
+  color: #9aa2ad;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.nav-btn:hover { color: #fff; background: #1b1f24; }
+.nav-btn.active { color: #fff; background: var(--red); }
+
+.stock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 30px 0;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.page-title {
+  font-family: var(--serif);
+  font-size: 32px;
+  margin: 0;
+}
+
+.stock-search-box {
+  display: flex;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  overflow: hidden;
+  background: #fff;
+  width: 100%;
+  max-width: 400px;
+}
+
+.stock-search-box input {
+  flex: 1;
+  border: none;
+  padding: 10px 14px;
+  font-size: 14px;
+  outline: none;
+  font-family: var(--sans);
+}
+
+.stock-search-box button {
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  padding: 0 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.stock-search-box button:hover { background: var(--red); }
+
+.stock-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  margin-bottom: 40px;
+}
+
+.stock-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 13px;
+}
+
+.stock-table th {
+  background: var(--bg-soft);
+  padding: 12px 16px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  border-bottom: 2px solid var(--ink);
+  font-weight: 700;
+}
+
+.stock-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rule);
+  font-variant-numeric: tabular-nums;
+}
+
+.stock-table tr:hover { background: var(--bg-soft); }
+.stock-table .num { text-align: right; }
+.stock-table .sym { font-weight: 700; font-size: 14px; }
+
+.stock-loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+@media (max-width: 820px) {
+  .main-nav { margin-left: 0; width: 100%; justify-content: center; }
+  .stock-header { flex-direction: column; align-items: stretch; }
+  .stock-search-box { max-width: 100%; }
+}
