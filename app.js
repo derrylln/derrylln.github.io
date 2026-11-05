@@ -307,7 +307,17 @@ function switchView(view) {
   } else {
     $('#newsView').style.display = 'none'; $('#stocksView').style.display = 'block'; $('#filters').style.display = 'none';
     $('#navNews').classList.remove('active'); $('#navStocks').classList.add('active');
-    if (!$('#stockDashboard').children.length) loadMarketDashboard();
+    
+    // 1. Instantly load cached dashboard if it exists
+    const cachedDash = localStorage.getItem('finwire.dashboard_html');
+    if (cachedDash) {
+      $('#stockDashboard').innerHTML = cachedDash;
+    } else if (!$('#stockDashboard').children.length) {
+      loadMarketDashboard();
+    }
+
+    // 2. Fetch fresh data in the background to update the cache
+    loadMarketDashboard();
   }
 }
 
@@ -402,21 +412,23 @@ function generateTableHTML(valid) {
 
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
-  dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
+  
+  // Only show loading text if there is no cached data
+  if (!dash.innerHTML || dash.innerHTML.includes('stock-loading')) {
+    dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
+  }
 
   let allFetchedStocks = []; 
   let execSummaryHtml = '';
-  let detailTablesHtml = '';
+  let detailSectionsHtml = '';
 
-  // 1. Fetch Data
+  // Fetch all data sequentially
   for (const cat of MARKET_CATEGORIES) {
     const valid = [];
     for (const sym of cat.symbols) {
       const details = await fetchStockDetails(sym);
       if (details) {
         valid.push(details);
-        
-        // Add to movers pool (only for actual equities/ETFs, not indices/macro)
         if (!cat.isHighlight && details.price) {
           details.pct = ((details.price - details.prevClose) / details.prevClose) * 100;
           details.market = sym.endsWith('.JK') ? 'IDX' : 'US';
@@ -426,7 +438,6 @@ async function loadMarketDashboard() {
       await new Promise(r => setTimeout(r, 100)); 
     }
 
-    // 2. Build Executive Summary Cards
     if (cat.isHighlight) {
       execSummaryHtml += valid.map(s => {
         if (!s.price) return '';
@@ -434,101 +445,65 @@ async function loadMarketDashboard() {
         const pct = (change / s.prevClose) * 100;
         const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
         
-        // Format ticker names for the cards
         let displayName = s.name || s.symbol;
-        if (s.symbol === 'IDR=X') displayName = 'USD/IDR';
-        if (s.symbol === 'GC=F') displayName = 'Gold';
-        if (s.symbol === 'CL=F') displayName = 'Crude Oil';
-        if (s.symbol === '^TNX') displayName = 'US 10Y Yield';
+        if (s.symbol === 'IDR=X') displayName = 'USD/IDR Rate';
         if (s.symbol === '^JKSE') displayName = 'IHSG';
-        if (s.symbol === '^IXIC') displayName = 'NASDAQ';
         
-        return `<div class="exec-card ${cat.isMacro ? 'macro' : ''}">
+        return `<div class="exec-card">
           <div class="exec-name">${esc(displayName)}</div>
           <div class="exec-price">${s.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
-          <div class="exec-change ${dir}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</div>
+          <div class="exec-change ${dir}">${change > 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(2)}%</div>
         </div>`;
       }).join('');
-    } 
-    // 3. Build Detail Tables (IDX, US, ETFs)
-    else {
+    } else {
+      // Build Clean Grid Cards instead of massive tables
       const title = state.lang === 'id' ? cat.titleId : cat.title;
-      detailTablesHtml += `<div class="category-section"><h2 class="category-title">${esc(title)}</h2>${generateTableHTML(valid)}</div>`;
+      const cards = valid.map(s => {
+        if (!s.price) return '';
+        const isUp = s.pct >= 0;
+        return `<a href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank" class="stock-card">
+          <div class="sc-header">
+            <div>
+              <div class="sc-sym">${esc(s.symbol.replace('.JK', ''))}</div>
+              <div class="sc-name">${esc(s.name)}</div>
+            </div>
+            <div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div>
+          </div>
+          <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
+        </a>`;
+      }).join('');
+      
+      detailSectionsHtml += `<div class="category-section">
+        <h2 class="category-title">${esc(title)}</h2>
+        <div class="stock-card-grid">${cards}</div>
+      </div>`;
     }
   }
 
-  // 4. Calculate Market Movers
+  // Build Top Movers Strip
   let moversHtml = '';
   if (allFetchedStocks.length > 0) {
-    const sortedByPct = [...allFetchedStocks].sort((a, b) => b.pct - a.pct);
-    const topGainers = sortedByPct.slice(0, 5);
-    const topLosers = sortedByPct.slice(-5).reverse();
-    const mostActive = [...allFetchedStocks].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
+    const sorted = [...allFetchedStocks].sort((a, b) => b.pct - a.pct);
+    const gainers = sorted.slice(0, 3);
+    const losers = sorted.slice(-3).reverse();
 
-    const fmtP = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
-    const fmtV = (n) => n ? (n/1000000).toFixed(2) + 'M' : '—';
-    const getBadge = (m) => m === 'IDX' ? '<span class="sym-badge badge-idx">IDX</span>' : '<span class="sym-badge badge-us">US</span>';
-
-    const generateMoversTable = (title, stocks, headerClass, valueClass) => {
-      const rows = stocks.map(s => `
-        <tr>
-          <td class="sym-cell"><span class="sym-code">${esc(s.symbol)}</span>${getBadge(s.market)}</td>
-          <td class="price-text">${fmtP(s.price)}</td>
-          <td class="${valueClass}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</td>
-        </tr>
-      `).join('');
-
-      return `
-        <div class="movers-panel">
-          <div class="movers-panel-header ${headerClass}">${title}</div>
-          <table class="movers-table">
-            <thead><tr><th>Symbol</th><th class="price-text">Price</th><th class="${valueClass}">Change</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-      `;
-    };
-
-    const activeRows = mostActive.map(s => `
-      <tr>
-        <td class="sym-cell"><span class="sym-code">${esc(s.symbol)}</span>${getBadge(s.market)}</td>
-        <td class="price-text">${fmtP(s.price)}</td>
-        <td class="vol-text">${fmtV(s.volume)}</td>
-        <td class="${s.pct >= 0 ? 'pct-up' : 'pct-down'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</td>
-      </tr>
-    `).join('');
-
-    moversHtml = `
-      <div class="dashboard-section">
-        <h2 class="category-title">Market Leadership</h2>
-        <div class="movers-grid">
-          ${generateMoversTable('Top 5 Gainers', topGainers, 'gainers', 'pct-up')}
-          ${generateMoversTable('Top 5 Losers', topLosers, 'losers', 'pct-down')}
-        </div>
-        <div class="movers-grid" style="grid-template-columns: 1fr;">
-          <div class="movers-panel">
-            <div class="movers-panel-header active">Most Active (By Volume)</div>
-            <table class="movers-table">
-              <thead><tr><th>Symbol</th><th class="price-text">Price</th><th class="vol-text">Volume</th><th class="price-text">Change</th></tr></thead>
-              <tbody>${activeRows}</tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    `;
+    moversHtml = `<div class="movers-strip">
+      <span class="title">▲ Top Gainers:</span>
+      ${gainers.map(s => `<a href="https://finance.yahoo.com/quote/${s.symbol}" target="_blank">${s.symbol.replace('.JK', '')} <span class="val-up">+${s.pct.toFixed(2)}%</span></a>`).join('')}
+      <span class="title" style="margin-left: 20px;">▼ Top Losers:</span>
+      ${losers.map(s => `<a href="https://finance.yahoo.com/quote/${s.symbol}" target="_blank">${s.symbol.replace('.JK', '')} <span class="val-down">${s.pct.toFixed(2)}%</span></a>`).join('')}
+    </div>`;
   }
 
-  // 5. Assemble Final Layout
-  dash.innerHTML = `
-    <div class="dashboard-section">
-      <h2 class="category-title">Executive Summary</h2>
-      <div class="exec-summary-grid">
-        ${execSummaryHtml}
-      </div>
-    </div>
+  // Assemble final HTML and save to cache
+  const finalHtml = `
+    <div class="exec-summary-grid">${execSummaryHtml}</div>
     ${moversHtml}
-    ${detailTablesHtml}
+    ${detailSectionsHtml}
   `;
+  
+  dash.innerHTML = finalHtml;
+  localStorage.setItem('finwire.dashboard_html', finalHtml); // <--- THE CACHE
 }
 
 async function searchStocks(query) {
