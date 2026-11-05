@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>FINWIRE — Markets, Business &amp; Economy</title>
+<meta name="description" content="Client-side financial news aggregator: Bloomberg, Reuters, CNBC Indonesia, Kontan, IDN Financials." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- ==================== MASTHEAD ==================== -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <a class="brand" href="./" aria-label="FINWIRE home">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-text">FIN<span class="accent">WIRE</span></span>
+    </a>
+
+    <p class="tagline" data-i18n="tagline">Markets · Business · Economy</p>
+
+    <div class="masthead-tools">
+      <div class="watch-box">
+        <input id="watchInput" type="text" autocomplete="off" spellcheck="false"
+               data-i18n-ph="watchPh" placeholder="Add watchlist keyword…" aria-label="Add watchlist keyword" />
+        <button id="watchAdd" class="btn btn-mini" type="button" aria-label="Add keyword">+</button>
+      </div>
+
+      <button id="markAllRead" class="btn" type="button" data-i18n="markAllRead">Mark all read</button>
+
+      <div class="lang-toggle" role="group" aria-label="Language">
+        <button type="button" data-lang="en" class="active">EN</button>
+        <button type="button" data-lang="id">ID</button>
+      </div>
+
+      <button id="refreshBtn" class="btn btn-icon" type="button" data-i18n-title="refresh" title="Refresh">
+        <span aria-hidden="true">⟳</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="watch-chips" id="watchChips"></div>
+</header>
+
+<!-- ==================== LIVE TICKER ==================== -->
+<div class="ticker-wrap" aria-hidden="true">
+  <div class="ticker-track" id="tickerTrack"></div>
+</div>
+
+<!-- ==================== STICKY FILTER BAR ==================== -->
+<nav class="filters" id="filters" aria-label="Source filter"></nav>
+
+<!-- ==================== MAIN ==================== -->
+<main class="container">
+  <div class="status" id="status"></div>
+
+  <section class="hero" id="hero" aria-label="Top stories"></section>
+  <section class="grid" id="grid" aria-label="Latest stories"></section>
+</main>
+
+<!-- ==================== FOOTER ==================== -->
+<footer class="footer">
+  <div class="footer-inner">
+    <span class="footer-brand">FIN<span class="accent">WIRE</span></span>
+    <p data-i18n="footer">FINWIRE — client-side market news aggregator. Data via public RSS feeds &amp; CORS proxies.</p>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
