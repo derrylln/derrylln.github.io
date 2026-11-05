@@ -281,7 +281,7 @@ function render() {
   if (!list.length) { if (heroEl) heroEl.innerHTML = ''; if (gridEl) gridEl.innerHTML = `<div class="empty">${esc(t.noArticles)}</div>`; return; }
   let heroIndex = list.findIndex(a => !!a.image); if (heroIndex < 0) heroIndex = 0;
   const hero = list[heroIndex]; const rest = list.slice(0, heroIndex).concat(list.slice(heroIndex + 1));
-  const side = rest.slice(0, 2), grid = rest.slice(2);
+  const side = rest.slice(0, 4), grid = rest.slice(4);
   if (heroEl) heroEl.innerHTML = `<div class="hero-main">${cardHTML(hero, 'hero')}</div><div class="hero-side">${side.map(a => cardHTML(a, 'side')).join('')}</div>`;
   if (gridEl) gridEl.innerHTML = grid.map(a => cardHTML(a, 'grid')).join('');
 }
