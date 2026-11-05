@@ -187,17 +187,8 @@ function stripHtml(html) {
    the rest if it starts failing.
    ============================================================ */
 const PROXIES = [
-  // 1. cors.lol - reliable and simple
-  (u) => `https://api.cors.lol/?url=${encodeURIComponent(u)}`,
-  // 2. cors.dev - doesn't require an API key for GET requests
-  (u) => `https://proxy.cors.dev/?url=${encodeURIComponent(u)}`,
-  // 3. Corsfix - free tier, no API key
-  (u) => `https://corsfix.com/${encodeURIComponent(u)}`,
-  // 4. CORS.x2u.in - good backup
-  (u) => `https://cors.x2u.in/${encodeURIComponent(u)}`,
-  // 5. AllOrigins - as a last resort
-  (u) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`
-];
+  (u) => `https://finwire-proxy.yourname.workers.dev/?url=${encodeURIComponent(u)}`
+]; 
 
 let preferredProxy = 0;
 
