@@ -312,48 +312,24 @@ function switchView(view) {
 
 async function fetchStockDetails(symbol) {
   try {
-    if (symbol.endsWith('.JK')) {
-      // --- IDX API (Midori Research) ---
-      const cleanSymbol = symbol.replace('.JK', '');
-      const url = `https://ihsg.midoriresearch.com/api/quote/${cleanSymbol}`;
-      const raw = await fetchViaProxy(url, { timeout: 8000 });
-      const data = JSON.parse(raw);
-      
-      // Handle potential different response structures
-      const d = data.data || data;
-      if (!d || d.price === undefined) throw new Error('No IDX data');
-      
-      return {
-        symbol: symbol,
-        name: d.name || cleanSymbol,
-        price: Number(d.price),
-        prevClose: Number(d.previous_close || d.prev_close || d.price),
-        volume: Number(d.volume) || null,
-        dayHigh: Number(d.high) || null,
-        dayLow: Number(d.low) || null,
-        week52High: null,
-        week52Low: null
-      };
-    } else {
-      // --- US API (Finnhub) ---
-      const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}`;
-      const raw = await fetchViaProxy(url, { timeout: 8000 });
-      const data = JSON.parse(raw);
-      
-      if (!data || data.c === undefined || data.c === 0) throw new Error('No Finnhub data');
-      
-      return {
-        symbol: symbol,
-        name: symbol, // Finnhub quote endpoint doesn't provide the company name
-        price: Number(data.c),
-        prevClose: Number(data.pc),
-        volume: null,
-        dayHigh: Number(data.h),
-        dayLow: Number(data.l),
-        week52High: null,
-        week52Low: null
-      };
-    }
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+    const raw = await fetchViaProxy(url, { timeout: 8000 });
+    const data = JSON.parse(raw);
+    
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta || typeof meta.regularMarketPrice !== 'number') throw new Error('No price data');
+
+    return { 
+      symbol: meta.symbol, 
+      name: meta.shortName || meta.symbol, 
+      price: meta.regularMarketPrice, 
+      prevClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice, 
+      volume: meta.regularMarketVolume, 
+      dayHigh: meta.regularMarketDayHigh, 
+      dayLow: meta.regularMarketDayLow, 
+      week52High: meta.fiftyTwoWeekHigh, 
+      week52Low: meta.fiftyTwoWeekLow 
+    };
   } catch (e) { 
     console.warn("Failed to fetch", symbol, e.message);
     return { symbol: symbol, name: symbol, price: null, prevClose: null, volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null };
@@ -362,63 +338,29 @@ async function fetchStockDetails(symbol) {
 
 async function fetchStockRatios(symbol) {
   try {
-    if (symbol.endsWith('.JK')) {
-      // --- IDX Ratios (Midori Research) ---
-      const cleanSymbol = symbol.replace('.JK', '');
-      const url = `https://ihsg.midoriresearch.com/api/fundamental/${cleanSymbol}`;
-      const raw = await fetchViaProxy(url, { timeout: 8000 });
-      const data = JSON.parse(raw);
-      
-      const d = data.data || data;
-      if (!d) throw new Error('No IDX ratios');
-      
-      const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toFixed(2) : '—';
-      
-      let mcStr = '—';
-      if (d.market_cap) {
-          const mc = d.market_cap;
-          if (mc >= 1e12) mcStr = (mc / 1e12).toFixed(2) + 'T';
-          else if (mc >= 1e9) mcStr = (mc / 1e9).toFixed(2) + 'B';
-          else if (mc >= 1e6) mcStr = (mc / 1e6).toFixed(2) + 'M';
-          else mcStr = mc.toLocaleString();
-      }
-
-      return {
-        marketCap: mcStr,
-        trailingPE: fmt(d.pe_ratio),
-        forwardPE: '—', // Often unavailable in IDX
-        dividendYield: d.dividend_yield ? (Number(d.dividend_yield) * 100).toFixed(2) + '%' : '—'
-      };
-    } else {
-      // --- US Ratios (Finnhub) ---
-      const url = `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all`;
-      const raw = await fetchViaProxy(url, { timeout: 8000 });
-      const data = JSON.parse(raw);
-      
-      if (!data.metric) throw new Error('No Finnhub metrics');
-      
-      const m = data.metric;
+    // ATTEMPTING v6 ENDPOINT AS REQUESTED
+    const url = `https://query1.finance.yahoo.com/v6/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+    const raw = await fetchViaProxy(url, { timeout: 8000 });
+    const data = JSON.parse(raw);
+    
+    if (data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result[0]) {
+      const q = data.quoteResponse.result[0];
       const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+      const fmtPct = (n) => (n !== undefined && n !== null) ? (Number(n) * 100).toFixed(2) + '%' : '—';
       
       let mcStr = '—';
-      if (m.marketCapitalization) {
-        const mc = m.marketCapitalization; 
-        if (mc >= 1e6) mcStr = (mc / 1e6).toFixed(2) + 'T';
-        else if (mc >= 1e3) mcStr = (mc / 1e3).toFixed(2) + 'B';
-        else mcStr = mc.toFixed(2) + 'M';
+      if (q.marketCap) {
+        if (q.marketCap >= 1e12) mcStr = (q.marketCap / 1e12).toFixed(2) + 'T';
+        else if (q.marketCap >= 1e9) mcStr = (q.marketCap / 1e9).toFixed(2) + 'B';
+        else if (q.marketCap >= 1e6) mcStr = (q.marketCap / 1e6).toFixed(2) + 'M';
+        else mcStr = fmt(q.marketCap);
       }
-      
-      return {
-        marketCap: mcStr,
-        trailingPE: fmt(m.peTTM),
-        forwardPE: fmt(m.forwardPE),
-        dividendYield: m.dividendYieldIndicatedAnnual ? (Number(m.dividendYieldIndicatedAnnual) * 100).toFixed(2) + '%' : '—'
-      };
+      return { marketCap: mcStr, trailingPE: fmt(q.trailingPE), forwardPE: fmt(q.forwardPE), dividendYield: q.dividendYield ? fmtPct(q.dividendYield) : '—' };
     }
   } catch (e) { 
     console.warn('Ratio fetch failed', e); 
-    return null;
   }
+  return null;
 }
 
 function generateStockRow(s) {
@@ -465,10 +407,11 @@ async function loadMarketDashboard() {
 
   for (const cat of MARKET_CATEGORIES) {
     const valid = [];
+    // Fetch sequentially to guarantee no rate limits
     for (const sym of cat.symbols) {
       const details = await fetchStockDetails(sym);
       if (details) valid.push(details);
-      await new Promise(r => setTimeout(r, 150)); 
+      await new Promise(r => setTimeout(r, 100)); 
     }
 
     if (cat.isHighlight) {
@@ -509,7 +452,7 @@ async function searchStocks(query) {
     const results = [];
     for (const s of symbols.slice(0, 10)) {
       results.push(await fetchStockDetails(s));
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 100));
     }
     const valid = results.filter(r => r !== null);
 
