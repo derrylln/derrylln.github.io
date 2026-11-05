@@ -58,7 +58,11 @@ const I18N = {
   }
 };
 
-const state = { articles: [], ticker: [], filter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, loading: false };
+const state = { 
+  articles: [], ticker: [], filter: 'all', unreadOnly: false, lang: 'en', 
+  read: new Set(), watch: [], lastTs: 0, loading: false,
+  marketData: {} // Cache for bulk market data
+};
 
 const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.prototype.slice.call(root.querySelectorAll(sel));
@@ -310,106 +314,46 @@ function switchView(view) {
   }
 }
 
-async function fetchStockDetails(symbol) {
-  try {
-    // Changed to range=5d to match the working ticker
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
-    const raw = await fetchViaProxy(url, { timeout: 8000 });
-    const data = JSON.parse(raw);
-    
-    const meta = data?.chart?.result?.[0]?.meta;
-    if (!meta || typeof meta.regularMarketPrice !== 'number') {
-      throw new Error('No price data');
-    }
-
-    return { 
-      symbol: meta.symbol, 
-      name: meta.shortName || meta.symbol, 
-      price: meta.regularMarketPrice, 
-      prevClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice, 
-      volume: meta.regularMarketVolume, 
-      dayHigh: meta.regularMarketDayHigh, 
-      dayLow: meta.regularMarketDayLow, 
-      week52High: meta.fiftyTwoWeekHigh, 
-      week52Low: meta.fiftyTwoWeekLow 
-    };
-  } catch (e) { 
-    console.warn("Failed to fetch", symbol, e.message);
-    return { 
-      symbol: symbol, name: symbol, price: null, prevClose: null, 
-      volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null 
-    };
-  }
-}
-
-async function fetchStockRatios(symbol) {
-  try {
-    const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(symbol)}?modules=defaultKeyStatistics,summaryDetail,financialData`;
-    const raw = await fetchViaProxy(url, { timeout: 12000 });
-    const data = JSON.parse(raw);
-    
-    if (data.quoteSummary && data.quoteSummary.result && data.quoteSummary.result[0]) {
-      const res = data.quoteSummary.result[0];
-      const summary = res.summaryDetail || {};
-      const stats = res.defaultKeyStatistics || {};
-      const financial = res.financialData || {};
-      const getRaw = (obj) => (obj && typeof obj === 'object' && obj.raw !== undefined) ? obj.raw : obj;
-      
-      const marketCap = getRaw(summary.marketCap) || getRaw(financial.marketCap);
-      const trailingPE = getRaw(summary.trailingPE) || getRaw(stats.trailingPE);
-      const forwardPE = getRaw(summary.forwardPE) || getRaw(stats.forwardPE);
-      const dividendYield = getRaw(summary.dividendYield);
-
-      const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
-      const fmtPct = (n) => (n !== undefined && n !== null) ? (Number(n) * 100).toFixed(2) + '%' : '—';
-      
-      let mcStr = '—';
-      if (marketCap) {
-        if (marketCap >= 1e12) mcStr = (marketCap / 1e12).toFixed(2) + 'T';
-        else if (marketCap >= 1e9) mcStr = (marketCap / 1e9).toFixed(2) + 'B';
-        else if (marketCap >= 1e6) mcStr = (marketCap / 1e6).toFixed(2) + 'M';
-        else mcStr = fmt(marketCap);
-      }
-      return { marketCap: mcStr, trailingPE: fmt(trailingPE), forwardPE: fmt(forwardPE), dividendYield: fmtPct(dividendYield) };
-    }
-  } catch (e) { 
-    console.warn('Ratio fetch failed', e); 
-  }
-  return null;
-}
-
-function generateStockRow(s) {
-  if (!s.price) {
+function generateStockRow(symbol) {
+  const t = I18N[state.lang];
+  const q = state.marketData[symbol];
+  
+  if (!q || !q.regularMarketPrice) {
     return `
-      <tr class="stock-row" data-symbol="${esc(s.symbol)}">
-        <td class="sym">${esc(s.symbol)}</td><td>${esc(s.name)}</td>
+      <tr class="stock-row" data-symbol="${esc(symbol)}">
+        <td class="sym">${esc(symbol)}</td><td>${esc(symbol)}</td>
         <td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td><td class="num">—</td>
       </tr>
-      <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;"><td colspan="7"></td></tr>`;
+      <tr class="stock-details-row" id="details-${esc(symbol)}" style="display:none;"><td colspan="7"></td></tr>`;
   }
 
-  const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
+  const price = q.regularMarketPrice;
+  const prevClose = q.regularMarketPreviousClose || price;
+  const change = price - prevClose; const pct = (change / prevClose) * 100;
   const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
   const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
+  
   const fmt = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
   const fmtVol = (n) => n ? (n/1000000).toFixed(2) + 'M' : '—';
   
   return `
-    <tr class="stock-row" data-symbol="${esc(s.symbol)}">
-      <td class="sym">${esc(s.symbol)}</td><td>${esc(s.name)}</td>
-      <td class="num" style="font-weight:600;">${fmt(s.price)}</td>
+    <tr class="stock-row" data-symbol="${esc(symbol)}">
+      <td class="sym">${esc(q.symbol)}</td><td>${esc(q.shortName || q.longName || q.symbol)}</td>
+      <td class="num" style="font-weight:600;">${fmt(price)}</td>
       <td class="num" style="font-weight:700; color:${color}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</td>
-      <td class="num">${fmtVol(s.volume)}</td><td class="num">${fmt(s.dayLow)} - ${fmt(s.dayHigh)}</td><td class="num">${fmt(s.week52Low)} - ${fmt(s.week52High)}</td>
+      <td class="num">${fmtVol(q.regularMarketVolume)}</td>
+      <td class="num">${fmt(q.regularMarketDayLow)} - ${fmt(q.regularMarketDayHigh)}</td>
+      <td class="num">${fmt(q.fiftyTwoWeekLow)} - ${fmt(q.fiftyTwoWeekHigh)}</td>
     </tr>
-    <tr class="stock-details-row" id="details-${esc(s.symbol)}" style="display:none;"><td colspan="7"></td></tr>`;
+    <tr class="stock-details-row" id="details-${esc(symbol)}" style="display:none;"><td colspan="7"></td></tr>`;
 }
 
-function generateTableHTML(valid) {
+function generateTableHTML(symbols) {
   const t = I18N[state.lang];
   return `<div class="stock-table-wrap">
     <table class="stock-table">
       <thead><tr><th>${t.thSym}</th><th>${t.thName}</th><th class="num">${t.thPrice}</th><th class="num">${t.thChange}</th><th class="num">${t.thVol}</th><th class="num">${t.thDay}</th><th class="num">${t.th52w}</th></tr></thead>
-      <tbody>${valid.map(s => generateStockRow(s)).join('')}</tbody>
+      <tbody>${symbols.map(s => generateStockRow(s)).join('')}</tbody>
     </table>
   </div>`;
 }
@@ -418,30 +362,46 @@ async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
 
+  // Fetch ALL dashboard symbols in ONE single request
+  const allSymbols = MARKET_CATEGORIES.flatMap(c => c.symbols);
+  const uniqueSymbols = [...new Set(allSymbols)];
+  state.marketData = {}; // Reset
+
+  try {
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${uniqueSymbols.join(',')}`;
+    const raw = await fetchViaProxy(url, { timeout: 12000 });
+    const data = JSON.parse(raw);
+    
+    if (data.quoteResponse && data.quoteResponse.result) {
+      data.quoteResponse.result.forEach(q => { state.marketData[q.symbol] = q; });
+    }
+  } catch (e) {
+    console.warn("Dashboard bulk fetch failed", e);
+  }
+
   let html = '';
-
   for (const cat of MARKET_CATEGORIES) {
-    // Fetch ALL symbols in this category in parallel
-    const settled = await Promise.allSettled(cat.symbols.map(sym => fetchStockDetails(sym)));
-    const valid = settled.map(r => r.status === 'fulfilled' ? r.value : null).filter(Boolean);
-
     if (cat.isHighlight) {
       html += `<div class="index-highlights">`;
-      html += valid.map(s => {
-        if (!s.price) return `<div class="index-card"><div class="idx-name">${esc(s.symbol)}</div><div class="idx-price">—</div></div>`;
-        const change = s.price - s.prevClose; const pct = (change / s.prevClose) * 100;
+      html += cat.symbols.map(s => {
+        const q = state.marketData[s];
+        if (!q || !q.regularMarketPrice) return `<div class="index-card"><div class="idx-name">${esc(s)}</div><div class="idx-price">—</div></div>`;
+        
+        const price = q.regularMarketPrice;
+        const change = price - q.regularMarketPreviousClose;
+        const pct = (change / q.regularMarketPreviousClose) * 100;
         const dir = change > 0 ? 'up' : (change < 0 ? 'down' : 'flat');
         const color = dir === 'up' ? 'var(--green)' : (dir === 'down' ? 'var(--red)' : 'var(--muted)');
         return `<div class="index-card">
-          <div class="idx-name">${esc(s.name)}</div>
-          <div class="idx-price">${s.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+          <div class="idx-name">${esc(q.shortName || q.symbol)}</div>
+          <div class="idx-price">${price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
           <div class="idx-change" style="color:${color}">${change > 0 ? '+' : ''}${change.toFixed(2)} (${pct.toFixed(2)}%)</div>
         </div>`;
       }).join('');
       html += `</div>`;
     } else {
       const title = state.lang === 'id' ? cat.titleId : cat.title;
-      html += `<div class="category-section"><h2 class="category-title">${esc(title)}</h2>${generateTableHTML(valid)}</div>`;
+      html += `<div class="category-section"><h2 class="category-title">${esc(title)}</h2>${generateTableHTML(cat.symbols)}</div>`;
     }
   }
   dash.innerHTML = html;
@@ -459,10 +419,18 @@ async function searchStocks(query) {
     
     if (symbols.length === 0) { dash.innerHTML = `<div class="stock-loading">${t.stockNoRes}</div>`; return; }
     
-    const results = await Promise.all(symbols.slice(0, 10).map(s => fetchStockDetails(s)));
-    const valid = results.filter(r => r !== null);
-
-    dash.innerHTML = `<div class="category-section"><h2 class="category-title">${t.searchBtn}: ${esc(query)}</h2>${generateTableHTML(valid)}</div>`;
+    // Bulk fetch the found symbols
+    const quoteUrl = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbols.slice(0, 10).join(',')}`;
+    const quoteRaw = await fetchViaProxy(quoteUrl, { timeout: 12000 });
+    const quoteData = JSON.parse(quoteRaw);
+    
+    if (quoteData.quoteResponse && quoteData.quoteResponse.result) {
+      quoteData.quoteResponse.result.forEach(q => { state.marketData[q.symbol] = q; });
+      const validSymbols = quoteData.quoteResponse.result.map(q => q.symbol);
+      dash.innerHTML = `<div class="category-section"><h2 class="category-title">${t.searchBtn}: ${esc(query)}</h2>${generateTableHTML(validSymbols)}</div>`;
+    } else {
+      dash.innerHTML = `<div class="stock-loading">${t.stockNoRes}</div>`;
+    }
   } catch (e) { dash.innerHTML = `<div class="stock-loading">${t.stockErr}</div>`; }
 }
 
@@ -502,7 +470,7 @@ function bindUI() {
   if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchStocks(searchInput.value.trim()); } });
 
   // --- Stock Row Expansion Logic ---
-  $('#stockDashboard').addEventListener('click', async (e) => {
+  $('#stockDashboard').addEventListener('click', (e) => {
     const row = e.target.closest('.stock-row');
     if (!row) return;
     const symbol = row.getAttribute('data-symbol');
@@ -514,24 +482,33 @@ function bindUI() {
       row.classList.add('expanded');
       
       const td = detailRow.querySelector('td');
-      if (td.innerHTML !== '') return;
+      if (td.innerHTML !== '') return; // Already loaded
 
-      td.innerHTML = `<div class="details-loading">Fetching ratios...</div>`;
-      
-      const ratios = await fetchStockRatios(symbol);
-      
+      const q = state.marketData[symbol];
       let ratioHtml = '';
-      if (ratios) {
+
+      if (q && q.regularMarketPrice) {
+        const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+        const fmtPct = (n) => (n !== undefined && n !== null) ? (Number(n) * 100).toFixed(2) + '%' : '—';
+        
+        let mcStr = '—';
+        if (q.marketCap) {
+          if (q.marketCap >= 1e12) mcStr = (q.marketCap / 1e12).toFixed(2) + 'T';
+          else if (q.marketCap >= 1e9) mcStr = (q.marketCap / 1e9).toFixed(2) + 'B';
+          else if (q.marketCap >= 1e6) mcStr = (q.marketCap / 1e6).toFixed(2) + 'M';
+          else mcStr = fmt(q.marketCap);
+        }
+
         ratioHtml = `
           <div class="ratio-group">
-            <div class="ratio-item"><span class="ratio-label">Market Cap</span><span class="ratio-value">${ratios.marketCap}</span></div>
-            <div class="ratio-item"><span class="ratio-label">P/E Ratio</span><span class="ratio-value">${ratios.trailingPE}</span></div>
-            <div class="ratio-item"><span class="ratio-label">Fwd P/E</span><span class="ratio-value">${ratios.forwardPE}</span></div>
-            <div class="ratio-item"><span class="ratio-label">Div Yield</span><span class="ratio-value">${ratios.dividendYield}</span></div>
+            <div class="ratio-item"><span class="ratio-label">Market Cap</span><span class="ratio-value">${mcStr}</span></div>
+            <div class="ratio-item"><span class="ratio-label">P/E Ratio</span><span class="ratio-value">${fmt(q.trailingPE)}</span></div>
+            <div class="ratio-item"><span class="ratio-label">Fwd P/E</span><span class="ratio-value">${fmt(q.forwardPE)}</span></div>
+            <div class="ratio-item"><span class="ratio-label">Div Yield</span><span class="ratio-value">${q.dividendYield ? (q.dividendYield * 100).toFixed(2) + '%' : '—'}</span></div>
           </div>
         `;
       } else {
-        ratioHtml = `<div class="ratio-group" style="color:var(--muted); font-style:italic; font-size:13px;">Detailed metrics unavailable. View full report via the link.</div>`;
+        ratioHtml = `<div class="ratio-group" style="color:var(--muted); font-style:italic; font-size:13px;">Detailed metrics unavailable.</div>`;
       }
 
       td.innerHTML = `
