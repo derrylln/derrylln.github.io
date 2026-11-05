@@ -26,7 +26,6 @@ const TICKERS = [
   { symbol: 'IDR=X', label: 'USD/IDR' }, { symbol: 'CL=F', label: 'CRUDE OIL' }
 ];
 
-// REMOVED S&P 500 FROM TOP INDICES AS REQUESTED
 const INDICES = [
   { symbol: '^JKSE', name: 'IHSG' }, 
   { symbol: '^IXIC', name: 'NASDAQ' }, 
@@ -359,9 +358,13 @@ async function fetchStockDetails(symbol) {
   }
 }
 
-async function fetchHistory(symbol, range = '1mo') {
+async function fetchHistory(symbol, range = '6mo') {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=${range}`;
+    let interval = '1d';
+    if (range === '1d') interval = '5m';
+    else if (range === '5d') interval = '15m';
+    
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=${interval}&range=${range}`;
     const raw = await fetchViaProxy(url);
     const data = JSON.parse(raw);
     const result = data?.chart?.result?.[0];
@@ -394,11 +397,12 @@ function generateMoversTable(title, stocks, headerClass) {
   `;
 }
 
+let ihsgChart, sp500Chart; // Global references for chart updates
+
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
 
-  // 1. Fetch all data (including S&P 500 explicitly)
   const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), '^GSPC', ...MACRO.map(x=>x.symbol), ...ECON_INDICATORS.map(x=>x.symbol), ...IDX_STOCKS.map(x=>x.symbol), ...US_STOCKS.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
   const allData = {};
 
@@ -411,11 +415,9 @@ async function loadMarketDashboard() {
     await new Promise(r => setTimeout(r, 100)); 
   }
 
-  // 2. Organize Data
   const idxData = IDX_STOCKS.map(s => allData[s.symbol]).filter(Boolean);
   const usData = US_STOCKS.map(s => allData[s.symbol]).filter(Boolean);
   
-  // Top Movers
   const idxSorted = [...idxData].sort((a, b) => b.pct - a.pct);
   const usSorted = [...usData].sort((a, b) => b.pct - a.pct);
 
@@ -424,7 +426,6 @@ async function loadMarketDashboard() {
   const usGainers = usSorted.slice(0, 5);
   const usLosers = usSorted.slice(-5).reverse();
 
-  // 3. Build Sparkline HTML (S&P 500 removed from INDICES array)
   const sumSymbols = [
     ...INDICES.map(x => ({...x, type: 'index'})), 
     ...MACRO.map(x => ({...x, type: 'macro'}))
@@ -449,11 +450,9 @@ async function loadMarketDashboard() {
     `;
   }).join('');
 
-  // 4. Fetch Big Chart Data
   const mainChartData = await fetchHistory('^JKSE', '6mo');
   const sp500ChartData = await fetchHistory('^GSPC', '6mo');
 
-  // 5. Build Cards HTML
   const buildCards = (list) => list.map(s => {
     if (!s) return '';
     const isUp = s.pct >= 0;
@@ -469,7 +468,6 @@ async function loadMarketDashboard() {
     </a>`;
   }).join('');
 
-  // 6. Build Macro Panel
   const vixData = allData['^VIX'];
   const tnxData = allData['^TNX'];
   
@@ -497,19 +495,36 @@ async function loadMarketDashboard() {
     </div>
   `;
 
-  // 7. Assemble Dashboard
+  const chartControlsHtml = (symbol, targetId) => `
+    <div class="chart-controls" data-symbol="${symbol}" data-target="${targetId}">
+      <button class="chart-btn" data-range="1d">1D</button>
+      <button class="chart-btn" data-range="5d">5D</button>
+      <button class="chart-btn" data-range="1mo">1M</button>
+      <button class="chart-btn" data-range="3mo">3M</button>
+      <button class="chart-btn active" data-range="6mo">6M</button>
+      <button class="chart-btn" data-range="1y">1Y</button>
+      <button class="chart-btn" data-range="5y">5Y</button>
+    </div>
+  `;
+
   dash.innerHTML = `
     <div class="sparkline-grid" style="grid-template-columns: repeat(4, 1fr);">${sparkHtml}</div>
     
     <div class="dash-grid" style="align-items: start;">
       <div>
         <div class="modern-card">
-          <div class="card-title">IHSG Market Performance <span style="color:var(--green);font-size:12px;">6 Month Trend</span></div>
+          <div class="card-title">
+            <span>IHSG Market Performance</span>
+            ${chartControlsHtml('^JKSE', 'ihsgChart')}
+          </div>
           <div id="mainChart"></div>
         </div>
         
         <div class="modern-card" style="margin-top: 24px;">
-          <div class="card-title">S&P 500 Market Performance <span style="color:#3b82f6;font-size:12px;">6 Month Trend</span></div>
+          <div class="card-title">
+            <span>S&P 500 Market Performance</span>
+            ${chartControlsHtml('^GSPC', 'sp500Chart')}
+          </div>
           <div id="sp500Chart"></div>
         </div>
 
@@ -522,6 +537,11 @@ async function loadMarketDashboard() {
           ${generateMoversTable('Top IDX Gainers', idxGainers, 'gainers')}
           ${generateMoversTable('Top IDX Losers', idxLosers, 'losers')}
         </div>
+        
+        <div class="card-title" style="margin-top: 32px;">IDX Bluechips</div>
+        <div class="stock-card-grid" style="grid-template-columns: 1fr; gap: 12px;">
+          ${buildCards(idxData)} <!-- SHOWS ALL 10 STOCKS -->
+        </div>
       </div>
     </div>
 
@@ -531,12 +551,6 @@ async function loadMarketDashboard() {
         <div class="movers-grid-4">
           ${generateMoversTable('Top US Gainers', usGainers, 'gainers')}
           ${generateMoversTable('Top US Losers', usLosers, 'losers')}
-        </div>
-      </div>
-      <div class="modern-card">
-        <div class="card-title">IDX Bluechips</div>
-        <div class="stock-card-grid" style="grid-template-columns: 1fr; gap: 12px;">
-          ${buildCards(idxData.slice(0, 5))}
         </div>
       </div>
     </div>
@@ -550,14 +564,8 @@ async function loadMarketDashboard() {
       <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">Popular ETFs</h2>
       <div class="stock-card-grid">${buildCards(ETFS.map(e => allData[e.symbol]).filter(Boolean))}</div>
     </div>
-
-    <div style="margin-top: 32px;">
-      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">More IDX Stocks</h2>
-      <div class="stock-card-grid">${buildCards(idxData.slice(5))}</div>
-    </div>
   `;
 
-  // Render Charts
   if (typeof ApexCharts !== 'undefined') {
     summaryData.forEach(d => {
       if (!d.data) return;
@@ -568,21 +576,46 @@ async function loadMarketDashboard() {
       }).render();
     });
 
-    // IHSG Chart
-    new ApexCharts(document.querySelector("#mainChart"), {
+    ihsgChart = new ApexCharts(document.querySelector("#mainChart"), {
       series: [{ name: 'IHSG', data: mainChartData }], chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'Inter' },
       colors: ['#d10a11'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0 } },
       dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 3 },
       xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: '#f1f3f5', strokeDashArray: 4 }
-    }).render();
+    });
+    ihsgChart.render();
 
-    // S&P 500 Chart
-    new ApexCharts(document.querySelector("#sp500Chart"), {
+    sp500Chart = new ApexCharts(document.querySelector("#sp500Chart"), {
       series: [{ name: 'S&P 500', data: sp500ChartData }], chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'Inter' },
       colors: ['#3b82f6'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0 } },
       dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 3 },
       xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: '#f1f3f5', strokeDashArray: 4 }
-    }).render();
+    });
+    sp500Chart.render();
+
+    // Attach event listeners for timeframe buttons
+    document.querySelectorAll('.chart-controls').forEach(control => {
+      control.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.chart-btn');
+        if (!btn) return;
+        
+        control.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        const range = btn.getAttribute('data-range');
+        const symbol = control.getAttribute('data-symbol');
+        const target = control.getAttribute('data-target');
+        
+        const btnText = btn.textContent;
+        btn.textContent = '...';
+        
+        const newData = await fetchHistory(symbol, range);
+        
+        if (target === 'ihsgChart' && ihsgChart) ihsgChart.updateSeries([{ name: 'IHSG', data: newData }]);
+        if (target === 'sp500Chart' && sp500Chart) sp500Chart.updateSeries([{ name: 'S&P 500', data: newData }]);
+        
+        btn.textContent = btnText;
+      });
+    });
   }
 }
 
