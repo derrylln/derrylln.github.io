@@ -512,14 +512,33 @@ button{ font-family:inherit; }
 .card.side .unread-dot{ top:8px; right:8px; }
 
 /* --- grid card --- */
-.grid{
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:var(--gap) var(--gap);
-  row-gap:34px;
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--gap) var(--gap);
+  row-gap: 34px;
 }
-.card.grid .thumb{ margin-bottom:14px; }
-.card.grid .headline{ font-size:20px; }
+
+.card.grid {
+  display: flex !important;       /* Forces the image and text to stack vertically */
+  flex-direction: column !important; 
+  height: 100%;
+}
+
+.card.grid .thumb {
+  width: 100% !important;
+  margin-bottom: 14px;
+}
+
+.card.grid .card-body {
+  flex: 1;
+  min-width: 0;                   /* Prevents long words from breaking the layout */
+  word-wrap: break-word;
+}
+
+.card.grid .headline {
+  font-size: 20px;
+}
 
 /* read / watch states */
 .card.read{ opacity:.6; }

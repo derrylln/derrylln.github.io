@@ -187,8 +187,10 @@ function stripHtml(html) {
    the rest if it starts failing.
    ============================================================ */
 const PROXIES = [
-  (u) => `https://finwire-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`
-]; 
+  (u) => `https://finwire-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`,
+  (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+  (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`
+];
 
 let preferredProxy = 0;
 
@@ -403,7 +405,8 @@ function dedupe(articles) {
 async function fetchAllNews() {
   const settled = await Promise.allSettled(
     SOURCES.map(async (source) => {
-      const xml = await fetchViaProxy(source.url, { timeout: 16000 });
+      // Change the timeout from 16000 to 7000
+      const xml = await fetchViaProxy(source.url, { timeout: 7000 });
       return parseFeed(xml, source);
     })
   );
