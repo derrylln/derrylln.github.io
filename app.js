@@ -1,5 +1,5 @@
 /* ============================================================
-   FINWIRE — CLIENT-SIDE DASHBOARD & NEWS
+   FINWIRE — COMPLETE CLIENT-SIDE APP
    ============================================================ */
 'use strict';
 
@@ -32,8 +32,7 @@ const I18N = {
     footer: 'FINWIRE — client-side market news aggregator.', justNow: 'just now', minAgo: n => `${n}m ago`,
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
-    thSym: 'Symbol', thName: 'Name', thPrice: 'Price', thChange: 'Change', thVol: 'Volume', thDay: 'Day Range', th52w: '52-Week Range',
-    stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.'
+    stockLoading: 'Fetching market data…'
   },
   id: {
     tagline: 'Pasar · Bisnis · Ekonomi', markAllRead: 'Tandai semua dibaca', watchPh: 'Tambah kata kunci pantauan…',
@@ -43,12 +42,11 @@ const I18N = {
     footer: 'FINWIRE — agregator berita pasar berbasis klien.', justNow: 'baru saja', minAgo: n => `${n}m lalu`,
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
-    thSym: 'Simbol', thName: 'Nama', thPrice: 'Harga', thChange: 'Perubahan', thVol: 'Volume', thDay: 'Rentang Harian', th52w: 'Rentang 52-Minggu',
-    stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.'
+    stockLoading: 'Memuat data pasar…'
   }
 };
 
-const state = { articles: [], ticker: [], filter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, loading: false };
+const state = { articles: [], ticker: [], filter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0 };
 
 const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.prototype.slice.call(root.querySelectorAll(sel));
@@ -132,7 +130,7 @@ async function fetchAllNews() {
         const res = await fetch(fetchUrl); if (!res.ok) throw new Error('HTTP ' + res.status);
         items = parseFeed(await res.text(), source);
       } else {
-        const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); items = parseFeed(xml, source);
+        const xml = await fetchViaProxy(fetchUrl, { timeout: 8000 }); items = parseFeed(xml, source);
       }
       if (items.length > 0) {
         state.articles = dedupe([...items, ...state.articles]).sort((a, b) => b.ts - a.ts);
@@ -140,7 +138,6 @@ async function fetchAllNews() {
       }
     } catch (err) { console.warn('[FINWIRE] feed failed:', source.id, err.message); }
   }));
-  if (!newArticlesFound && state.articles.length === 0) throw new Error('No feeds returned data');
 }
 
 /* --- NEWS RENDERING --- */
@@ -204,6 +201,17 @@ function renderNews() {
   if (gridEl) gridEl.innerHTML = grid.map(a => cardHTML(a, 'grid')).join('');
 }
 
+async function fetchTicker() {
+  const settled = await Promise.allSettled(TICKERS.map(async (t) => {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t.symbol)}?interval=1d&range=5d`;
+    const raw = await fetchViaProxy(url, { timeout: 6000 }); const data = JSON.parse(raw);
+    const meta = data?.chart?.result?.[0]?.meta; if (!meta || typeof meta.regularMarketPrice !== 'number') throw new Error('No price');
+    const price = meta.regularMarketPrice; const prev = meta.chartPreviousClose || meta.previousClose || price;
+    return { label: t.label, symbol: t.symbol, price: price, change: prev ? ((price - prev) / prev) * 100 : 0 };
+  }));
+  return settled.map((res, i) => res.status === 'fulfilled' ? res.value : { label: TICKERS[i].label, symbol: TICKERS[i].symbol, price: null, change: null });
+}
+
 function renderTicker(items) {
   const track = $('#tickerTrack'); if (!track || !items || !items.length) return;
   const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
@@ -246,6 +254,7 @@ async function fetchHistory(symbol, range = '1mo') {
 
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard');
+  if (!dash) return;
   dash.innerHTML = '<div style="text-align:center;padding:40px;color:#666;">Loading terminal data...</div>';
 
   const sumSymbols = [{ s: '^JKSE', n: 'IHSG' }, { s: '^GSPC', n: 'S&P 500' }, { s: 'IDR=X', n: 'USD/IDR' }, { s: 'GC=F', n: 'Gold' }];
@@ -322,7 +331,7 @@ async function loadMarketDashboard() {
   `).join('');
 }
 
-/* --- FILTERS & UI BINDING --- */
+/* --- FILTERS, UI BINDING & INIT --- */
 function renderFilters() {
   const bar = $('#filters'); if (!bar) return; const t = I18N[state.lang];
   const sourceChips = SOURCES.map(s => `<button type="button" class="chip${state.filter === s.id ? ' active' : ''}" data-filter="${esc(s.id)}">${esc(s.label)}</button>`).join('');
@@ -357,7 +366,31 @@ function switchView(view) {
   }
 }
 
-function bindUI() {
+async function loadNews(force) {
+  const cached = loadJSON(LS.news, null);
+  if (cached && cached.articles && cached.articles.length > 0) {
+    state.articles = cached.articles; state.lastTs = cached.ts;
+    renderNews();
+    if (!force && (Date.now() - cached.ts) < CACHE_TTL) return;
+  }
+  try {
+    await fetchAllNews(); saveJSON(LS.news, { ts: Date.now(), articles: state.articles });
+  } catch (err) { }
+}
+
+async function loadTicker(force) {
+  const cached = loadJSON(LS.ticker, null);
+  if (!force && cached && cached.items && (Date.now() - cached.ts) < CACHE_TTL) { state.ticker = cached.items; renderTicker(state.ticker); return; }
+  try {
+    const items = await fetchTicker(); state.ticker = items; saveJSON(LS.ticker, { ts: Date.now(), items }); renderTicker(items);
+  } catch (err) { if (cached && cached.items) { state.ticker = cached.items; renderTicker(state.ticker); } }
+}
+
+function init() {
+  const savedLang = localStorage.getItem(LS.lang); state.lang = (savedLang === 'id' || savedLang === 'en') ? savedLang : 'en';
+  const savedRead = loadJSON(LS.read, []); state.read = new Set(Array.isArray(savedRead) ? savedRead : []);
+  const savedWatch = loadJSON(LS.watch, null); state.watch = Array.isArray(savedWatch) ? savedWatch : [];
+
   $('#navNews')?.addEventListener('click', () => switchView('news'));
   $('#navStocks')?.addEventListener('click', () => switchView('stocks'));
 
@@ -377,8 +410,8 @@ function bindUI() {
     });
   });
 
-  $('#markAllRead').addEventListener('click', () => { currentArticles().forEach(a => state.read.add(a.link)); saveJSON(LS.read, Array.from(state.read).slice(-1000)); renderNews(); });
-  $('#refreshBtn').addEventListener('click', () => { loadNews(true); loadMarketDashboard(); });
+  $('#markAllRead')?.addEventListener('click', () => { currentArticles().forEach(a => state.read.add(a.link)); saveJSON(LS.read, Array.from(state.read).slice(-1000)); renderNews(); });
+  $('#refreshBtn')?.addEventListener('click', () => { loadNews(true); loadTicker(true); loadMarketDashboard(); });
 
   const input = $('#watchInput');
   const addKeyword = () => {
@@ -402,31 +435,13 @@ function bindUI() {
     card.classList.remove('unread'); card.classList.add('read');
     const dot = card.querySelector('.unread-dot'); if (dot) dot.remove();
   });
-}
 
-async function loadNews(force) {
-  const cached = loadJSON(LS.news, null);
-  if (cached && cached.articles && cached.articles.length > 0) {
-    state.articles = cached.articles; state.lastTs = cached.ts;
-    renderNews();
-    if (!force && (Date.now() - cached.ts) < CACHE_TTL) return;
-  }
-  try {
-    await fetchAllNews(); saveJSON(LS.news, { ts: Date.now(), articles: state.articles });
-  } catch (err) { }
-}
-
-function init() {
-  const savedLang = localStorage.getItem(LS.lang); state.lang = (savedLang === 'id' || savedLang === 'en') ? savedLang : 'en';
-  const savedRead = loadJSON(LS.read, []); state.read = new Set(Array.isArray(savedRead) ? savedRead : []);
-  const savedWatch = loadJSON(LS.watch, null); state.watch = Array.isArray(savedWatch) ? savedWatch : [];
-
-  bindUI();
   renderFilters();
   renderWatchChips();
   applyLang();
   
   loadNews(false);
+  loadTicker(false);
   loadMarketDashboard();
 }
 
