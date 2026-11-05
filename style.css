@@ -363,13 +363,14 @@ button{ font-family:inherit; }
 /* ============================================================
    HERO
    ============================================================ */
-.hero{
-  display:grid;
-  grid-template-columns:minmax(0,2fr) minmax(0,1fr);
-  gap:var(--gap);
-  padding:20px 0 30px;
-  margin-bottom:30px;
-  border-bottom:1px solid var(--rule);
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--gap);
+  padding: 20px 0 30px;
+  margin-bottom: 30px;
+  border-bottom: 1px solid var(--rule);
+  min-width: 0; /* ADD THIS */
 }
 .hero:empty{ display:none; }
 
@@ -384,11 +385,12 @@ button{ font-family:inherit; }
 /* ============================================================
    CARDS
    ============================================================ */
-.card{
-  position:relative;
-  display:block;
-  background:#fff;
-  transition:opacity .2s;
+.card {
+  position: relative;
+  display: block;
+  background: #fff;
+  transition: opacity .2s;
+  min-width: 0; /* ADD THIS - stops grid overflow */
 }
 .card:hover .headline{ color:var(--red); }
 
@@ -452,12 +454,13 @@ button{ font-family:inherit; }
 }
 
 /* thumbnails */
-.thumb{
-  position:relative;
-  display:block;
-  overflow:hidden;
-  background:var(--rule-2);
-  aspect-ratio:16/10;
+.thumb {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: var(--rule-2);
+  width: 100%; /* ADD THIS */
+  aspect-ratio: 16/10;
 }
 .thumb img{
   position:absolute;
@@ -494,11 +497,13 @@ button{ font-family:inherit; }
 .card.hero .summary{ font-size:15px; -webkit-line-clamp:2; margin-top:10px; }
 
 /* --- side card (horizontal) --- */
-.card.side{
-  display:grid;
-  grid-template-columns:118px minmax(0,1fr);
-  gap:14px;
-  align-content:start;
+.card.side {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr); /* slightly smaller image column */
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+  word-wrap: break-word; /* ADD THIS - stops text overflow */
 }
 .card.side .thumb{ aspect-ratio:1/1; height:100%; }
 .card.side .headline{ font-size:16.5px; line-height:1.22; }

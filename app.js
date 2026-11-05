@@ -821,48 +821,67 @@ function persistWatch() {
    ============================================================ */
 async function loadNews(force) {
   const cached = loadJSON(LS.news, null);
-  const isFresh = cached && cached.articles && (Date.now() - cached.ts) < CACHE_TTL;
-
-  if (!force && isFresh) {
+  
+  // 1. INSTANTLY load from cache (even if expired) so the user sees data immediately
+  if (cached && cached.articles && cached.articles.length > 0) {
     state.articles = cached.articles;
     state.lastTs = cached.ts;
     state.lastKind = 'cached';
     render();
     updateStatusLabel('cached', cached.ts);
-    return;
+    
+    // If it's fresh, we stop here and don't fetch.
+    if (!force && (Date.now() - cached.ts) < CACHE_TTL) return;
+  } else {
+    // Only show loading if we have NO cache at all
+    updateStatusLabel('loading');
   }
 
-  updateStatusLabel('loading');
-
+  // 2. Fetch fresh data in the background
   try {
     const articles = await fetchAllNews();
+    
+    // Check if data actually changed before re-rendering to prevent visual flicker
+    const hasChanged = JSON.stringify(articles) !== JSON.stringify(state.articles);
 
     state.articles = articles;
     state.lastTs = Date.now();
     state.lastKind = 'live';
 
     saveJSON(LS.news, { ts: Date.now(), articles: articles });
-    render();
+    
+    if (hasChanged) {
+      render();
+    }
     updateStatusLabel('live', state.lastTs);
 
-    // Background image enrichment — re-render when it yields anything new.
+    // 3. Scrape missing images silently in the background
     enrichImages(articles).then(changed => {
       if (!changed) return;
-      state.articles = articles;
       saveJSON(LS.news, { ts: Date.now(), articles: articles });
-      render();
-      refreshTimes();
-    }).catch(() => { /* silent */ });
+      
+      // Update ONLY the images directly in the DOM instead of re-rendering the whole page
+      articles.forEach(a => {
+        if (a.image) {
+          const card = document.querySelector(`.card[data-url="${a.link}"]`);
+          if (card) {
+            const thumb = card.querySelector('.thumb');
+            if (thumb && !thumb.querySelector('img')) {
+              const img = document.createElement('img');
+              img.src = a.image;
+              img.loading = 'lazy';
+              img.referrerPolicy = 'no-referrer';
+              img.onerror = function() { this.remove(); };
+              thumb.appendChild(img);
+            }
+          }
+        }
+      });
+    }).catch(() => {});
 
   } catch (err) {
     console.warn('[FINWIRE] news load failed:', err);
-    if (cached && cached.articles) {
-      state.articles = cached.articles;
-      state.lastTs = cached.ts;
-      state.lastKind = 'stale';
-      render();
-      updateStatusLabel('stale', cached.ts);
-    } else {
+    if (!cached) {
       state.articles = [];
       render();
       updateStatusLabel('error');
