@@ -312,105 +312,60 @@ function switchView(view) {
 
 async function fetchStockDetails(symbol) {
   try {
-    // Check if it's an Indonesian stock (ends with .JK)
-    if (symbol.endsWith('.JK')) {
-      // --- IDX Data Source (using a public JSON endpoint) ---
-      const cleanSymbol = symbol.replace('.JK', '');
-      // Note: This is a placeholder URL for a free IDX API.
-      // You may need to replace it if the service changes.
-      const url = `https://ihsg.midoriresearch.com/api/quote/${cleanSymbol}`;
-      const raw = await fetchViaProxy(url, { timeout: 8000 });
-      const data = JSON.parse(raw);
-      
-      if (!data || data.price === undefined) throw new Error('No IDX data');
-      
-      return {
-        symbol: symbol,
-        name: data.name || cleanSymbol,
-        price: data.price,
-        prevClose: data.previous_close,
-        volume: data.volume,
-        dayHigh: data.high,
-        dayLow: data.low,
-        week52High: null, // Not always available in this endpoint
-        week52Low: null
-      };
-    } else {
-      // --- US Stock Data Source (Finnhub) ---
-      const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}`;
-      const raw = await fetchViaProxy(url, { timeout: 8000 });
-      const data = JSON.parse(raw);
-      
-      if (!data || data.c === undefined || data.c === 0) throw new Error('No Finnhub data');
-      
-      return {
-        symbol: symbol,
-        name: symbol, // Finnhub quote endpoint doesn't return a name
-        price: data.c,      // Current price
-        prevClose: data.pc, // Previous close
-        volume: null,       // Not in this endpoint
-        dayHigh: data.h,    // High price
-        dayLow: data.l,     // Low price
-        week52High: null,
-        week52Low: null
-      };
+    // Use the exact endpoint that powers the ticker (v8/finance/chart)
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
+    const raw = await fetchViaProxy(url, { timeout: 8000 });
+    const data = JSON.parse(raw);
+    
+    const meta = data?.chart?.result?.[0]?.meta;
+    if (!meta || typeof meta.regularMarketPrice !== 'number') {
+      throw new Error('No price data');
     }
-  } catch (e) {
+
+    return { 
+      symbol: meta.symbol, 
+      name: meta.shortName || meta.symbol, 
+      price: meta.regularMarketPrice, 
+      prevClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice, 
+      volume: meta.regularMarketVolume, 
+      dayHigh: meta.regularMarketDayHigh, 
+      dayLow: meta.regularMarketDayLow, 
+      week52High: meta.fiftyTwoWeekHigh, 
+      week52Low: meta.fiftyTwoWeekLow 
+    };
+  } catch (e) { 
     console.warn("Failed to fetch", symbol, e.message);
-    return { symbol: symbol, name: symbol, price: null, prevClose: null, volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null };
+    return { 
+      symbol: symbol, name: symbol, price: null, prevClose: null, 
+      volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null 
+    };
   }
 }
 
 async function fetchStockRatios(symbol) {
   try {
-    if (symbol.endsWith('.JK')) {
-      // --- IDX Ratios (from Bursarium or similar) ---
-      const cleanSymbol = symbol.replace('.JK', '');
-      // Placeholder: Fetch ratios from the same IDX API
-      const url = `https://ihsg.midoriresearch.com/api/fundamental/${cleanSymbol}`;
-      const raw = await fetchViaProxy(url, { timeout: 8000 });
-      const data = JSON.parse(raw);
-      
-      if (!data) throw new Error('No IDX ratios');
-      
-      const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toFixed(2) : '—';
-      
-      return {
-        marketCap: data.market_cap ? (data.market_cap / 1e12).toFixed(2) + 'T' : '—',
-        trailingPE: fmt(data.pe_ratio),
-        forwardPE: fmt(data.forward_pe),
-        dividendYield: data.dividend_yield ? (data.dividend_yield * 100).toFixed(2) + '%' : '—'
-      };
-    } else {
-      // --- US Ratios (Finnhub) ---
-      const url = `https://finnhub.io/api/v1/stock/metric?symbol=${encodeURIComponent(symbol)}&metric=all`;
-      const raw = await fetchViaProxy(url, { timeout: 8000 });
-      const data = JSON.parse(raw);
-      
-      if (!data.metric) throw new Error('No Finnhub metrics');
-      
-      const m = data.metric;
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+    const raw = await fetchViaProxy(url, { timeout: 8000 });
+    const data = JSON.parse(raw);
+    
+    if (data.quoteResponse && data.quoteResponse.result && data.quoteResponse.result[0]) {
+      const q = data.quoteResponse.result[0];
       const fmt = (n) => (n !== undefined && n !== null) ? Number(n).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+      const fmtPct = (n) => (n !== undefined && n !== null) ? (Number(n) * 100).toFixed(2) + '%' : '—';
       
       let mcStr = '—';
-      if (m.marketCapitalization) {
-        const mc = m.marketCapitalization; // In millions
-        if (mc >= 1e6) mcStr = (mc / 1e6).toFixed(2) + 'T';
-        else if (mc >= 1e3) mcStr = (mc / 1e3).toFixed(2) + 'B';
-        else mcStr = mc.toFixed(2) + 'M';
+      if (q.marketCap) {
+        if (q.marketCap >= 1e12) mcStr = (q.marketCap / 1e12).toFixed(2) + 'T';
+        else if (q.marketCap >= 1e9) mcStr = (q.marketCap / 1e9).toFixed(2) + 'B';
+        else if (q.marketCap >= 1e6) mcStr = (q.marketCap / 1e6).toFixed(2) + 'M';
+        else mcStr = fmt(q.marketCap);
       }
-      
-      return {
-        marketCap: mcStr,
-        trailingPE: fmt(m.peTTM), // Trailing P/E
-        forwardPE: fmt(m.forwardPE),
-        dividendYield: m.dividendYieldIndicatedAnnual ? (m.dividendYieldIndicatedAnnual * 100).toFixed(2) + '%' : '—'
-      };
+      return { marketCap: mcStr, trailingPE: fmt(q.trailingPE), forwardPE: fmt(q.forwardPE), dividendYield: q.dividendYield ? fmtPct(q.dividendYield) : '—' };
     }
   } catch (e) { 
     console.warn('Ratio fetch failed', e); 
-    return null;
   }
+  return null;
 }
 
 function generateStockRow(s) {
@@ -457,12 +412,11 @@ async function loadMarketDashboard() {
 
   for (const cat of MARKET_CATEGORIES) {
     const valid = [];
-    // Fetch sequentially to avoid Yahoo rate limits
+    // Fetch sequentially with a 200ms delay to guarantee Yahoo doesn't block us
     for (const sym of cat.symbols) {
       const details = await fetchStockDetails(sym);
       if (details) valid.push(details);
-      // 100ms delay between requests to ensure Yahoo doesn't block us
-      await new Promise(r => setTimeout(r, 100)); 
+      await new Promise(r => setTimeout(r, 200)); 
     }
 
     if (cat.isHighlight) {
@@ -500,7 +454,11 @@ async function searchStocks(query) {
     
     if (symbols.length === 0) { dash.innerHTML = `<div class="stock-loading">${t.stockNoRes}</div>`; return; }
     
-    const results = await Promise.all(symbols.slice(0, 10).map(s => fetchStockDetails(s)));
+    const results = [];
+    for (const s of symbols.slice(0, 10)) {
+      results.push(await fetchStockDetails(s));
+      await new Promise(r => setTimeout(r, 200));
+    }
     const valid = results.filter(r => r !== null);
 
     dash.innerHTML = `<div class="category-section"><h2 class="category-title">${t.searchBtn}: ${esc(query)}</h2>${generateTableHTML(valid)}</div>`;
