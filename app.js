@@ -414,7 +414,7 @@ async function loadMarketDashboard() {
       if (details) {
         valid.push(details);
         
-        // Add to the global pool for Movers calculation
+        // Add to the global pool for Movers calculation (excluding indices)
         if (!cat.isHighlight && details.price) {
           details.pct = ((details.price - details.prevClose) / details.prevClose) * 100;
           details.market = sym.endsWith('.JK') ? 'IDX' : 'US';
@@ -451,8 +451,8 @@ async function loadMarketDashboard() {
     const total = allFetchedStocks.length;
     const upCount = allFetchedStocks.filter(s => s.pct > 0).length;
     const downCount = allFetchedStocks.filter(s => s.pct < 0).length;
-    const upPct = (upCount / total) * 100;
-    const downPct = (downCount / total) * 100;
+    const upPct = total > 0 ? (upCount / total) * 100 : 50;
+    const downPct = total > 0 ? (downCount / total) * 100 : 50;
 
     const sortedByPct = [...allFetchedStocks].sort((a, b) => b.pct - a.pct);
     const topGainers = sortedByPct.slice(0, 5);
@@ -463,26 +463,34 @@ async function loadMarketDashboard() {
     const fmtV = (n) => n ? (n/1000000).toFixed(2) + 'M' : '—';
     const getBadge = (m) => m === 'IDX' ? '<span class="sym-badge badge-idx">IDX</span>' : '<span class="sym-badge badge-us">US</span>';
 
-    const buildTable = (stocks, headerClass, headerText, valueClass) => `
-      <div class="movers-panel">
-        <div class="movers-panel-header ${headerClass}">${headerText}</div>
-        <table class="movers-table">
-          <thead><tr><th>Symbol</th><th class="price-text">Price</th><th class="${valueClass}">Change</th></tr></thead>
-          <tbody>
-            ${stocks.map(s => `
-              <tr>
-                <td class="sym-cell">
-                  <span class="sym-code">${esc(s.symbol)}</span>
-                  ${getBadge(s.market)}
-                </td>
-                <td class="price-text">${fmtP(s.price)}</td>
-                <td class="${valueClass}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
+    const generateMoversTable = (title, stocks, headerClass, valueClass) => {
+      const rows = stocks.map(s => `
+        <tr>
+          <td class="sym-cell"><span class="sym-code">${esc(s.symbol)}</span>${getBadge(s.market)}</td>
+          <td class="price-text">${fmtP(s.price)}</td>
+          <td class="${valueClass}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</td>
+        </tr>
+      `).join('');
+
+      return `
+        <div class="movers-panel">
+          <div class="movers-panel-header ${headerClass}">${title}</div>
+          <table class="movers-table">
+            <thead><tr><th>Symbol</th><th class="price-text">Price</th><th class="${valueClass}">Change</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    };
+
+    const activeRows = mostActive.map(s => `
+      <tr>
+        <td class="sym-cell"><span class="sym-code">${esc(s.symbol)}</span>${getBadge(s.market)}</td>
+        <td class="price-text">${fmtP(s.price)}</td>
+        <td class="vol-text">${fmtV(s.volume)}</td>
+        <td class="${s.pct >= 0 ? 'pct-up' : 'pct-down'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</td>
+      </tr>
+    `).join('');
 
     dashboardHtml = `
       <div class="category-section dashboard-overview">
@@ -500,8 +508,8 @@ async function loadMarketDashboard() {
         </div>
 
         <div class="movers-grid">
-          ${buildTable(topGainers, 'gainers', 'Top 5 Gainers', 'pct-up')}
-          ${buildTable(topLosers, 'losers', 'Top 5 Losers', 'pct-down')}
+          ${generateMoversTable('Top 5 Gainers', topGainers, 'gainers', 'pct-up')}
+          ${generateMoversTable('Top 5 Losers', topLosers, 'losers', 'pct-down')}
         </div>
 
         <div class="movers-grid" style="grid-template-columns: 1fr;">
@@ -509,19 +517,7 @@ async function loadMarketDashboard() {
             <div class="movers-panel-header active">Most Active (By Volume)</div>
             <table class="movers-table">
               <thead><tr><th>Symbol</th><th class="price-text">Price</th><th class="vol-text">Volume</th><th class="price-text">Change</th></tr></thead>
-              <tbody>
-                ${mostActive.map(s => `
-                  <tr>
-                    <td class="sym-cell">
-                      <span class="sym-code">${esc(s.symbol)}</span>
-                      ${getBadge(s.market)}
-                    </td>
-                    <td class="price-text">${fmtP(s.price)}</td>
-                    <td class="vol-text">${fmtV(s.volume)}</td>
-                    <td class="${s.pct >= 0 ? 'pct-up' : 'pct-down'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</td>
-                  </tr>
-                `).join('')}
-              </tbody>
+              <tbody>${activeRows}</tbody>
             </table>
           </div>
         </div>
