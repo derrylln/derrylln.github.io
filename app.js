@@ -404,13 +404,21 @@ async function loadMarketDashboard() {
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
 
   let html = '';
+  let allFetchedStocks = []; // Collect all stocks to calculate top movers later
 
   for (const cat of MARKET_CATEGORIES) {
     const valid = [];
     // Fetch sequentially to guarantee no rate limits
     for (const sym of cat.symbols) {
       const details = await fetchStockDetails(sym);
-      if (details) valid.push(details);
+      if (details) {
+        valid.push(details);
+        // Only add to movers pool if it's a stock/ETF (skip indices)
+        if (!cat.isHighlight && details.price) {
+          details.pct = ((details.price - details.prevClose) / details.prevClose) * 100;
+          allFetchedStocks.push(details);
+        }
+      }
       await new Promise(r => setTimeout(r, 100)); 
     }
 
@@ -434,7 +442,86 @@ async function loadMarketDashboard() {
       html += `<div class="category-section"><h2 class="category-title">${esc(title)}</h2>${generateTableHTML(valid)}</div>`;
     }
   }
-  dash.innerHTML = html;
+
+  // --- Calculate Top Movers & Breadth ---
+  let moversHtml = '';
+  if (allFetchedStocks.length > 0) {
+    // Sort stocks by percentage change
+    const sortedStocks = [...allFetchedStocks].sort((a, b) => b.pct - a.pct);
+    
+    const topGainers = sortedStocks.slice(0, 3);
+    const topLosers = sortedStocks.slice(-3).reverse(); // Get bottom 3, reverse so worst is first
+    
+    const total = allFetchedStocks.length;
+    const upCount = allFetchedStocks.filter(s => s.pct > 0).length;
+    const downCount = allFetchedStocks.filter(s => s.pct < 0).length;
+    const upPct = (upCount / total) * 100;
+    const downPct = (downCount / total) * 100;
+
+    const fmt = (n) => n ? n.toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—';
+
+    moversHtml = `
+      <div class="category-section">
+        <h2 class="category-title">Market Pulse</h2>
+        
+        <div style="margin-bottom: 24px;">
+          <div style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: var(--muted);">
+            <span>Advancing: <span style="color: var(--green);">${upCount}</span></span>
+            <span>Declining: <span style="color: var(--red);">${downCount}</span></span>
+          </div>
+          <div class="breadth-bar">
+            <div class="breadth-fill-up" style="width: ${upPct}%;"></div>
+            <div class="breadth-fill-down" style="width: ${downPct}%;"></div>
+          </div>
+        </div>
+
+        <div class="movers-grid">
+          <!-- Top Gainers -->
+          <div class="movers-card">
+            <div class="movers-header gainers">
+              <span>Top Gainers</span>
+              <span>▲</span>
+            </div>
+            ${topGainers.map(s => `
+              <a href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank" class="mover-row">
+                <div class="mover-left">
+                  <span class="mover-sym">${esc(s.symbol)}</span>
+                  <span class="mover-name">${esc(s.name)}</span>
+                </div>
+                <div class="mover-right">
+                  <span class="mover-price">${fmt(s.price)}</span>
+                  <span class="mover-pct up">+${s.pct.toFixed(2)}%</span>
+                </div>
+              </a>
+            `).join('')}
+          </div>
+
+          <!-- Top Losers -->
+          <div class="movers-card">
+            <div class="movers-header losers">
+              <span>Top Losers</span>
+              <span>▼</span>
+            </div>
+            ${topLosers.map(s => `
+              <a href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank" class="mover-row">
+                <div class="mover-left">
+                  <span class="mover-sym">${esc(s.symbol)}</span>
+                  <span class="mover-name">${esc(s.name)}</span>
+                </div>
+                <div class="mover-right">
+                  <span class="mover-price">${fmt(s.price)}</span>
+                  <span class="mover-pct down">${s.pct.toFixed(2)}%</span>
+                </div>
+              </a>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Insert Movers HTML right below the Indices
+  dash.innerHTML = html.replace('<div class="category-section"><h2 class="category-title">Indonesian Stocks', moversHtml + '<div class="category-section"><h2 class="category-title">Indonesian Stocks');
 }
 
 async function searchStocks(query) {
