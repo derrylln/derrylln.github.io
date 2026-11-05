@@ -33,8 +33,14 @@ const INDICES = [
 
 const MACRO = [
   { symbol: 'IDR=X', name: 'USD/IDR' }, { symbol: 'GC=F', name: 'Gold' }, 
-  { symbol: 'CL=F', name: 'Crude Oil' }, { symbol: '^TNX', name: '10Y Yield' }, 
+  { symbol: 'CL=F', name: 'Crude Oil' }, { symbol: '^TNX', name: 'US 10Y Yield' }, 
   { symbol: 'BTC-USD', name: 'Bitcoin' }
+];
+
+// ADDED: VIX for Macro Panel
+const ECON_INDICATORS = [
+  { symbol: '^VIX', name: 'CBOE Volatility (VIX)' },
+  { symbol: '^TNX', name: 'US 10Y Treasury Yield' }
 ];
 
 const IDX_STOCKS = [
@@ -392,7 +398,7 @@ async function loadMarketDashboard() {
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
 
   // 1. Fetch all data
-  const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), ...MACRO.map(x=>x.symbol), ...IDX_STOCKS.map(x=>x.symbol), ...US_STOCKS.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
+  const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), ...MACRO.map(x=>x.symbol), ...ECON_INDICATORS.map(x=>x.symbol), ...IDX_STOCKS.map(x=>x.symbol), ...US_STOCKS.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
   const allData = {};
 
   for (const sym of allSymbols) {
@@ -408,14 +414,14 @@ async function loadMarketDashboard() {
   const idxData = IDX_STOCKS.map(s => allData[s.symbol]).filter(Boolean);
   const usData = US_STOCKS.map(s => allData[s.symbol]).filter(Boolean);
   
-  // Top Movers
+  // Top Movers (Expanded to Top 5)
   const idxSorted = [...idxData].sort((a, b) => b.pct - a.pct);
   const usSorted = [...usData].sort((a, b) => b.pct - a.pct);
 
-  const idxGainers = idxSorted.slice(0, 3);
-  const idxLosers = idxSorted.slice(-3).reverse();
-  const usGainers = usSorted.slice(0, 3);
-  const usLosers = usSorted.slice(-3).reverse();
+  const idxGainers = idxSorted.slice(0, 5);
+  const idxLosers = idxSorted.slice(-5).reverse();
+  const usGainers = usSorted.slice(0, 5);
+  const usLosers = usSorted.slice(-5).reverse();
 
   // 3. Build Sparkline HTML
   const sumSymbols = [
@@ -460,14 +466,45 @@ async function loadMarketDashboard() {
     </a>`;
   }).join('');
 
-  // 5. Assemble Dashboard with align-items: start
+  // 5. Build Macro Panel to fill empty space
+  const vixData = allData['^VIX'];
+  const tnxData = allData['^TNX'];
+  
+  const macroPanelHtml = `
+    <div class="modern-card" style="margin-top: 24px;">
+      <div class="card-title">Macro & Economic Indicators</div>
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        ${vixData ? `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--rule-2); padding-bottom:12px;">
+          <div><div style="font-weight:700;">US VIX Volatility Index</div><div style="font-size:11px; color:var(--muted);">CBOE Volatility Index</div></div>
+          <div style="text-align:right;"><div style="font-weight:700;">${vixData.price.toLocaleString('en-US')}</div><div style="font-size:12px; font-weight:700; color:${vixData.pct >= 0 ? 'var(--green)' : 'var(--red)'}">${vixData.pct > 0 ? '+' : ''}${vixData.pct.toFixed(2)}%</div></div>
+        </div>
+        ` : ''}
+        ${tnxData ? `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--rule-2); padding-bottom:12px;">
+          <div><div style="font-weight:700;">US 10Y Treasury Yield</div><div style="font-size:11px; color:var(--muted);">10-Year Bond Yield</div></div>
+          <div style="text-align:right;"><div style="font-weight:700;">${tnxData.price.toFixed(3)}%</div><div style="font-size:12px; font-weight:700; color:${tnxData.pct >= 0 ? 'var(--green)' : 'var(--red)'}">${tnxData.pct > 0 ? '+' : ''}${tnxData.pct.toFixed(2)}%</div></div>
+        </div>
+        ` : ''}
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div><div style="font-weight:700;">Bank Indonesia (BI) Rate</div><div style="font-size:11px; color:var(--muted);">7-Day Reverse Repo</div></div>
+          <div style="text-align:right;"><div style="font-weight:700;">6.25%</div><div style="font-size:12px; font-weight:700; color:var(--muted);">Static</div></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // 6. Assemble Dashboard
   dash.innerHTML = `
     <div class="sparkline-grid" style="grid-template-columns: repeat(5, 1fr);">${sparkHtml}</div>
     
     <div class="dash-grid" style="align-items: start;">
-      <div class="modern-card">
-        <div class="card-title">IHSG Market Performance</div>
-        <div id="mainChart"></div>
+      <div>
+        <div class="modern-card">
+          <div class="card-title">IHSG Market Performance</div>
+          <div id="mainChart"></div>
+        </div>
+        ${macroPanelHtml}
       </div>
       <div class="modern-card">
         <div class="card-title">Market Movers (IDX)</div>
@@ -478,7 +515,7 @@ async function loadMarketDashboard() {
       </div>
     </div>
 
-    <div class="dash-grid" style="align-items: start;">
+    <div class="dash-grid" style="align-items: start; margin-top:24px;">
       <div class="modern-card">
         <div class="card-title">US Market Movers</div>
         <div class="movers-grid-4">
