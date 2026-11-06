@@ -13,8 +13,8 @@ const LS = {
 };
 
 const SOURCES = [
-  // Swapped Bloomberg for NBC News Business
-  { id: 'nbc', label: 'NBC News', color: '#111827', url: 'https://feeds.nbcnews.com/nbcnews/public/business' },
+  // Swapped to CNBC US (Extremely reliable, includes images)
+  { id: 'cnbc_us', label: 'CNBC US', color: '#111827', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114' },
   // WSJ Markets Feed
   { id: 'reuters', label: 'WSJ Markets', color: '#7c2d12', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml' },
   { id: 'cnbc', label: 'CNBC Indonesia', color: '#1e3a8a', url: 'https://www.cnbcindonesia.com/market/rss' },
