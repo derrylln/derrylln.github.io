@@ -13,14 +13,14 @@ const LS = {
 };
 
 const SOURCES = [
-  // Official Bloomberg Feed (Includes images)
-  { id: 'bloomberg', label: 'Bloomberg', color: '#111827', url: 'https://feeds.bloomberg.com/markets/news.rss' },
-  // WSJ Markets Feed (Replaces broken Reuters, includes images)
+  // Swapped Bloomberg for NBC News Business
+  { id: 'nbc', label: 'NBC News', color: '#111827', url: 'https://feeds.nbcnews.com/nbcnews/public/business' },
+  // WSJ Markets Feed
   { id: 'reuters', label: 'WSJ Markets', color: '#7c2d12', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml' },
   { id: 'cnbc', label: 'CNBC Indonesia', color: '#1e3a8a', url: 'https://www.cnbcindonesia.com/market/rss' },
-  // FIXED: Added useJsonApi to Kontan. This forces the mobile browser to receive clean JSON instead of raw XML.
+  // Kontan (using JSON API for mobile stability)
   { id: 'kontan', label: 'Kontan', color: '#14532d', url: 'https://investasi.kontan.co.id/rss', useJsonApi: true },
-  // Google News (Note: Google explicitly hides images in their RSS feeds for copyright reasons. The app will show the colored block fallback for these).
+  // IDN Financials
   { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id', useJsonApi: true }
 ];
 
