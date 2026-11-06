@@ -13,8 +13,10 @@ const LS = {
 };
 
 const SOURCES = [
-  { id: 'bloomberg', label: 'Bloomberg', color: '#111827', url: 'https://news.google.com/rss/search?q=when:24h+site:bloomberg.com+markets&hl=en-US&gl=US&ceid=US:en', useJsonApi: true },
-  { id: 'reuters', label: 'Reuters', color: '#7c2d12', url: 'https://news.google.com/rss/search?q=when:24h+site:reuters.com+business&hl=en-US&gl=US&ceid=US:en', useJsonApi: true },
+  // Switched to Official Bloomberg Feed (has images)
+  { id: 'bloomberg', label: 'Bloomberg', color: '#111827', url: 'https://feeds.bloomberg.com/markets/news.rss' },
+  // Switched to WSJ Markets (reliable, has images, replaces broken Reuters feed)
+  { id: 'reuters', label: 'WSJ Markets', color: '#7c2d12', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml' },
   { id: 'cnbc', label: 'CNBC Indonesia', color: '#1e3a8a', url: 'https://www.cnbcindonesia.com/market/rss' },
   { id: 'kontan', label: 'Kontan', color: '#14532d', url: 'https://investasi.kontan.co.id/rss' },
   { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id', useJsonApi: true }
@@ -174,17 +176,26 @@ async function fetchAllNews() {
   let newArticlesFound = false;
   await Promise.allSettled(SOURCES.map(async (source) => {
     try {
-      let fetchUrl = source.url, items = [];
+      // ADDED: Cache buster for direct feeds to prevent stale news
+      let fetchUrl = source.url;
+      if (!source.useJsonApi) {
+        fetchUrl += (fetchUrl.includes('?') ? '&' : '?') + `_t=${Date.now()}`;
+      }
+      
+      let items = [];
       if (source.useJsonApi) {
-        fetchUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
-        const res = await fetch(fetchUrl); if (!res.ok) throw new Error('HTTP ' + res.status);
+        const jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+        const res = await fetch(jsonUrl); if (!res.ok) throw new Error('HTTP ' + res.status);
         items = parseFeed(await res.text(), source);
       } else {
-        const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); items = parseFeed(xml, source);
+        const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); 
+        items = parseFeed(xml, source);
       }
       if (items.length > 0) {
         state.articles = dedupe([...items, ...state.articles]).sort((a, b) => b.ts - a.ts);
-        newArticlesFound = true; render(); enrichImages(items);
+        newArticlesFound = true; 
+        render(); 
+        enrichImages(items);
       }
     } catch (err) { console.warn('[FINWIRE] feed failed:', source.id, err.message); }
   }));
@@ -404,15 +415,40 @@ async function loadMarketDashboard() {
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
 
   const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), '^GSPC', ...MACRO.map(x=>x.symbol), ...ECON_INDICATORS.map(x=>x.symbol), ...IDX_STOCKS.map(x=>x.symbol), ...US_STOCKS.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
-  const allData = {};
+  
+  let allData = {};
+  let failedCount = 0;
 
   for (const sym of allSymbols) {
     const details = await fetchStockDetails(sym);
     if (details && details.price) {
       details.pct = ((details.price - details.prevClose) / details.prevClose) * 100;
       allData[sym] = details;
+    } else {
+      failedCount++;
     }
-    await new Promise(r => setTimeout(r, 100)); 
+    await new Promise(r => setTimeout(r, 50)); // Reduced delay slightly
+  }
+
+  // --- FALLBACK CACHING LOGIC ---
+  const cacheKey = 'fw.market_data_cache';
+  
+  if (failedCount > 5) {
+    // If Yahoo blocks us, load yesterday's data from cache
+    console.warn("Yahoo rate limit hit. Loading cached market data.");
+    const cached = loadJSON(cacheKey, {});
+    if (Object.keys(cached).length > 0) {
+      allData = cached;
+    }
+  } else if (Object.keys(allData).length > 0) {
+    // If fetch was successful, save to cache for future fallback
+    saveJSON(cacheKey, allData);
+  }
+  
+  // If absolutely no data, show error
+  if (Object.keys(allData).length === 0) {
+    dash.innerHTML = `<div class="stock-loading">Market data temporarily unavailable. Please try again in a few minutes.</div>`;
+    return;
   }
 
   const idxData = IDX_STOCKS.map(s => allData[s.symbol]).filter(Boolean);
