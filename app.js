@@ -9,7 +9,8 @@ const OG_MAX_SCRAPES  = 10;
 
 const LS = {
   news: 'finwire.news.v3', ticker: 'finwire.ticker.v3', read: 'finwire.read.v2',
-  watch: 'finwire.watch.v2', lang: 'finwire.lang.v2', ogimg: 'finwire.ogimg.v2'
+  watch: 'finwire.watch.v2', lang: 'finwire.lang.v2', ogimg: 'finwire.ogimg.v2',
+  theme: 'finwire.theme.v1' // NEW
 };
 
 const SOURCES = [
@@ -665,28 +666,34 @@ async function loadMarketDashboard() {
   `;
 
   if (typeof ApexCharts !== 'undefined') {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const chartTheme = { mode: isDark ? 'dark' : 'light' };
+
     summaryData.forEach(d => {
       if (!d.data) return;
       new ApexCharts(document.querySelector(`#spark-${d.symbol.replace('^', '').replace('=', '')}`), {
         series: [{ data: d.spark.map(p => p.y) }], chart: { type: 'area', height: 50, sparkline: { enabled: true } },
-        stroke: { curve: 'smooth', width: 2 }, colors: [d.data.pct >= 0 ? '#0a8f4a' : '#d10a11'],
+        theme: chartTheme,
+        stroke: { curve: 'smooth', width: 2 }, colors: [d.data.pct >= 0 ? '#22c55e' : '#ef4444'],
         fill: { type: 'gradient', gradient: { opacityFrom: 0.4, opacityTo: 0 } }, tooltip: { enabled: false }
       }).render();
     });
 
     ihsgChart = new ApexCharts(document.querySelector("#mainChart"), {
       series: [{ name: 'IHSG', data: mainChartData }], chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'Inter' },
-      colors: ['#d10a11'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0 } },
+      theme: chartTheme,
+      colors: ['#ef4444'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0 } },
       dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 3 },
-      xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: '#f1f3f5', strokeDashArray: 4 }
+      xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 }
     });
     ihsgChart.render();
 
     sp500Chart = new ApexCharts(document.querySelector("#sp500Chart"), {
       series: [{ name: 'S&P 500', data: sp500ChartData }], chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'Inter' },
+      theme: chartTheme,
       colors: ['#3b82f6'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0 } },
       dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 3 },
-      xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: '#f1f3f5', strokeDashArray: 4 }
+      xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 }
     });
     sp500Chart.render();
 
@@ -804,7 +811,28 @@ async function getFullArticleText(url) {
 function bindUI() {
   if ($('#navNews')) $('#navNews').addEventListener('click', () => switchView('news'));
   if ($('#navStocks')) $('#navStocks').addEventListener('click', () => switchView('stocks'));
-  
+
+  // --- NEW: THEME TOGGLE LOGIC GOES HERE ---
+  const themeToggleBtn = $('#themeToggle');
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener('click', () => {
+      const currentTheme = document.documentElement.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      
+      document.documentElement.setAttribute('data-theme', newTheme);
+      localStorage.setItem(LS.theme, newTheme);
+      
+      // Update Icon
+      themeToggleBtn.innerHTML = newTheme === 'dark' ? '<span aria-hidden="true">☀️</span>' : '<span aria-hidden="true">🌙</span>';
+      
+      // Re-render charts if on Market page to apply new colors
+      if ($('#stocksView').style.display !== 'none') {
+        loadMarketDashboard();
+      }
+    });
+  }
+  // -----------------------------------------
+
   const searchInput = $('#stockSearchInput');
   if ($('#stockSearchBtn')) $('#stockSearchBtn').addEventListener('click', () => searchStocks(searchInput.value.trim()));
   if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchStocks(searchInput.value.trim()); } });
@@ -1029,6 +1057,15 @@ function bindUI() {
 }
 
 function init() {
+  // --- LOAD SAVED THEME ---
+  const savedTheme = localStorage.getItem(LS.theme) || 'light';
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  const themeToggleBtn = $('#themeToggle');
+  if (themeToggleBtn) {
+    themeToggleBtn.innerHTML = savedTheme === 'dark' ? '<span aria-hidden="true">☀️</span>' : '<span aria-hidden="true">🌙</span>';
+  }
+  // ------------------------
+
   const savedLang = localStorage.getItem(LS.lang); state.lang = (savedLang === 'id' || savedLang === 'en') ? savedLang : 'en';
   const savedRead = loadJSON(LS.read, []); state.read = new Set(Array.isArray(savedRead) ? savedRead : []);
   const savedWatch = loadJSON(LS.watch, null); state.watch = Array.isArray(savedWatch) ? savedWatch : [];
