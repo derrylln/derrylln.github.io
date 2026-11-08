@@ -1599,3 +1599,27 @@ body, html {
   from { opacity: 0; transform: translateY(-5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Daily Briefing Styling */
+.briefing-container {
+  margin: 20px 0 30px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+#briefingContent {
+  width: 100%;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 4px solid #a855f7;
+  border-radius: 8px;
+}
+#briefingContent ul {
+  margin: 10px 0 0 0;
+  padding-left: 20px;
+}
+#briefingContent li {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
