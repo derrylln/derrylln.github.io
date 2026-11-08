@@ -16,8 +16,6 @@ const SOURCES = [
   { id: 'bloomberg', label: 'Bloomberg', color: '#111827', url: 'https://feeds.bloomberg.com/markets/news.rss', useJsonApi: true },
   { id: 'reuters', label: 'Reuters', color: '#7c2d12', url: 'https://news.google.com/rss/search?q=when:24h+site:reuters.com/business&hl=en-US&gl=US&ceid=US:en', useJsonApi: true },
   { id: 'marketwatch', label: 'MarketWatch', color: '#059669', url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', useJsonApi: true },
-  
-  // Indonesian Sources
   { id: 'cnbc', label: 'CNBC Indonesia', color: '#e11d48', url: 'https://www.cnbcindonesia.com/market/rss', useJsonApi: true },
   { id: 'kontan', label: 'Kontan', color: '#14532d', url: 'https://investasi.kontan.co.id/rss', useJsonApi: true },
   { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id', useJsonApi: true },
@@ -265,8 +263,15 @@ async function fetchTicker() {
   const settled = await Promise.allSettled(TICKERS.map(async (t) => {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t.symbol)}?interval=1d&range=5d`;
     const raw = await fetchViaProxy(url, { timeout: 6000 }); const data = JSON.parse(raw);
-    const meta = data?.chart?.result?.[0]?.meta; if (!meta || typeof meta.regularMarketPrice !== 'number') throw new Error('No price');
-    const price = meta.regularMarketPrice; const prev = meta.chartPreviousClose || meta.previousClose || price;
+    const result = data?.chart?.result?.[0];
+    const meta = result?.meta; if (!meta) throw new Error('No price');
+    
+    let price = meta.regularMarketPrice;
+    let prev = meta.chartPreviousClose;
+    const quotes = result.indicators?.quote?.[0]?.close || [];
+    const validQuotes = quotes.filter(q => q !== null && q !== undefined);
+    if (validQuotes.length >= 2) prev = validQuotes[validQuotes.length - 2];
+    
     return { label: t.label, symbol: t.symbol, price: price, change: prev ? ((price - prev) / prev) * 100 : 0 };
   }));
   const cached = loadJSON(LS.ticker, null); const cachedMap = {};
@@ -407,11 +412,19 @@ async function fetchStockDetails(symbol) {
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`;
     const raw = await fetchViaProxy(url, { timeout: 8000 });
     const data = JSON.parse(raw);
-    const meta = data?.chart?.result?.[0]?.meta;
-    if (!meta || typeof meta.regularMarketPrice !== 'number') throw new Error('No price data');
+    const result = data?.chart?.result?.[0];
+    const meta = result?.meta;
+    if (!meta) throw new Error('No price data');
+
+    let price = meta.regularMarketPrice;
+    let prevClose = meta.chartPreviousClose;
+    const quotes = result.indicators?.quote?.[0]?.close || [];
+    const validQuotes = quotes.filter(q => q !== null && q !== undefined);
+    if (validQuotes.length >= 2) prevClose = validQuotes[validQuotes.length - 2];
+    if (!price && validQuotes.length > 0) price = validQuotes[validQuotes.length - 1];
+
     return { 
-      symbol: meta.symbol, name: meta.shortName || meta.symbol, price: meta.regularMarketPrice, 
-      prevClose: meta.chartPreviousClose || meta.previousClose || meta.regularMarketPrice, 
+      symbol: meta.symbol, name: meta.shortName || meta.symbol, price: price, prevClose: prevClose, 
       volume: meta.regularMarketVolume, dayHigh: meta.regularMarketDayHigh, dayLow: meta.regularMarketDayLow, 
       week52High: meta.fiftyTwoWeekHigh, week52Low: meta.fiftyTwoWeekLow 
     };
@@ -774,39 +787,16 @@ async function loadAll(force) {
 
 async function getFullArticleText(url) {
   try {
-    // 1. Add a cache buster so Cloudflare doesn't return an old blocked page
     const fetchUrl = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
-    
-    // 2. Increase timeout to 10 seconds
     const html = await fetchViaProxy(fetchUrl, { timeout: 10000 });
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    
-    // 3. Remove all the junk
     doc.querySelectorAll('script, style, nav, footer, header, aside, iframe, noscript, .ads, .related').forEach(el => el.remove());
-    
-    // 4. Try to find the main article container
-    let contentEl = doc.querySelector('article') || 
-                    doc.querySelector('main') || 
-                    doc.querySelector('.detail-text') || 
-                    doc.querySelector('.article-content') || 
-                    doc.querySelector('.post-content') ||
-                    doc.body;
-                    
+    let contentEl = doc.querySelector('article') || doc.querySelector('main') || doc.querySelector('.detail-text') || doc.querySelector('.article-content') || doc.querySelector('.post-content') || doc.body;
     let text = contentEl.textContent || '';
-    
-    // 5. Clean up whitespace
     text = text.replace(/\s+/g, ' ').trim();
-    
-    // 6. If the text is super short, the proxy hit a block page
-    if (text.length < 300) {
-        console.warn("Scraper returned too little text. Falling back to subtitle.");
-        return ''; 
-    }
-    
-    // 7. Limit to 5000 characters so we don't waste tokens
+    if (text.length < 300) return ''; 
     return text.substring(0, 5000);
   } catch (e) {
-    console.warn("Scrape failed:", e.message);
     return '';
   }
 }
@@ -1020,120 +1010,6 @@ function bindUI() {
       }
     });
   }
-
-  let resizeTimer = null;
-  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderTicker(state.ticker), 350); });
-  setInterval(refreshTimes, 60 * 1000);
-}
-
-  // ==========================================
-  // AI EXPLAIN MOVE LOGIC (NEW)
-  // ==========================================
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.explain-btn');
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    const sym = btn.getAttribute('data-sym');
-    const pct = btn.getAttribute('data-pct');
-    const isUp = btn.getAttribute('data-up') === 'true';
-    
-    const row = document.getElementById(`explain-row-${sym}`);
-    const textEl = document.getElementById(`explain-text-${sym}`);
-    
-    if (row.style.display === 'table-row') {
-      row.style.display = 'none';
-      return;
-    }
-
-    // Show loading
-    row.style.display = 'table-row';
-    textEl.innerHTML = '✨ Analyzing news for this move...';
-    textEl.style.display = 'block';
-
-    // Grab the top 10 recent news titles to give context
-    const recentNews = currentArticles().slice(0, 10).map(a => a.title).join('\n');
-
-    try {
-      const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-explain-move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol: sym, pct, isUp, newsText: recentNews })
-      });
-      
-      const data = await res.json();
-      
-      if (data && data.summary) {
-        textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(data.summary)}`;
-      } else {
-        textEl.innerHTML = `<em>Could not analyze the move.</em>`;
-      }
-    } catch (err) {
-      textEl.innerHTML = `<em>Failed to connect to AI.</em>`;
-    }
-  });
-  // ==========================================
-
-  let resizeTimer = null;
-  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderTicker(state.ticker), 350); });
-  setInterval(refreshTimes, 60 * 1000);
-}
-
-  // ==========================================
-  // NEW: AI DAILY BRIEFING LOGIC
-  // ==========================================
-  const briefingBtn = $('#generateBriefingBtn');
-  if (briefingBtn) {
-    briefingBtn.addEventListener('click', async () => {
-      const contentEl = $('#briefingContent');
-      
-      // Get the top 15 recent articles to summarize
-      const articles = currentArticles().slice(0, 15);
-      if (articles.length === 0) return;
-
-      // Combine titles and summaries
-      const combinedText = articles.map((a, i) => `${i+1}. ${a.title} - ${a.summary}`).join('\n\n');
-
-      briefingBtn.disabled = true;
-      briefingBtn.innerHTML = '✨ Analyzing 15 articles...';
-      contentEl.style.display = 'none';
-
-      try {
-        const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: combinedText, isBriefing: true, lang: state.lang }) // <-- ADD lang HERE
-        });
-        
-        const data = await res.json();
-        
-        if (data && data.summary) {
-          // Convert markdown bullets (*) to HTML list items if Gemini uses them
-          let formattedText = data.summary
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold text
-            .replace(/^\* (.*$)/gim, '<li>$1</li>'); // Bullet points
-          
-          if (formattedText.includes('<li>')) {
-            formattedText = `<ul>${formattedText}</ul>`;
-          }
-
-          contentEl.innerHTML = `<strong>Market Briefing:</strong><br>${formattedText}`;
-          contentEl.style.display = 'block';
-        } else {
-          contentEl.innerHTML = `<em>Failed to generate briefing. Try again.</em>`;
-          contentEl.style.display = 'block';
-        }
-      } catch (err) {
-        contentEl.innerHTML = `<em>Failed to connect to AI.</em>`;
-        contentEl.style.display = 'block';
-      } finally {
-        briefingBtn.disabled = false;
-        briefingBtn.innerHTML = '✨ Generate Today\'s Market Briefing';
-      }
-    });
-  }
-  // ==========================================
 
   let resizeTimer = null;
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderTicker(state.ticker), 350); });
