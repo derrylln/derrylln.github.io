@@ -18,10 +18,12 @@ const SOURCES = [
   { id: 'cnbc', label: 'CNBC Indonesia', color: '#1e3a8a', url: 'https://www.cnbcindonesia.com/market/rss' },
   { id: 'kontan', label: 'Kontan', color: '#14532d', url: 'https://investasi.kontan.co.id/rss', useJsonApi: true },
   { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id', useJsonApi: true },
-  { id: 'antara', label: 'Antara Ekonomi', color: '#b91c1c', url: 'https://www.antaranews.com/rss/ekonomi' },
-  { id: 'cnn_id', label: 'CNN Ekonomi', color: '#dc2626', url: 'https://www.cnnindonesia.com/ekonomi/rss' },
-  { id: 'tempo', label: 'Tempo Bisnis', color: '#ea580c', url: 'http://rss.tempo.co/bisnis' },
-  { id: 'suara', label: 'Suara Bisnis', color: '#65a30d', url: 'https://www.suara.com/rss/bisnis' }
+  
+  // FIXED: Added useJsonApi: true to all of these so they parse correctly
+  { id: 'antara', label: 'Antara Ekonomi', color: '#b91c1c', url: 'https://www.antaranews.com/rss/ekonomi', useJsonApi: true },
+  { id: 'cnn_id', label: 'CNN Ekonomi', color: '#dc2626', url: 'https://www.cnnindonesia.com/ekonomi/rss', useJsonApi: true },
+  { id: 'tempo', label: 'Tempo Bisnis', color: '#ea580c', url: 'https://rss.tempo.co/bisnis', useJsonApi: true },
+  { id: 'suara', label: 'Suara Bisnis', color: '#65a30d', url: 'https://www.suara.com/rss/bisnis', useJsonApi: true }
 ];
 
 const TICKERS = [
