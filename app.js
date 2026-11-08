@@ -826,7 +826,13 @@ function bindUI() {
     e.preventDefault();
     e.stopPropagation(); 
     
-    const text = btn.getAttribute('data-text');
+    // Use the text from the button, or fallback to the card if it's missing
+    let text = btn.getAttribute('data-text');
+    if (!text || text === 'undefined') {
+        const card = btn.closest('.card');
+        text = card.querySelector('.headline').innerText;
+    }
+
     const targetId = btn.getAttribute('data-target');
     const targetEl = document.getElementById(targetId);
     
@@ -842,8 +848,13 @@ function bindUI() {
       const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: body.text || text, lang: state.lang }) // <-- ADD lang HERE
+        body: JSON.stringify({ text, lang: state.lang }) // Added lang here!
       });
+      
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Worker Error ${res.status}: ${errText}`);
+      }
       
       const data = await res.json();
       
@@ -858,7 +869,8 @@ function bindUI() {
         targetEl.style.display = 'block';
       }
     } catch (err) {
-      targetEl.innerHTML = `<em>Failed to connect to AI.</em>`;
+      // This will now show us the EXACT error
+      targetEl.innerHTML = `<em>Failed: ${esc(err.message)}</em>`;
       targetEl.style.display = 'block';
     } finally {
       btn.disabled = false;
