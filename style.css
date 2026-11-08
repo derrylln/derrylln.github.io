@@ -1786,3 +1786,62 @@ body, html {
   justify-content: center; 
   align-items: flex-start; /* FIXES the stretched AI button */
 }
+
+/* ============================================================
+   LIGHT MODE GREY BOXES (Matching Dark Mode)
+   ============================================================ */
+
+/* 1. Set the page background to a soft off-white so the cards pop */
+body {
+  background-color: #f4f7fe !important; 
+}
+
+/* 2. Apply the white box with a soft border and shadow */
+.card,
+.modern-card,
+.stock-card,
+.movers-panel,
+.spark-card,
+.ai-summary-box,
+.exec-card,
+.stock-search-box,
+.breadth-container,
+.briefing-container {
+  background-color: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.03) !important;
+}
+
+/* 3. Ensure the text doesn't touch the edges of the grid cards */
+.card.grid .card-body {
+  padding: 0 16px 16px 16px !important;
+}
+
+/* 4. Ensure the side cards have the exact same centered image and padding */
+.card.side {
+  display: flex !important; 
+  flex-direction: row !important;
+  align-items: center !important; 
+  gap: 16px !important;
+  padding: 16px !important; 
+}
+
+.card.side .thumb {
+  width: 110px !important;
+  height: 110px !important;
+  flex-shrink: 0;
+  margin-bottom: 0 !important; 
+}
+
+.card.side .card-body {
+  padding: 0 !important; 
+  display: flex;
+  flex-direction: column;
+  justify-content: center; 
+  align-items: flex-start; 
+}
+
+/* 5. Hero Card text padding */
+.card.hero .card-body {
+  padding-top: 16px !important;
+}
