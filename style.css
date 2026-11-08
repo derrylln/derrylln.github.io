@@ -1667,7 +1667,11 @@ body, .card, .modern-card, .stock-card, .movers-panel, .spark-card, .ai-summary-
 [data-theme="dark"] .spark-card,
 [data-theme="dark"] .ai-summary-box,
 [data-theme="dark"] .stock-search-box,
-[data-theme="dark"] .briefing-container,
+[data-theme="dark"] .briefing-container {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
 [data-theme="dark"] .exec-card,
 [data-theme="dark"] .breadth-container {
   background-color: var(--bg-soft) !important;
