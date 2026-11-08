@@ -1629,109 +1629,133 @@ body, html {
 }
 
 /* ============================================================
-   DARK MODE / LIGHT MODE THEME
+   DARK MODE THEME (FIXED)
    ============================================================ */
 
-body, .card, .modern-card, .stock-card, .movers-panel, .spark-card, .ai-summary-box, .filters, .footer, .masthead, .ticker-wrap {
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
-}
-
 [data-theme="dark"] {
-  --bg: #0f172a;
-  --bg-soft: #1e293b;
-  --ink: #f8fafc;
-  --ink-2: #cbd5e1;
-  --muted: #94a3b8;
-  --rule: #334155;
-  --rule-2: #1e293b;
+  --bg: #0f172a;         /* Main dark blue background */
+  --bg-soft: #1e293b;    /* Card grey background */
+  --ink: #f8fafc;        /* Bright white text */
+  --ink-2: #cbd5e1;      /* Off-white text */
+  --muted: #94a3b8;      /* Muted grey text */
+  --rule: #334155;       /* Borders */
+  --rule-2: #1e293b;     /* Darker borders */
   --red: #ef4444;
   --green: #22c55e;
 }
 
-[data-theme="dark"] .masthead { 
-  background: #0f172a; 
-  border-bottom: 3px solid var(--red); 
-}
+/* 1. Ticker & Header */
+[data-theme="dark"] .masthead { background: var(--bg); border-bottom: 3px solid var(--red); }
+[data-theme="dark"] .ticker-wrap { background: var(--bg); border-bottom: 1px solid var(--rule); }
+[data-theme="dark"] .filters { background: rgba(15, 23, 42, 0.95); border-bottom: 1px solid var(--rule); }
 
-/* Fix the black ticker bar */
-[data-theme="dark"] .ticker-wrap {
-  background: var(--bg);
-  border-bottom: 1px solid var(--rule);
-}
-
-/* Fix the cards (remove harsh borders, just use soft background) */
+/* 2. Unify ALL card backgrounds into grey boxes */
 [data-theme="dark"] .card,
 [data-theme="dark"] .modern-card,
 [data-theme="dark"] .stock-card,
 [data-theme="dark"] .movers-panel,
 [data-theme="dark"] .spark-card,
 [data-theme="dark"] .ai-summary-box,
-[data-theme="dark"] .stock-search-box,
-[data-theme="dark"] .briefing-container {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
 [data-theme="dark"] .exec-card,
-[data-theme="dark"] .breadth-container {
+[data-theme="dark"] .breadth-container,
+[data-theme="dark"] .stock-search-box {
   background-color: var(--bg-soft) !important;
-  border: none !important; /* Removes the tight outline */
-  box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+  border: 1px solid var(--rule) !important; 
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
 }
 
-/* Fix the invisible chip text */
+/* 3. Fix Table Headers inside the panels */
+[data-theme="dark"] .movers-table th {
+  background-color: transparent !important;
+  color: var(--muted) !important;
+  border-bottom: 1px solid var(--rule) !important;
+}
+
+[data-theme="dark"] .movers-panel-header.gainers {
+  background: rgba(34, 197, 94, 0.1) !important;
+  color: var(--green) !important;
+  border-top: 3px solid var(--green) !important;
+  border-bottom: 1px solid var(--rule) !important;
+}
+
+[data-theme="dark"] .movers-panel-header.losers {
+  background: rgba(239, 68, 68, 0.1) !important;
+  color: var(--red) !important;
+  border-top: 3px solid var(--red) !important;
+  border-bottom: 1px solid var(--rule) !important;
+}
+
+[data-theme="dark"] .movers-panel-header.active {
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: var(--ink) !important;
+  border-top: 3px solid var(--ink) !important;
+  border-bottom: 1px solid var(--rule) !important;
+}
+
+/* 4. Fix table row borders and hover */
+[data-theme="dark"] .movers-table td {
+  border-bottom: 1px solid var(--rule-2) !important;
+}
+
+[data-theme="dark"] .movers-table tr:hover,
+[data-theme="dark"] .card:hover,
+[data-theme="dark"] .stock-card:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* 5. Fix text colors everywhere */
+[data-theme="dark"] .sc-sym,
+[data-theme="dark"] .sc-price,
+[data-theme="dark"] .card-title,
+[data-theme="dark"] .page-title,
+[data-theme="dark"] .spark-val,
+[data-theme="dark"] .headline {
+  color: var(--ink) !important;
+}
+
+[data-theme="dark"] .sc-name,
+[data-theme="dark"] .spark-name,
+[data-theme="dark"] .category-title,
+[data-theme="dark"] .summary {
+  color: var(--muted) !important;
+}
+
+/* 6. Fix Green/Red badges */
+[data-theme="dark"] .sc-chg.up,
+[data-theme="dark"] .spark-chg.up {
+  background: rgba(34, 197, 94, 0.15) !important;
+  color: var(--green) !important;
+}
+
+[data-theme="dark"] .sc-chg.down,
+[data-theme="dark"] .spark-chg.down {
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: var(--red) !important;
+}
+
+/* 7. Fix AI elements */
+[data-theme="dark"] .ai-btn {
+  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.3) !important;
+}
+[data-theme="dark"] .ai-summary-box {
+  background: rgba(168, 85, 247, 0.1) !important;
+  border-left: 4px solid #a855f7 !important;
+  border-top: none !important;
+  border-right: none !important;
+  border-bottom: none !important;
+}
 [data-theme="dark"] .chip.active {
   background: var(--red) !important;
   color: #fff !important;
 }
 
-/* Fix the weird outline on the AI button */
-[data-theme="dark"] .ai-btn {
-  outline: none !important;
-  border: none !important;
-  box-shadow: 0 4px 15px rgba(168, 85, 247, 0.4) !important;
-}
-
-[data-theme="dark"] .filters { 
-  background: rgba(15, 23, 42, 0.95); 
-  border-bottom: 1px solid var(--rule); 
-}
-
-[data-theme="dark"] .movers-table tr:hover, 
-[data-theme="dark"] .card:hover { 
-  background-color: rgba(255, 255, 255, 0.03) !important; 
-}
-
-[data-theme="dark"] .thumb-fb { 
-  background: var(--rule); 
-  color: var(--ink); 
-}
-
-[data-theme="dark"] .ai-summary-box { 
-  background: rgba(168, 85, 247, 0.1) !important; 
-  border-left: 4px solid #a855f7 !important; 
-}
-
-[data-theme="dark"] #briefingContent { 
-  background: rgba(168, 85, 247, 0.1); 
-  border: none;
-  border-left: 4px solid #a855f7;
-}
-
-[data-theme="dark"] .stock-search-box input { 
-  color: var(--ink); 
-}
-
-/* Fix excessive spacing in Grid Cards */
-.card.grid .card-body {
-  padding-top: 0 !important; /* Removes the extra padding on top */
-}
-
+/* 8. Fix the spacing between thumbnails and titles */
 .card.grid .thumb {
-  margin-bottom: 10px !important; /* Brings the text closer to the image */
+  margin-bottom: 8px !important; 
 }
-
-/* Ensure side cards also stay tight */
-.card.side .card-body {
-  padding: 0 !important; 
+.card.grid .card-body {
+  padding: 0 0 16px 0 !important; 
+}
+.card.grid .meta {
+  margin-top: 0 !important;
 }
