@@ -1749,13 +1749,39 @@ body, html {
   color: #fff !important;
 }
 
-/* 8. Fix the spacing between thumbnails and titles */
+/* ============================================================
+   FIX CARD PADDING AND SIDE CARD CENTERING
+   ============================================================ */
+
+/* 1. Grid Cards (Bottom Rows) */
 .card.grid .thumb {
-  margin-bottom: 8px !important; 
+  margin-bottom: 12px !important; 
 }
+
 .card.grid .card-body {
-  padding: 0 0 16px 0 !important; 
+  padding: 0 16px 16px 16px !important; /* Adds Left/Right/Bottom padding back */
 }
-.card.grid .meta {
-  margin-top: 0 !important;
+
+/* 2. Side Cards (Right side of Hero) */
+.card.side {
+  display: flex !important; 
+  flex-direction: row !important;
+  align-items: center !important; /* Centers the image vertically */
+  gap: 16px !important;
+  padding: 16px !important; /* Adds space around the whole card */
+  height: 100%;
+}
+
+.card.side .thumb {
+  width: 110px !important;
+  height: 110px !important;
+  flex-shrink: 0;
+  margin-bottom: 0 !important; 
+}
+
+.card.side .card-body {
+  padding: 0 !important; 
+  display: flex;
+  flex-direction: column;
+  justify-content: center; /* Centers the text vertically */
 }
