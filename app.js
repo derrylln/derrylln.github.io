@@ -8,7 +8,7 @@ const AUTO_REFRESH_MS = 15 * 60 * 1000;
 const OG_MAX_SCRAPES  = 10; 
 
 const LS = {
-  news: 'finwire.news.v2', ticker: 'finwire.ticker.v2', read: 'finwire.read.v2',
+  news: 'finwire.news.v3', ticker: 'finwire.ticker.v3', read: 'finwire.read.v2',
   watch: 'finwire.watch.v2', lang: 'finwire.lang.v2', ogimg: 'finwire.ogimg.v2'
 };
 
