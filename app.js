@@ -25,9 +25,16 @@ const SOURCES = [
 ];
 
 const TICKERS = [
-  { symbol: '^JKSE', label: 'IHSG' }, { symbol: 'BBCA.JK', label: 'BBCA' },
-  { symbol: 'BBRI.JK', label: 'BBRI' }, { symbol: 'TLKM.JK', label: 'TLKM' },
-  { symbol: 'IDR=X', label: 'USD/IDR' }, { symbol: 'CL=F', label: 'CRUDE OIL' }
+  { symbol: '^JKSE', label: 'IHSG' }, 
+  { symbol: '^GSPC', label: 'S&P 500' },
+  { symbol: '^IXIC', label: 'NASDAQ' },
+  { symbol: 'IDR=X', label: 'USD/IDR' },
+  { symbol: 'SGD=X', label: 'USD/SGD' },
+  { symbol: 'CHF=X', label: 'USD/CHF' },
+  { symbol: '^TNX', label: 'US 10Y' },
+  { symbol: 'GC=F', label: 'GOLD' },
+  { symbol: 'CL=F', label: 'CRUDE OIL' },
+  { symbol: 'BTC-USD', label: 'BITCOIN' }
 ];
 
 const INDICES = [
