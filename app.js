@@ -13,15 +13,17 @@ const LS = {
 };
 
 const SOURCES = [
-  { id: 'cnbc_us', label: 'CNBC US', color: '#111827', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114' },
-  { id: 'reuters', label: 'WSJ Markets', color: '#7c2d12', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml' },
-  { id: 'cnbc', label: 'CNBC Indonesia', color: '#1e3a8a', url: 'https://www.cnbcindonesia.com/market/rss' },
+  { id: 'bloomberg', label: 'Bloomberg', color: '#111827', url: 'https://www.bloomberg.com/feeds/markets/news.rss' },
+  { id: 'reuters', label: 'Reuters', color: '#7c2d12', url: 'https://news.google.com/rss/search?q=when:24h+site:reuters.com/business&hl=en-US&gl=US&ceid=US:en', useJsonApi: true },
+  { id: 'marketwatch', label: 'MarketWatch', color: '#059669', url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories' },
+  
+  // Indonesian Sources
+  { id: 'cnbc', label: 'CNBC Indonesia', color: '#e11d48', url: 'https://www.cnbcindonesia.com/market/rss' },
   { id: 'kontan', label: 'Kontan', color: '#14532d', url: 'https://investasi.kontan.co.id/rss', useJsonApi: true },
   { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id', useJsonApi: true },
   { id: 'antara', label: 'Antara Ekonomi', color: '#b91c1c', url: 'https://www.antaranews.com/rss/ekonomi', useJsonApi: true },
   { id: 'cnn_id', label: 'CNN Ekonomi', color: '#dc2626', url: 'https://www.cnnindonesia.com/ekonomi/rss', useJsonApi: true },
-  { id: 'tempo', label: 'Tempo Bisnis', color: '#ea580c', url: 'https://rss.tempo.co/bisnis', useJsonApi: true },
-  { id: 'suara', label: 'Suara Bisnis', color: '#65a30d', url: 'https://www.suara.com/rss/bisnis', useJsonApi: true }
+  { id: 'tempo', label: 'Tempo Bisnis', color: '#ea580c', url: 'https://rss.tempo.co/bisnis', useJsonApi: true }
 ];
 
 const TICKERS = [
