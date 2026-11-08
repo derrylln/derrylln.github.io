@@ -1721,3 +1721,17 @@ body, .card, .modern-card, .stock-card, .movers-panel, .spark-card, .ai-summary-
 [data-theme="dark"] .stock-search-box input { 
   color: var(--ink); 
 }
+
+/* Fix excessive spacing in Grid Cards */
+.card.grid .card-body {
+  padding-top: 0 !important; /* Removes the extra padding on top */
+}
+
+.card.grid .thumb {
+  margin-bottom: 10px !important; /* Brings the text closer to the image */
+}
+
+/* Ensure side cards also stay tight */
+.card.side .card-body {
+  padding: 0 !important; 
+}
