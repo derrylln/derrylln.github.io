@@ -1768,8 +1768,8 @@ body, html {
   flex-direction: row !important;
   align-items: center !important; /* Centers the image vertically */
   gap: 16px !important;
-  padding: 16px !important; /* Adds space around the whole card */
-  height: 100%;
+  padding: 16px !important; 
+  /* REMOVED height: 100% so it doesn't stretch vertically */
 }
 
 .card.side .thumb {
@@ -1783,5 +1783,6 @@ body, html {
   padding: 0 !important; 
   display: flex;
   flex-direction: column;
-  justify-content: center; /* Centers the text vertically */
+  justify-content: center; 
+  align-items: flex-start; /* FIXES the stretched AI button */
 }
