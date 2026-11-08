@@ -441,10 +441,18 @@ function generateMoversTable(title, stocks, headerClass) {
   if (!stocks.length) return '';
   const rows = stocks.map(s => `
     <tr>
-      <td style="font-weight:800; color:var(--ink);">${esc(s.symbol.replace('.JK', ''))}</td>
+      <td style="font-weight:800; color:var(--ink);">
+        ${esc(s.symbol.replace('.JK', ''))}
+        <button class="ai-btn explain-btn" data-sym="${esc(s.symbol)}" data-pct="${s.pct.toFixed(2)}" data-up="${s.pct >= 0}" style="padding: 2px 6px; font-size: 9px; margin-left: 4px; border-radius: 4px;">✨</button>
+      </td>
       <td style="color:var(--muted); font-size:11px;">${esc(s.name)}</td>
       <td style="text-align:right; font-weight:600;">${s.price.toLocaleString('en-US')}</td>
       <td style="text-align:right; font-weight:700; color:${s.pct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</td>
+    </tr>
+    <tr id="explain-row-${esc(s.symbol)}" style="display:none;">
+      <td colspan="4" style="padding: 0; border-bottom: none;">
+         <div id="explain-text-${esc(s.symbol)}" class="ai-summary-box" style="margin: 8px 16px; border-left-color: var(--ink);"></div>
+      </td>
     </tr>
   `).join('');
 
@@ -877,24 +885,20 @@ function bindUI() {
     btn.innerHTML = '✨ Scraping...';
     
     try {
-      // 1. Get the article URL from the parent card
       const card = btn.closest('.card');
       const articleUrl = card ? card.getAttribute('data-url') : null;
       
-      // 2. Try to scrape the full text
       let textToSummarize = '';
       if (articleUrl) {
           textToSummarize = await getFullArticleText(articleUrl);
       }
       
-      // 3. Fallback to title + summary if scraping fails (e.g. paywall)
       if (!textToSummarize || textToSummarize.length < 100) {
           textToSummarize = btn.getAttribute('data-text');
       }
 
       btn.innerHTML = '✨ Thinking...';
       
-      // 4. Send to Gemini
       const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -926,6 +930,60 @@ function bindUI() {
       btn.innerHTML = '✨ AI Summary';
     }
   });
+
+  // ==========================================
+  // AI EXPLAIN MOVE LOGIC (NEW)
+  // ==========================================
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.explain-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const sym = btn.getAttribute('data-sym');
+    const pct = btn.getAttribute('data-pct');
+    const isUp = btn.getAttribute('data-up') === 'true';
+    
+    const row = document.getElementById(`explain-row-${sym}`);
+    const textEl = document.getElementById(`explain-text-${sym}`);
+    
+    if (row.style.display === 'table-row') {
+      row.style.display = 'none';
+      return;
+    }
+
+    // Show loading
+    row.style.display = 'table-row';
+    textEl.innerHTML = '✨ Analyzing news for this move...';
+    textEl.style.display = 'block';
+
+    // Grab the top 10 recent news titles to give context
+    const recentNews = currentArticles().slice(0, 10).map(a => a.title).join('\n');
+
+    try {
+      const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-explain-move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: sym, pct, isUp, newsText: recentNews })
+      });
+      
+      const data = await res.json();
+      
+      if (data && data.summary) {
+        textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(data.summary)}`;
+      } else {
+        textEl.innerHTML = `<em>Could not analyze the move.</em>`;
+      }
+    } catch (err) {
+      textEl.innerHTML = `<em>Failed to connect to AI.</em>`;
+    }
+  });
+  // ==========================================
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderTicker(state.ticker), 350); });
+  setInterval(refreshTimes, 60 * 1000);
+}
 
   // ==========================================
   // NEW: AI DAILY BRIEFING LOGIC
