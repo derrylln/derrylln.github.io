@@ -5,7 +5,7 @@
 
 const CACHE_TTL       = 15 * 60 * 1000;
 const AUTO_REFRESH_MS = 15 * 60 * 1000;
-const OG_MAX_SCRAPES  = 10;
+const OG_MAX_SCRAPES  = 10; // Increased to find more images
 
 const LS = {
   news: 'finwire.news.v2', ticker: 'finwire.ticker.v2', read: 'finwire.read.v2',
@@ -13,15 +13,15 @@ const LS = {
 };
 
 const SOURCES = [
-  // Swapped to CNBC US (Extremely reliable, includes images)
   { id: 'cnbc_us', label: 'CNBC US', color: '#111827', url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114' },
-  // WSJ Markets Feed
   { id: 'reuters', label: 'WSJ Markets', color: '#7c2d12', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml' },
   { id: 'cnbc', label: 'CNBC Indonesia', color: '#1e3a8a', url: 'https://www.cnbcindonesia.com/market/rss' },
-  // Kontan (using JSON API for mobile stability)
   { id: 'kontan', label: 'Kontan', color: '#14532d', url: 'https://investasi.kontan.co.id/rss', useJsonApi: true },
-  // IDN Financials
-  { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id', useJsonApi: true }
+  { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id', useJsonApi: true },
+  { id: 'antara', label: 'Antara Ekonomi', color: '#b91c1c', url: 'https://www.antaranews.com/rss/ekonomi' },
+  { id: 'cnn_id', label: 'CNN Ekonomi', color: '#dc2626', url: 'https://www.cnnindonesia.com/ekonomi/rss' },
+  { id: 'tempo', label: 'Tempo Bisnis', color: '#ea580c', url: 'http://rss.tempo.co/bisnis' },
+  { id: 'suara', label: 'Suara Bisnis', color: '#65a30d', url: 'https://www.suara.com/rss/bisnis' }
 ];
 
 const TICKERS = [
@@ -47,21 +47,19 @@ const ECON_INDICATORS = [
   { symbol: '^TNX', name: 'US 10Y Treasury Yield' }
 ];
 
-const IDX_STOCKS = [
-  { symbol: 'BBCA.JK', name: 'Bank Central Asia' }, { symbol: 'BBRI.JK', name: 'Bank Rakyat Indonesia' },
-  { symbol: 'BMRI.JK', name: 'Bank Mandiri' }, { symbol: 'TLKM.JK', name: 'Telkom Indonesia' },
-  { symbol: 'ASII.JK', name: 'Astra International' }, { symbol: 'GOTO.JK', name: 'GoTo Gojek Tokopedia' },
-  { symbol: 'AMRT.JK', name: 'Sumber Alfaria Trijaya' }, { symbol: 'BRPT.JK', name: 'Barito Pacific' },
-  { symbol: 'ANTM.JK', name: 'Aneka Tambang' }, { symbol: 'ICBP.JK', name: 'Indofood CBP' }
-];
+// EXPANDED POOL FOR DYNAMIC SORTING
+const IDX_POOL = [
+  'BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'BBNI.JK', 'TLKM.JK', 'ASII.JK', 'GOTO.JK', 'AMRT.JK', 
+  'BRPT.JK', 'ANTM.JK', 'ICBP.JK', 'INDF.JK', 'KLBF.JK', 'UNVR.JK', 'ADRO.JK', 'PTBA.JK', 
+  'ITMG.JK', 'MDKA.JK', 'CPIN.JK', 'JPFA.JK', 'EXCL.JK', 'ISAT.JK', 'TOWR.JK', 'MIKA.JK', 
+  'PGAS.JK', 'SMGR.JK', 'INTP.JK', 'CTRA.JK', 'BSDE.JK', 'PWON.JK'
+].map(sym => ({ symbol: sym, name: sym.replace('.JK', '') }));
 
-const US_STOCKS = [
-  { symbol: 'AAPL', name: 'Apple Inc.' }, { symbol: 'MSFT', name: 'Microsoft Corp.' },
-  { symbol: 'NVDA', name: 'NVIDIA Corp.' }, { symbol: 'GOOGL', name: 'Alphabet Inc.' },
-  { symbol: 'AMZN', name: 'Amazon.com Inc.' }, { symbol: 'TSLA', name: 'Tesla Inc.' },
-  { symbol: 'META', name: 'Meta Platforms' }, { symbol: 'AMD', name: 'Advanced Micro Devices' },
-  { symbol: 'NFLX', name: 'Netflix Inc.' }, { symbol: 'JPM', name: 'JPMorgan Chase' }
-];
+const US_POOL = [
+  'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'TSLA', 'META', 'AMD', 'NFLX', 'JPM', 
+  'V', 'MA', 'DIS', 'BA', 'KO', 'PEP', 'WMT', 'TGT', 'XOM', 'CVX', 
+  'PFE', 'MRNA', 'JNJ', 'UNH', 'CRM', 'ORCL', 'ADBE', 'INTC', 'CSCO', 'QCOM'
+].map(sym => ({ symbol: sym, name: sym }));
 
 const ETFS = [
   { symbol: 'SPY', name: 'SPDR S&P 500 ETF' }, { symbol: 'QQQ', name: 'Invesco QQQ Trust' },
@@ -149,26 +147,10 @@ function parseFeed(rawText, source) {
     try {
       const data = JSON.parse(rawText); 
       if (data.status !== 'ok' || !data.items) throw new Error('JSON API error');
-      
       return data.items.map(item => {
-        // Try to find image in thumbnail, enclosure, OR inside the description HTML
         let imgUrl = item.thumbnail || (item.enclosure && item.enclosure.link) || '';
-        if (!imgUrl && item.description) {
-          const m = item.description.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
-          if (m && m[1]) imgUrl = m[1];
-        }
-
-        return {
-          id: item.link, 
-          title: item.title, 
-          link: item.link, 
-          summary: stripHtml(item.description), 
-          image: imgUrl, 
-          ts: Date.parse(item.pubDate) || Date.now(), 
-          sourceId: source.id, 
-          sourceLabel: source.label, 
-          color: source.color 
-        };
+        if (!imgUrl && item.description) { const m = item.description.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i); if (m && m[1]) imgUrl = m[1]; }
+        return { id: item.link, title: item.title, link: item.link, summary: stripHtml(item.description), image: imgUrl, ts: Date.parse(item.pubDate) || Date.now(), sourceId: source.id, sourceLabel: source.label, color: source.color };
       });
     } catch (e) { return []; }
   }
@@ -199,26 +181,18 @@ async function fetchAllNews() {
   let newArticlesFound = false;
   await Promise.allSettled(SOURCES.map(async (source) => {
     try {
-      // ADDED: Cache buster for direct feeds to prevent stale news
-      let fetchUrl = source.url;
-      if (!source.useJsonApi) {
-        fetchUrl += (fetchUrl.includes('?') ? '&' : '?') + `_t=${Date.now()}`;
-      }
-      
-      let items = [];
+      let fetchUrl = source.url, items = [];
       if (source.useJsonApi) {
-        const jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
-        const res = await fetch(jsonUrl); if (!res.ok) throw new Error('HTTP ' + res.status);
+        fetchUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+        const res = await fetch(fetchUrl); if (!res.ok) throw new Error('HTTP ' + res.status);
         items = parseFeed(await res.text(), source);
       } else {
-        const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); 
-        items = parseFeed(xml, source);
+        fetchUrl += (fetchUrl.includes('?') ? '&' : '?') + `_t=${Date.now()}`;
+        const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); items = parseFeed(xml, source);
       }
       if (items.length > 0) {
         state.articles = dedupe([...items, ...state.articles]).sort((a, b) => b.ts - a.ts);
-        newArticlesFound = true; 
-        render(); 
-        enrichImages(items);
+        newArticlesFound = true; render(); enrichImages(items);
       }
     } catch (err) { console.warn('[FINWIRE] feed failed:', source.id, err.message); }
   }));
@@ -318,7 +292,10 @@ function currentArticles() {
 function render() {
   const heroEl = $('#hero'), gridEl = $('#grid'), t = I18N[state.lang]; const list = currentArticles();
   if (!list.length) { if (heroEl) heroEl.innerHTML = ''; if (gridEl) gridEl.innerHTML = `<div class="empty">${esc(t.noArticles)}</div>`; return; }
-  let heroIndex = list.findIndex(a => !!a.image); if (heroIndex < 0) heroIndex = 0;
+  
+  // ALWAYS MAKE THE ABSOLUTE NEWEST ARTICLE THE HERO
+  let heroIndex = 0; 
+  
   const hero = list[heroIndex]; const rest = list.slice(0, heroIndex).concat(list.slice(heroIndex + 1));
   const side = rest.slice(0, 4), grid = rest.slice(4);
   if (heroEl) heroEl.innerHTML = `<div class="hero-main">${cardHTML(hero, 'hero')}</div><div class="hero-side">${side.map(a => cardHTML(a, 'side')).join('')}</div>`;
@@ -431,15 +408,15 @@ function generateMoversTable(title, stocks, headerClass) {
   `;
 }
 
-let ihsgChart, sp500Chart; // Global references for chart updates
+let ihsgChart, sp500Chart; 
 
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
 
-  const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), '^GSPC', ...MACRO.map(x=>x.symbol), ...ECON_INDICATORS.map(x=>x.symbol), ...IDX_STOCKS.map(x=>x.symbol), ...US_STOCKS.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
-  
-  let allData = {};
+  // Fetch all data for the expanded pools
+  const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), '^GSPC', ...MACRO.map(x=>x.symbol), ...ECON_INDICATORS.map(x=>x.symbol), ...IDX_POOL.map(x=>x.symbol), ...US_POOL.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
+  const allData = {};
   let failedCount = 0;
 
   for (const sym of allSymbols) {
@@ -450,45 +427,41 @@ async function loadMarketDashboard() {
     } else {
       failedCount++;
     }
-    await new Promise(r => setTimeout(r, 50)); // Reduced delay slightly
+    await new Promise(r => setTimeout(r, 50)); 
   }
 
-  // --- FALLBACK CACHING LOGIC ---
+  // Caching Fallback
   const cacheKey = 'fw.market_data_cache';
-  
-  if (failedCount > 5) {
-    // If Yahoo blocks us, load yesterday's data from cache
+  if (failedCount > 10) {
     console.warn("Yahoo rate limit hit. Loading cached market data.");
     const cached = loadJSON(cacheKey, {});
-    if (Object.keys(cached).length > 0) {
-      allData = cached;
-    }
+    if (Object.keys(cached).length > 0) Object.assign(allData, cached);
   } else if (Object.keys(allData).length > 0) {
-    // If fetch was successful, save to cache for future fallback
     saveJSON(cacheKey, allData);
   }
   
-  // If absolutely no data, show error
   if (Object.keys(allData).length === 0) {
     dash.innerHTML = `<div class="stock-loading">Market data temporarily unavailable. Please try again in a few minutes.</div>`;
     return;
   }
 
-  const idxData = IDX_STOCKS.map(s => allData[s.symbol]).filter(Boolean);
-  const usData = US_STOCKS.map(s => allData[s.symbol]).filter(Boolean);
-  
-  const idxSorted = [...idxData].sort((a, b) => b.pct - a.pct);
-  const usSorted = [...usData].sort((a, b) => b.pct - a.pct);
+  // --- DYNAMIC SORTING LOGIC ---
+  // 1. IDX Data
+  const idxData = IDX_POOL.map(s => allData[s.symbol]).filter(Boolean);
+  const idxSortedByPct = [...idxData].sort((a, b) => b.pct - a.pct);
+  const idxGainers = idxSortedByPct.slice(0, 5);
+  const idxLosers = idxSortedByPct.slice(-5).reverse();
+  const idxMostActive = [...idxData].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
 
-  const idxGainers = idxSorted.slice(0, 5);
-  const idxLosers = idxSorted.slice(-5).reverse();
-  const usGainers = usSorted.slice(0, 5);
-  const usLosers = usSorted.slice(-5).reverse();
+  // 2. US Data
+  const usData = US_POOL.map(s => allData[s.symbol]).filter(Boolean);
+  const usSortedByPct = [...usData].sort((a, b) => b.pct - a.pct);
+  const usGainers = usSortedByPct.slice(0, 5);
+  const usLosers = usSortedByPct.slice(-5).reverse();
+  const usMostActive = [...usData].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
 
-  const sumSymbols = [
-    ...INDICES.map(x => ({...x, type: 'index'})), 
-    ...MACRO.map(x => ({...x, type: 'macro'}))
-  ];
+  // Sparklines
+  const sumSymbols = [...INDICES.map(x => ({...x, type: 'index'})), ...MACRO.map(x => ({...x, type: 'macro'}))];
   const summaryData = await Promise.all(sumSymbols.map(async x => {
     const hist = await fetchHistory(x.symbol, '1mo');
     return { ...x, data: allData[x.symbol], spark: hist };
@@ -566,11 +539,10 @@ async function loadMarketDashboard() {
     </div>
   `;
 
-  // 7. Assemble Dashboard
   dash.innerHTML = `
     <div class="sparkline-grid">${sparkHtml}</div>
     
-    <div class="dash-grid">
+    <div class="dash-grid" style="align-items: start;">
       <div>
         <div class="modern-card">
           <div class="card-title">
@@ -600,7 +572,15 @@ async function loadMarketDashboard() {
       </div>
     </div>
 
-    <!-- Full-width separated grids below -->
+    <!-- Most Active & Sections -->
+    <div style="margin-top: 32px;">
+      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">Most Active</h2>
+      <div class="movers-grid-4">
+        ${generateMoversTable('Most Active IDX', idxMostActive, 'active')}
+        ${generateMoversTable('Most Active US', usMostActive, 'active')}
+      </div>
+    </div>
+
     <div style="margin-top: 32px;">
       <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">IDX Bluechips</h2>
       <div class="stock-card-grid">${buildCards(idxData)}</div>
