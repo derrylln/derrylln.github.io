@@ -1478,3 +1478,79 @@ body, html {
   word-wrap: break-word;
   max-width: 150px;
 }
+
+/* ============================================================
+   APPLE-STYLE SOFT UI (Rounded Corners)
+   ============================================================ */
+
+/* 1. Round all images and thumbnails */
+.thumb {
+  border-radius: 12px !important;
+  overflow: hidden;
+}
+.card.grid .thumb, .card.hero .thumb, .card.side .thumb {
+  border-radius: 16px !important;
+}
+
+/* 2. Round the news cards */
+.card {
+  border-radius: 16px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.card:hover {
+  transform: translateY(-2px);
+}
+.card.hit {
+  border-radius: 12px;
+}
+
+/* 3. Round the Market Dashboard components */
+.modern-card, .index-card, .movers-panel, .spark-card {
+  border-radius: 16px !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03) !important;
+}
+
+.stock-card {
+  border-radius: 16px !important;
+}
+
+/* 4. Round the search bar and inputs */
+.stock-search-box, .watch-box {
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+.stock-search-box input, .watch-box input {
+  border-radius: 8px 0 0 8px;
+}
+.stock-search-box button, .watch-box button {
+  border-radius: 0 8px 8px 0;
+}
+
+/* 5. Make the top navigation and filter chips look like smooth pills */
+.chip {
+  border-radius: 20px !important;
+  margin: 4px 2px;
+  padding: 8px 16px;
+}
+.chip.active {
+  background: var(--ink);
+  color: #fff;
+  border-bottom-color: transparent;
+}
+
+.chart-btn {
+  border-radius: 6px !important;
+}
+
+/* 6. Soften the top ticker */
+.ticker-wrap {
+  border-bottom: 1px solid #1f2937;
+}
+
+/* 7. Round the stock table rows */
+.stock-table-wrap {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--rule);
+}
