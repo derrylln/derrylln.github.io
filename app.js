@@ -766,28 +766,40 @@ async function loadAll(force) {
 
 async function getFullArticleText(url) {
   try {
-    const html = await fetchViaProxy(url, { timeout: 8000 });
+    // 1. Add a cache buster so Cloudflare doesn't return an old blocked page
+    const fetchUrl = url + (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
+    
+    // 2. Increase timeout to 10 seconds
+    const html = await fetchViaProxy(fetchUrl, { timeout: 10000 });
     const doc = new DOMParser().parseFromString(html, 'text/html');
     
-    // Remove all the junk (scripts, styles, navbars, footers)
-    doc.querySelectorAll('script, style, nav, footer, header, aside, .ad, .ads, .menu').forEach(el => el.remove());
+    // 3. Remove all the junk
+    doc.querySelectorAll('script, style, nav, footer, header, aside, iframe, noscript, .ads, .related').forEach(el => el.remove());
     
-    // Extract all paragraphs
-    const paragraphs = Array.from(doc.querySelectorAll('p'));
+    // 4. Try to find the main article container
+    let contentEl = doc.querySelector('article') || 
+                    doc.querySelector('main') || 
+                    doc.querySelector('.detail-text') || 
+                    doc.querySelector('.article-content') || 
+                    doc.querySelector('.post-content') ||
+                    doc.body;
+                    
+    let text = contentEl.textContent || '';
     
-    // Filter out tiny paragraphs (like image captions) and join the rest
-    const text = paragraphs
-      .map(p => p.textContent.trim())
-      .filter(t => t.length > 40) 
-      .join(' ');
-      
-    // If we couldn't find good paragraphs, fallback to body text
-    let finalText = text.length > 200 ? text : doc.body.textContent.trim().replace(/\s+/g, ' ');
+    // 5. Clean up whitespace
+    text = text.replace(/\s+/g, ' ').trim();
     
-    // Limit to 4,000 characters so we don't waste tokens or hit limits
-    return finalText.substring(0, 4000);
+    // 6. If the text is super short, the proxy hit a block page
+    if (text.length < 300) {
+        console.warn("Scraper returned too little text. Falling back to subtitle.");
+        return ''; 
+    }
+    
+    // 7. Limit to 5000 characters so we don't waste tokens
+    return text.substring(0, 5000);
   } catch (e) {
-    return ''; // If it fails (e.g., paywall), return empty
+    console.warn("Scrape failed:", e.message);
+    return '';
   }
 }
 
@@ -862,7 +874,7 @@ function bindUI() {
     }
 
     btn.disabled = true;
-    btn.innerHTML = '✨ Reading article...';
+    btn.innerHTML = '✨ Scraping...';
     
     try {
       // 1. Get the article URL from the parent card
