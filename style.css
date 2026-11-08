@@ -1881,3 +1881,28 @@ body, html {
 .card.hero .card-body {
   padding-top: 16px !important;
 }
+
+/* ============================================================
+   REMOVE EXCESS SPACE ABOVE HERO IMAGE
+   ============================================================ */
+.hero {
+  padding-top: 0 !important;
+  margin-top: 10px !important; /* Small gap just to separate from the button */
+}
+
+.card {
+  padding-top: 0 !important;
+}
+
+.card.hero .thumb {
+  margin-top: 0 !important;
+  border-top-left-radius: 16px !important;
+  border-top-right-radius: 16px !important;
+}
+
+/* Ensure the unread dot is on top of the image if it overlaps */
+.card.hero .unread-dot {
+  z-index: 10 !important;
+  top: 16px !important;
+  right: 16px !important;
+}
