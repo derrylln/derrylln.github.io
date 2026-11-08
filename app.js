@@ -940,35 +940,42 @@ function bindUI() {
       return;
     }
 
-    // Show loading
     row.style.display = 'table-row';
     textEl.innerHTML = '✨ Analyzing news for this move...';
     textEl.style.display = 'block';
 
-    // --- NEW: Smart Search for related news ---
-    // Try to find articles that mention the stock symbol or name
     const searchTerms = [sym.replace('.JK', '').toLowerCase(), btn.closest('tr').querySelector('td:nth-child(2)').textContent.toLowerCase()];
     let relatedArticles = state.articles.filter(a => {
       const text = (a.title + ' ' + a.summary).toLowerCase();
       return searchTerms.some(term => text.includes(term));
     });
 
-    // If we found specific news, use it. If not, fall back to the top 10 general news.
     if (relatedArticles.length === 0) {
         relatedArticles = currentArticles().slice(0, 10);
     } else {
-        relatedArticles = relatedArticles.slice(0, 5); // Only need the top 5 most relevant
+        relatedArticles = relatedArticles.slice(0, 5); 
     }
     
     const recentNews = relatedArticles.map(a => `- ${a.title}`).join('\n');
-    // ------------------------------------------
 
     try {
       const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-explain-move', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol: sym, pct, isUp, newsText: recentNews, lang: state.lang }) // Added lang here too!
+        body: JSON.stringify({ symbol: sym, pct, isUp, newsText: recentNews, lang: state.lang })
       });
+      
+      const data = await res.json();
+      
+      if (data && data.summary) {
+        textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(data.summary)}`;
+      } else {
+        textEl.innerHTML = `<em>Could not analyze the move.</em>`;
+      }
+    } catch (err) {
+      textEl.innerHTML = `<em>Failed to connect to AI.</em>`;
+    }
+  });
 
   // Daily Briefing Logic
   const briefingBtn = $('#generateBriefingBtn');
