@@ -5,7 +5,7 @@
 
 const CACHE_TTL       = 15 * 60 * 1000;
 const AUTO_REFRESH_MS = 15 * 60 * 1000;
-const OG_MAX_SCRAPES  = 10; // Increased to find more images
+const OG_MAX_SCRAPES  = 10; 
 
 const LS = {
   news: 'finwire.news.v2', ticker: 'finwire.ticker.v2', read: 'finwire.read.v2',
@@ -18,8 +18,6 @@ const SOURCES = [
   { id: 'cnbc', label: 'CNBC Indonesia', color: '#1e3a8a', url: 'https://www.cnbcindonesia.com/market/rss' },
   { id: 'kontan', label: 'Kontan', color: '#14532d', url: 'https://investasi.kontan.co.id/rss', useJsonApi: true },
   { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://news.google.com/rss/search?q=site:idnfinancials.com&hl=id&gl=ID&ceid=ID:id', useJsonApi: true },
-  
-  // FIXED: Added useJsonApi: true to all of these so they parse correctly
   { id: 'antara', label: 'Antara Ekonomi', color: '#b91c1c', url: 'https://www.antaranews.com/rss/ekonomi', useJsonApi: true },
   { id: 'cnn_id', label: 'CNN Ekonomi', color: '#dc2626', url: 'https://www.cnnindonesia.com/ekonomi/rss', useJsonApi: true },
   { id: 'tempo', label: 'Tempo Bisnis', color: '#ea580c', url: 'https://rss.tempo.co/bisnis', useJsonApi: true },
@@ -49,7 +47,6 @@ const ECON_INDICATORS = [
   { symbol: '^TNX', name: 'US 10Y Treasury Yield' }
 ];
 
-// EXPANDED POOL FOR DYNAMIC SORTING
 const IDX_POOL = [
   'BBCA.JK', 'BBRI.JK', 'BMRI.JK', 'BBNI.JK', 'TLKM.JK', 'ASII.JK', 'GOTO.JK', 'AMRT.JK', 
   'BRPT.JK', 'ANTM.JK', 'ICBP.JK', 'INDF.JK', 'KLBF.JK', 'UNVR.JK', 'ADRO.JK', 'PTBA.JK', 
@@ -67,6 +64,15 @@ const ETFS = [
   { symbol: 'SPY', name: 'SPDR S&P 500 ETF' }, { symbol: 'QQQ', name: 'Invesco QQQ Trust' },
   { symbol: 'VOO', name: 'Vanguard S&P 500' }, { symbol: 'EIDO', name: 'iShares MSCI Indonesia' },
   { symbol: 'ARKK', name: 'ARK Innovation ETF' }
+];
+
+const CATEGORIES = [
+  { id: 'all', label: 'All Topics' },
+  { id: 'markets', label: 'Markets', keywords: ['stock', 'market', 'ihsg', 'nasdaq', 's&p', 'saham', 'trading', 'equity', 'wall street'] },
+  { id: 'macro', label: 'Macro', keywords: ['fed', 'inflation', 'interest rate', 'gdp', 'economy', 'central bank', 'bank indonesia', 'bi rate', 'ekonomi', 'inflasi', 'suku bunga', 'rupiah'] },
+  { id: 'tech', label: 'Tech', keywords: ['technology', 'tech', 'apple', 'microsoft', 'google', 'ai', 'artificial intelligence', 'startup', 'teknologi', 'meta', 'nvidia'] },
+  { id: 'crypto', label: 'Crypto', keywords: ['bitcoin', 'crypto', 'ethereum', 'blockchain', 'btc', 'eth', 'kripto'] },
+  { id: 'commodities', label: 'Commodities', keywords: ['oil', 'crude', 'gold', 'coal', 'gas', 'commodity', 'emas', 'minyak', 'batu bara'] }
 ];
 
 const I18N = {
@@ -92,7 +98,7 @@ const I18N = {
   }
 };
 
-const state = { articles: [], ticker: [], filter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, loading: false };
+const state = { articles: [], ticker: [], filter: 'all', categoryFilter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, loading: false };
 
 const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.prototype.slice.call(root.querySelectorAll(sel));
@@ -107,6 +113,17 @@ function timeAgo(ts, lang) {
   if (hours < 24) return t.hourAgo(hours); return t.dayAgo(Math.floor(hours / 24));
 }
 function stripHtml(html) { if (!html) return ''; const doc = new DOMParser().parseFromString(String(html), 'text/html'); doc.querySelectorAll('script, style, noscript').forEach(n => n.remove()); return (doc.body.textContent || '').replace(/\s+/g, ' ').trim(); }
+
+function categorizeArticle(article) {
+  const text = (article.title + ' ' + article.summary).toLowerCase();
+  for (const cat of CATEGORIES) {
+    if (cat.id === 'all') continue;
+    if (cat.keywords.some(kw => text.includes(kw))) {
+      return cat.id;
+    }
+  }
+  return 'markets';
+}
 
 /* CORS PROXY LAYER */
 const PROXIES = [
@@ -152,7 +169,10 @@ function parseFeed(rawText, source) {
       return data.items.map(item => {
         let imgUrl = item.thumbnail || (item.enclosure && item.enclosure.link) || '';
         if (!imgUrl && item.description) { const m = item.description.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i); if (m && m[1]) imgUrl = m[1]; }
-        return { id: item.link, title: item.title, link: item.link, summary: stripHtml(item.description), image: imgUrl, ts: Date.parse(item.pubDate) || Date.now(), sourceId: source.id, sourceLabel: source.label, color: source.color };
+        
+        const art = { id: item.link, title: item.title, link: item.link, summary: stripHtml(item.description), image: imgUrl, ts: Date.parse(item.pubDate) || Date.now(), sourceId: source.id, sourceLabel: source.label, color: source.color };
+        art.category = categorizeArticle(art);
+        return art;
       });
     } catch (e) { return []; }
   }
@@ -165,7 +185,10 @@ function parseFeed(rawText, source) {
     const title = cleanTitle(rawTitle, node); const rawDesc = textOf(node, ['description', 'summary', 'content']);
     let summary = stripHtml(rawDesc); if (summary.length > 280) summary = summary.slice(0, 277).trim() + '…';
     const dateStr = textOf(node, ['pubDate', 'published', 'updated', 'dc:date', 'date']); let ts = Date.parse(dateStr); if (!isFinite(ts)) ts = Date.now();
-    out.push({ id: link, title, link, summary, image: extractImage(node, rawDesc) || '', ts, sourceId: source.id, sourceLabel: source.label, color: source.color });
+    
+    const art = { id: link, title, link, summary, image: extractImage(node, rawDesc) || '', ts, sourceId: source.id, sourceLabel: source.label, color: source.color };
+    art.category = categorizeArticle(art);
+    out.push(art);
   }
   return out;
 }
@@ -276,7 +299,7 @@ function cardHTML(article, variant) {
   const summary = (variant !== 'side' && article.summary) ? `<p class="summary">${esc(article.summary)}</p>` : '';
   const watchBadge = isHit ? `<span class="badge-watch">${esc(t.watch)}</span>` : '';
   const dot = isRead ? '' : '<span class="unread-dot" aria-hidden="true"></span>';
-  // Hash the URL so we can uniquely identify the summary box for this article
+  
   const hash = article.link.split('').reduce((a,b)=>{a=((a<<5)-a)+b.charCodeAt(0);return a&a},0); 
 
   return `<div class="${classes}" data-url="${esc(article.link)}">
@@ -292,10 +315,12 @@ function cardHTML(article, variant) {
       <div class="ai-summary-box" id="ai-${hash}"></div>
     </div>
     ${dot}</div>`;
+}
 
 function currentArticles() {
   let list = state.articles.slice();
   if (state.filter !== 'all') list = list.filter(a => a.sourceId === state.filter);
+  if (state.categoryFilter !== 'all') list = list.filter(a => a.category === state.categoryFilter);
   if (state.unreadOnly) list = list.filter(a => !state.read.has(a.link));
   return list;
 }
@@ -304,7 +329,6 @@ function render() {
   const heroEl = $('#hero'), gridEl = $('#grid'), t = I18N[state.lang]; const list = currentArticles();
   if (!list.length) { if (heroEl) heroEl.innerHTML = ''; if (gridEl) gridEl.innerHTML = `<div class="empty">${esc(t.noArticles)}</div>`; return; }
   
-  // ALWAYS MAKE THE ABSOLUTE NEWEST ARTICLE THE HERO
   let heroIndex = 0; 
   
   const hero = list[heroIndex]; const rest = list.slice(0, heroIndex).concat(list.slice(heroIndex + 1));
@@ -330,11 +354,18 @@ function updateStatusLabel(kind, ts) {
 function renderFilters() {
   const bar = $('#filters'); if (!bar) return; const t = I18N[state.lang];
   const sourceChips = SOURCES.map(s => `<button type="button" class="chip${state.filter === s.id ? ' active' : ''}" data-filter="${esc(s.id)}">${esc(s.label)}</button>`).join('');
-  bar.innerHTML = `<div class="filters-inner">
-    <button type="button" class="chip${state.filter === 'all' ? ' active' : ''}" data-filter="all">${esc(t.all)}</button>
-    ${sourceChips}<span class="spacer"></span>
-    <label class="switch"><input type="checkbox" id="unreadToggle"${state.unreadOnly ? ' checked' : ''}><span>${esc(t.unreadOnly)}</span></label>
-  </div>`;
+  const catChips = CATEGORIES.map(c => `<button type="button" class="chip cat-chip${state.categoryFilter === c.id ? ' active' : ''}" data-cat-filter="${esc(c.id)}">${esc(c.label)}</button>`).join('');
+
+  bar.innerHTML = `
+    <div class="filters-inner" style="border-bottom: none; padding-bottom: 0;">
+      <button type="button" class="chip${state.filter === 'all' ? ' active' : ''}" data-filter="all">${esc(t.all)}</button>
+      ${sourceChips}<span class="spacer"></span>
+      <label class="switch"><input type="checkbox" id="unreadToggle"${state.unreadOnly ? ' checked' : ''}><span>${esc(t.unreadOnly)}</span></label>
+    </div>
+    <div class="filters-inner" style="min-height: 40px; padding-top: 4px; padding-bottom: 8px;">
+      ${catChips}
+    </div>
+  `;
 }
 
 function renderWatchChips() {
@@ -425,7 +456,6 @@ async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
   dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
 
-  // Fetch all data for the expanded pools
   const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), '^GSPC', ...MACRO.map(x=>x.symbol), ...ECON_INDICATORS.map(x=>x.symbol), ...IDX_POOL.map(x=>x.symbol), ...US_POOL.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
   const allData = {};
   let failedCount = 0;
@@ -441,7 +471,6 @@ async function loadMarketDashboard() {
     await new Promise(r => setTimeout(r, 50)); 
   }
 
-  // Caching Fallback
   const cacheKey = 'fw.market_data_cache';
   if (failedCount > 10) {
     console.warn("Yahoo rate limit hit. Loading cached market data.");
@@ -456,22 +485,18 @@ async function loadMarketDashboard() {
     return;
   }
 
-  // --- DYNAMIC SORTING LOGIC ---
-  // 1. IDX Data
   const idxData = IDX_POOL.map(s => allData[s.symbol]).filter(Boolean);
   const idxSortedByPct = [...idxData].sort((a, b) => b.pct - a.pct);
   const idxGainers = idxSortedByPct.slice(0, 5);
   const idxLosers = idxSortedByPct.slice(-5).reverse();
   const idxMostActive = [...idxData].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
 
-  // 2. US Data
   const usData = US_POOL.map(s => allData[s.symbol]).filter(Boolean);
   const usSortedByPct = [...usData].sort((a, b) => b.pct - a.pct);
   const usGainers = usSortedByPct.slice(0, 5);
   const usLosers = usSortedByPct.slice(-5).reverse();
   const usMostActive = [...usData].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
 
-  // Sparklines
   const sumSymbols = [...INDICES.map(x => ({...x, type: 'index'})), ...MACRO.map(x => ({...x, type: 'macro'}))];
   const summaryData = await Promise.all(sumSymbols.map(async x => {
     const hist = await fetchHistory(x.symbol, '1mo');
@@ -583,7 +608,6 @@ async function loadMarketDashboard() {
       </div>
     </div>
 
-    <!-- Most Active & Sections -->
     <div style="margin-top: 32px;">
       <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">Most Active</h2>
       <div class="movers-grid-4">
@@ -740,9 +764,20 @@ function bindUI() {
   if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchStocks(searchInput.value.trim()); } });
 
   $('#filters').addEventListener('click', (e) => {
-    const chip = e.target.closest('.chip[data-filter]'); if (!chip) return;
-    state.filter = chip.getAttribute('data-filter');
-    $$('#filters .chip').forEach(c => c.classList.toggle('active', c === chip)); render();
+    const chip = e.target.closest('.chip[data-filter]'); 
+    if (chip) {
+      state.filter = chip.getAttribute('data-filter');
+      $$('#filters .chip[data-filter]').forEach(c => c.classList.toggle('active', c === chip)); 
+      render();
+      return;
+    }
+    
+    const catChip = e.target.closest('.cat-chip[data-cat-filter]');
+    if (catChip) {
+      state.categoryFilter = catChip.getAttribute('data-cat-filter');
+      $$('.cat-chip').forEach(c => c.classList.toggle('active', c === catChip)); 
+      render();
+    }
   });
 
   $('#filters').addEventListener('change', (e) => { if (e.target && e.target.id === 'unreadToggle') { state.unreadOnly = e.target.checked; render(); } });
@@ -775,22 +810,20 @@ function bindUI() {
   });
 
   document.addEventListener('click', (e) => {
-    const card = e.target.closest('a.card'); if (!card) return;
+    const card = e.target.closest('.card'); if (!card) return;
     const url = card.getAttribute('data-url'); if (!url || state.read.has(url)) return;
     state.read.add(url); saveJSON(LS.read, Array.from(state.read).slice(-1000));
     card.classList.remove('unread'); card.classList.add('read');
     const dot = card.querySelector('.unread-dot'); if (dot) dot.remove();
   });
 
-  // ==========================================
-  // AI SUMMARIZE LOGIC (Added here)
-  // ==========================================
+  // AI SUMMARIZE LOGIC
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('.ai-btn');
     if (!btn) return;
     
     e.preventDefault();
-    e.stopPropagation(); // Stops the card from being marked as read/opening the link
+    e.stopPropagation(); 
     
     const text = btn.getAttribute('data-text');
     const targetId = btn.getAttribute('data-target');
@@ -828,7 +861,6 @@ function bindUI() {
       btn.innerHTML = '✨ AI Summary';
     }
   });
-  // ==========================================
 
   let resizeTimer = null;
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderTicker(state.ticker), 350); });
