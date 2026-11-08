@@ -931,6 +931,101 @@ function bindUI() {
     }
   });
 
+  // AI EXPLAIN MOVE LOGIC
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.explain-btn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    const sym = btn.getAttribute('data-sym');
+    const pct = btn.getAttribute('data-pct');
+    const isUp = btn.getAttribute('data-up') === 'true';
+    
+    const row = document.getElementById(`explain-row-${sym}`);
+    const textEl = document.getElementById(`explain-text-${sym}`);
+    
+    if (row.style.display === 'table-row') {
+      row.style.display = 'none';
+      return;
+    }
+
+    row.style.display = 'table-row';
+    textEl.innerHTML = '✨ Analyzing news for this move...';
+    textEl.style.display = 'block';
+
+    const recentNews = currentArticles().slice(0, 10).map(a => a.title).join('\n');
+
+    try {
+      const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-explain-move', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbol: sym, pct, isUp, newsText: recentNews })
+      });
+      
+      const data = await res.json();
+      
+      if (data && data.summary) {
+        textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(data.summary)}`;
+      } else {
+        textEl.innerHTML = `<em>Could not analyze the move.</em>`;
+      }
+    } catch (err) {
+      textEl.innerHTML = `<em>Failed to connect to AI.</em>`;
+    }
+  });
+
+  // Daily Briefing Logic
+  const briefingBtn = $('#generateBriefingBtn');
+  if (briefingBtn) {
+    briefingBtn.addEventListener('click', async () => {
+      const contentEl = $('#briefingContent');
+      const articles = currentArticles().slice(0, 15);
+      if (articles.length === 0) return;
+
+      const combinedText = articles.map((a, i) => `${i+1}. ${a.title} - ${a.summary}`).join('\n\n');
+
+      briefingBtn.disabled = true;
+      briefingBtn.innerHTML = '✨ Analyzing 15 articles...';
+      contentEl.style.display = 'none';
+
+      try {
+        const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: combinedText, isBriefing: true, lang: state.lang })
+        });
+        
+        const data = await res.json();
+        
+        if (data && data.summary) {
+          let formattedText = data.summary
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/^\* (.*$)/gim, '<li>$1</li>');
+          
+          if (formattedText.includes('<li>')) formattedText = `<ul>${formattedText}</ul>`;
+
+          contentEl.innerHTML = `<strong>Market Briefing:</strong><br>${formattedText}`;
+          contentEl.style.display = 'block';
+        } else {
+          contentEl.innerHTML = `<em>Failed to generate briefing. Try again.</em>`;
+          contentEl.style.display = 'block';
+        }
+      } catch (err) {
+        contentEl.innerHTML = `<em>Failed to connect to AI.</em>`;
+        contentEl.style.display = 'block';
+      } finally {
+        briefingBtn.disabled = false;
+        briefingBtn.innerHTML = '✨ Generate Today\'s Market Briefing';
+      }
+    });
+  }
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderTicker(state.ticker), 350); });
+  setInterval(refreshTimes, 60 * 1000);
+}
+
   // ==========================================
   // AI EXPLAIN MOVE LOGIC (NEW)
   // ==========================================
