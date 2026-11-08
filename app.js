@@ -833,7 +833,7 @@ function bindUI() {
       const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
+        body: JSON.stringify({ text: body.text || text, lang: state.lang }) // <-- ADD lang HERE
       });
       
       const data = await res.json();
@@ -880,7 +880,7 @@ function bindUI() {
         const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: combinedText, isBriefing: true })
+          body: JSON.stringify({ text: combinedText, isBriefing: true, lang: state.lang }) // <-- ADD lang HERE
         });
         
         const data = await res.json();
