@@ -809,15 +809,7 @@ function bindUI() {
     if (!isNaN(idx)) { state.watch.splice(idx, 1); saveJSON(LS.watch, state.watch); renderWatchChips(); render(); }
   });
 
-  document.addEventListener('click', (e) => {
-    const card = e.target.closest('.card'); if (!card) return;
-    const url = card.getAttribute('data-url'); if (!url || state.read.has(url)) return;
-    state.read.add(url); saveJSON(LS.read, Array.from(state.read).slice(-1000));
-    card.classList.remove('unread'); card.classList.add('read');
-    const dot = card.querySelector('.unread-dot'); if (dot) dot.remove();
-  });
-
-  // AI SUMMARIZE LOGIC
+  // AI SUMMARIZE LOGIC (Gemini)
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('.ai-btn');
     if (!btn) return;
@@ -838,7 +830,7 @@ function bindUI() {
     btn.innerHTML = '✨ Thinking...';
     
     try {
-      const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/hf-summarize', {
+      const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text })
@@ -846,11 +838,14 @@ function bindUI() {
       
       const data = await res.json();
       
-      if (data && data[0] && data[0].summary_text) {
-        targetEl.innerHTML = `<strong>AI Summary:</strong> ${esc(data[0].summary_text)}`;
+      if (data && data.summary) {
+        targetEl.innerHTML = `<strong>AI Summary:</strong> ${esc(data.summary)}`;
+        targetEl.style.display = 'block';
+      } else if (data.error) {
+        targetEl.innerHTML = `<em>Error: ${esc(data.error)}</em>`;
         targetEl.style.display = 'block';
       } else {
-        targetEl.innerHTML = `<em>AI is busy right now. Try again in a few seconds.</em>`;
+        targetEl.innerHTML = `<em>AI is busy. Try again.</em>`;
         targetEl.style.display = 'block';
       }
     } catch (err) {
