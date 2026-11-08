@@ -5,7 +5,7 @@
 
 const CACHE_TTL       = 15 * 60 * 1000;
 const AUTO_REFRESH_MS = 15 * 60 * 1000;
-const OG_MAX_SCRAPES  = 3;
+const OG_MAX_SCRAPES  = 10;
 
 const LS = {
   news: 'finwire.news.v2', ticker: 'finwire.ticker.v2', read: 'finwire.read.v2',
@@ -147,8 +147,29 @@ function cleanTitle(title, node) { let t = (title || '').trim(); const srcEl = f
 function parseFeed(rawText, source) {
   if (source.useJsonApi) {
     try {
-      const data = JSON.parse(rawText); if (data.status !== 'ok' || !data.items) throw new Error('JSON API error');
-      return data.items.map(item => ({ id: item.link, title: item.title, link: item.link, summary: stripHtml(item.description), image: item.thumbnail || (item.enclosure && item.enclosure.link) || '', ts: Date.parse(item.pubDate) || Date.now(), sourceId: source.id, sourceLabel: source.label, color: source.color }));
+      const data = JSON.parse(rawText); 
+      if (data.status !== 'ok' || !data.items) throw new Error('JSON API error');
+      
+      return data.items.map(item => {
+        // Try to find image in thumbnail, enclosure, OR inside the description HTML
+        let imgUrl = item.thumbnail || (item.enclosure && item.enclosure.link) || '';
+        if (!imgUrl && item.description) {
+          const m = item.description.match(/<img[^>]+src\s*=\s*["']([^"']+)["']/i);
+          if (m && m[1]) imgUrl = m[1];
+        }
+
+        return {
+          id: item.link, 
+          title: item.title, 
+          link: item.link, 
+          summary: stripHtml(item.description), 
+          image: imgUrl, 
+          ts: Date.parse(item.pubDate) || Date.now(), 
+          sourceId: source.id, 
+          sourceLabel: source.label, 
+          color: source.color 
+        };
+      });
     } catch (e) { return []; }
   }
   const doc = new DOMParser().parseFromString(rawText, 'text/xml');
