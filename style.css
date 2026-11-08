@@ -1788,36 +1788,73 @@ body, html {
 }
 
 /* ============================================================
-   LIGHT MODE GREY BOXES (Matching Dark Mode)
+   THEME STYLES (LIGHT & DARK MODE) - FULLY ISOLATED
    ============================================================ */
 
-/* 1. Set the page background to a soft off-white so the cards pop */
-body {
-  background-color: #f4f7fe !important; 
+/* --- 1. LIGHT MODE (Crisp White on Soft Background) --- */
+[data-theme="light"] body {
+  background-color: #f4f7fe !important; /* Soft off-white background */
 }
 
-/* 2. Apply the white box with a soft border and shadow */
-.card,
-.modern-card,
-.stock-card,
-.movers-panel,
-.spark-card,
-.ai-summary-box,
-.exec-card,
-.stock-search-box,
-.breadth-container,
-.briefing-container {
+[data-theme="light"] .card,
+[data-theme="light"] .modern-card,
+[data-theme="light"] .stock-card,
+[data-theme="light"] .movers-panel,
+[data-theme="light"] .spark-card,
+[data-theme="light"] .ai-summary-box,
+[data-theme="light"] .exec-card,
+[data-theme="light"] .stock-search-box,
+[data-theme="light"] .breadth-container {
   background-color: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   box-shadow: 0 4px 12px rgba(0,0,0,0.03) !important;
 }
 
-/* 3. Ensure the text doesn't touch the edges of the grid cards */
-.card.grid .card-body {
-  padding: 0 16px 16px 16px !important;
+[data-theme="light"] .card:hover {
+  box-shadow: 0 6px 16px rgba(0,0,0,0.06) !important;
 }
 
-/* 4. Ensure the side cards have the exact same centered image and padding */
+/* --- 2. DARK MODE (Deep Blue/Grey) --- */
+[data-theme="dark"] body {
+  background-color: #0f172a !important; /* Fixes the white background */
+}
+
+[data-theme="dark"] .card,
+[data-theme="dark"] .modern-card,
+[data-theme="dark"] .stock-card,
+[data-theme="dark"] .movers-panel,
+[data-theme="dark"] .spark-card,
+[data-theme="dark"] .ai-summary-box,
+[data-theme="dark"] .exec-card,
+[data-theme="dark"] .stock-search-box,
+[data-theme="dark"] .breadth-container {
+  background-color: #1e293b !important;
+  border: 1px solid #334155 !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
+}
+
+[data-theme="dark"] .card:hover,
+[data-theme="dark"] .stock-card:hover,
+[data-theme="dark"] .movers-table tr:hover {
+  background-color: #263347 !important; /* Fixes the white hover background */
+  border-color: #475569 !important;
+}
+
+/* --- 3. FIX THE BRIEFING BUTTON BOX (Applies to both) --- */
+.briefing-container {
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  width: auto !important; /* Stops it from stretching */
+  margin-bottom: 24px !important;
+}
+
+/* --- 4. FIX CARD PADDING & POSITIONING (Applies to both) --- */
+.card.grid .card-body {
+  padding: 0 16px 16px 16px !important; 
+}
+
 .card.side {
   display: flex !important; 
   flex-direction: row !important;
@@ -1841,7 +1878,6 @@ body {
   align-items: flex-start; 
 }
 
-/* 5. Hero Card text padding */
 .card.hero .card-body {
   padding-top: 16px !important;
 }
