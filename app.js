@@ -764,6 +764,33 @@ async function loadAll(force) {
   try { await Promise.all([loadNews(force), loadTicker(force)]); } finally { state.loading = false; }
 }
 
+async function getFullArticleText(url) {
+  try {
+    const html = await fetchViaProxy(url, { timeout: 8000 });
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    
+    // Remove all the junk (scripts, styles, navbars, footers)
+    doc.querySelectorAll('script, style, nav, footer, header, aside, .ad, .ads, .menu').forEach(el => el.remove());
+    
+    // Extract all paragraphs
+    const paragraphs = Array.from(doc.querySelectorAll('p'));
+    
+    // Filter out tiny paragraphs (like image captions) and join the rest
+    const text = paragraphs
+      .map(p => p.textContent.trim())
+      .filter(t => t.length > 40) 
+      .join(' ');
+      
+    // If we couldn't find good paragraphs, fallback to body text
+    let finalText = text.length > 200 ? text : doc.body.textContent.trim().replace(/\s+/g, ' ');
+    
+    // Limit to 4,000 characters so we don't waste tokens or hit limits
+    return finalText.substring(0, 4000);
+  } catch (e) {
+    return ''; // If it fails (e.g., paywall), return empty
+  }
+}
+
 function bindUI() {
   if ($('#navNews')) $('#navNews').addEventListener('click', () => switchView('news'));
   if ($('#navStocks')) $('#navStocks').addEventListener('click', () => switchView('stocks'));
@@ -826,13 +853,6 @@ function bindUI() {
     e.preventDefault();
     e.stopPropagation(); 
     
-    // Use the text from the button, or fallback to the card if it's missing
-    let text = btn.getAttribute('data-text');
-    if (!text || text === 'undefined') {
-        const card = btn.closest('.card');
-        text = card.querySelector('.headline').innerText;
-    }
-
     const targetId = btn.getAttribute('data-target');
     const targetEl = document.getElementById(targetId);
     
@@ -842,13 +862,31 @@ function bindUI() {
     }
 
     btn.disabled = true;
-    btn.innerHTML = '✨ Thinking...';
+    btn.innerHTML = '✨ Reading article...';
     
     try {
+      // 1. Get the article URL from the parent card
+      const card = btn.closest('.card');
+      const articleUrl = card ? card.getAttribute('data-url') : null;
+      
+      // 2. Try to scrape the full text
+      let textToSummarize = '';
+      if (articleUrl) {
+          textToSummarize = await getFullArticleText(articleUrl);
+      }
+      
+      // 3. Fallback to title + summary if scraping fails (e.g. paywall)
+      if (!textToSummarize || textToSummarize.length < 100) {
+          textToSummarize = btn.getAttribute('data-text');
+      }
+
+      btn.innerHTML = '✨ Thinking...';
+      
+      // 4. Send to Gemini
       const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, lang: state.lang }) // Added lang here!
+        body: JSON.stringify({ text: textToSummarize, lang: state.lang })
       });
       
       if (!res.ok) {
@@ -869,7 +907,6 @@ function bindUI() {
         targetEl.style.display = 'block';
       }
     } catch (err) {
-      // This will now show us the EXACT error
       targetEl.innerHTML = `<em>Failed: ${esc(err.message)}</em>`;
       targetEl.style.display = 'block';
     } finally {
