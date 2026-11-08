@@ -276,13 +276,22 @@ function cardHTML(article, variant) {
   const summary = (variant !== 'side' && article.summary) ? `<p class="summary">${esc(article.summary)}</p>` : '';
   const watchBadge = isHit ? `<span class="badge-watch">${esc(t.watch)}</span>` : '';
   const dot = isRead ? '' : '<span class="unread-dot" aria-hidden="true"></span>';
-  return `<a class="${classes}" href="${esc(article.link)}" target="_blank" rel="noopener noreferrer" data-url="${esc(article.link)}">
+  // Hash the URL so we can uniquely identify the summary box for this article
+  const hash = article.link.split('').reduce((a,b)=>{a=((a<<5)-a)+b.charCodeAt(0);return a&a},0); 
+
+  return `<div class="${classes}" data-url="${esc(article.link)}">
     ${thumb}
     <div class="card-body">
       <div class="meta"><span class="src">${esc(article.sourceLabel)}</span><span class="sep">•</span><time class="ago" data-ts="${article.ts}">${esc(timeAgo(article.ts, state.lang))}</time>${watchBadge}</div>
-      <h2 class="headline">${esc(article.title)}</h2>${summary}
-    </div>${dot}</a>`;
-}
+      <h2 class="headline"><a href="${esc(article.link)}" target="_blank" rel="noopener noreferrer">${esc(article.title)}</a></h2>
+      ${summary}
+      
+      <button class="ai-btn" data-text="${esc(article.title + '. ' + article.summary)}" data-target="ai-${hash}">
+        ✨ AI Summary
+      </button>
+      <div class="ai-summary-box" id="ai-${hash}"></div>
+    </div>
+    ${dot}</div>`;
 
 function currentArticles() {
   let list = state.articles.slice();
@@ -772,6 +781,54 @@ function bindUI() {
     card.classList.remove('unread'); card.classList.add('read');
     const dot = card.querySelector('.unread-dot'); if (dot) dot.remove();
   });
+
+  // ==========================================
+  // AI SUMMARIZE LOGIC (Added here)
+  // ==========================================
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.ai-btn');
+    if (!btn) return;
+    
+    e.preventDefault();
+    e.stopPropagation(); // Stops the card from being marked as read/opening the link
+    
+    const text = btn.getAttribute('data-text');
+    const targetId = btn.getAttribute('data-target');
+    const targetEl = document.getElementById(targetId);
+    
+    if (targetEl.style.display === 'block') {
+      targetEl.style.display = 'none';
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '✨ Thinking...';
+    
+    try {
+      const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/hf-summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+      
+      const data = await res.json();
+      
+      if (data && data[0] && data[0].summary_text) {
+        targetEl.innerHTML = `<strong>AI Summary:</strong> ${esc(data[0].summary_text)}`;
+        targetEl.style.display = 'block';
+      } else {
+        targetEl.innerHTML = `<em>AI is busy right now. Try again in a few seconds.</em>`;
+        targetEl.style.display = 'block';
+      }
+    } catch (err) {
+      targetEl.innerHTML = `<em>Failed to connect to AI.</em>`;
+      targetEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '✨ AI Summary';
+    }
+  });
+  // ==========================================
 
   let resizeTimer = null;
   window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => renderTicker(state.ticker), 350); });

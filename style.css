@@ -1554,3 +1554,48 @@ body, html {
   overflow: hidden;
   border: 1px solid var(--rule);
 }
+
+/* --- AI Summary Styling --- */
+.ai-btn {
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  transition: opacity 0.2s, transform 0.2s;
+  box-shadow: 0 2px 10px rgba(168, 85, 247, 0.3);
+}
+.ai-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.ai-btn:disabled {
+  background: #e5e7eb;
+  color: #9ca3af;
+  box-shadow: none;
+  cursor: wait;
+  transform: none;
+}
+.ai-summary-box {
+  display: none;
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-left: 3px solid #a855f7;
+  border-radius: 0 8px 8px 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+  animation: fadeIn 0.3s ease-in-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
