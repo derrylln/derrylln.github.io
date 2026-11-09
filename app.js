@@ -485,11 +485,27 @@ let ihsgChart, sp500Chart;
 
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
-  dash.innerHTML = `<div class="stock-loading">${t.stockLoading}</div>`;
+  
+  // Inject the loading bar UI
+  dash.innerHTML = `
+    <div class="loading-container">
+      <div class="loading-text">Fetching Market Data...</div>
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="marketProgressFill"></div>
+      </div>
+      <div class="progress-text" id="marketProgressText">0 / 0 loaded</div>
+    </div>
+  `;
 
   const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), '^GSPC', ...MACRO.map(x=>x.symbol), ...ECON_INDICATORS.map(x=>x.symbol), ...IDX_POOL.map(x=>x.symbol), ...US_POOL.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
   const allData = {};
   let failedCount = 0;
+  
+  // Progress tracking variables
+  const totalCount = allSymbols.length;
+  let processedCount = 0;
+  const progressFill = document.getElementById('marketProgressFill');
+  const progressText = document.getElementById('marketProgressText');
 
   for (const sym of allSymbols) {
     const details = await fetchStockDetails(sym);
@@ -499,9 +515,16 @@ async function loadMarketDashboard() {
     } else {
       failedCount++;
     }
+    
+    // Update progress bar
+    processedCount++;
+    if (progressFill) progressFill.style.width = `${(processedCount / totalCount) * 100}%`;
+    if (progressText) progressText.textContent = `${processedCount} / ${totalCount} loaded`;
+
     await new Promise(r => setTimeout(r, 50)); 
   }
 
+  // ... (rest of the caching and rendering logic remains the same) ...
   const cacheKey = 'fw.market_data_cache';
   if (failedCount > 10) {
     console.warn("Yahoo rate limit hit. Loading cached market data.");
@@ -515,6 +538,8 @@ async function loadMarketDashboard() {
     dash.innerHTML = `<div class="stock-loading">Market data temporarily unavailable. Please try again in a few minutes.</div>`;
     return;
   }
+  
+  // ... (continue with idxData, usData, etc.)
 
   const idxData = IDX_POOL.map(s => allData[s.symbol]).filter(Boolean);
   const idxSortedByPct = [...idxData].sort((a, b) => b.pct - a.pct);
