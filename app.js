@@ -216,10 +216,14 @@ async function fetchAllNews() {
     try {
       let fetchUrl = source.url, items = [];
       if (source.useJsonApi) {
-        fetchUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+        // ADD CACHE BUSTER HERE
+        const cacheBusterUrl = source.url + (source.url.includes('?') ? '&' : '?') + `_t=${Date.now()}`;
+        fetchUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(cacheBusterUrl)}`;
+        
         const res = await fetch(fetchUrl); if (!res.ok) throw new Error('HTTP ' + res.status);
         items = parseFeed(await res.text(), source);
       } else {
+        // ... (the rest remains the same)
         fetchUrl += (fetchUrl.includes('?') ? '&' : '?') + `_t=${Date.now()}`;
         const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); items = parseFeed(xml, source);
       }
