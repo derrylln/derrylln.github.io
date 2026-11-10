@@ -1472,20 +1472,60 @@ function bindUI() {
 
   // Headlines Yahoo publishes about one ticker — far more relevant to a single-stock
   // move than our own RSS feeds, which are mostly Indonesian macro/business news.
+  // Google News keeps a per-query Indonesian feed and is the only reliable source of
+  // IDX coverage: Yahoo's search returns no news at all for .JK listings.
+  function parseGoogleNews(xml, symbol) {
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const nodes = Array.prototype.slice.call(doc.getElementsByTagName('item'));
+    const out = [];
+    nodes.forEach(node => {
+      let title = textOf(node, ['title']);
+      const link = linkOf(node);
+      const publisher = textOf(node, ['source']) || 'Google News';
+      const ts = Date.parse(textOf(node, ['pubDate'])) || 0;
+      if (!title || !link) return;
+      // The feed is relevance-ranked, so it drags in loose matches; keep only
+      // headlines that actually name the ticker.
+      if (title.toLowerCase().indexOf(symbol.toLowerCase()) === -1) return;
+      if (title.endsWith(' - ' + publisher)) title = title.slice(0, title.length - 3 - publisher.length);
+      out.push({ title: title.trim(), publisher, link, ts, tickers: [symbol] });
+    });
+    return out;
+  }
+
   async function fetchTickerNews(symbol) {
     const clean = symbol.replace(/\.JK$/i, '').toUpperCase();
-    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&newsCount=12&quotesCount=0&enableFuzzyQuery=false`;
-    const raw = await fetchViaProxy(url, { timeout: 7000 });
-    const data = JSON.parse(raw);
-    const items = (data.news || []).filter(n => n && n.title).map(n => ({
-      title: n.title.trim(),
-      publisher: n.publisher || 'Yahoo Finance',
-      link: n.link || '',
-      ts: (n.providerPublishTime || 0) * 1000,
-      tickers: n.relatedTickers || []
-    }));
-    const tagged = items.filter(n => n.tickers.indexOf(clean) !== -1);
-    return (tagged.length ? tagged : items).sort((a, b) => b.ts - a.ts).slice(0, 8);
+    let items = [];
+    try {
+      const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&newsCount=12&quotesCount=0&enableFuzzyQuery=false`;
+      const data = JSON.parse(await fetchViaProxy(url, { timeout: 7000 }));
+      items = (data.news || []).filter(n => n && n.title).map(n => ({
+        title: n.title.trim(),
+        publisher: n.publisher || 'Yahoo Finance',
+        link: n.link || '',
+        ts: (n.providerPublishTime || 0) * 1000,
+        tickers: n.relatedTickers || []
+      }));
+      const tagged = items.filter(n => n.tickers.indexOf(clean) !== -1);
+      items = tagged.length ? tagged : items;
+    } catch (err) { items = []; }
+
+    if (/\.JK$/i.test(symbol)) {
+      try {
+        const gn = `https://news.google.com/rss/search?q=${encodeURIComponent(clean + ' saham')}&hl=id&gl=ID&ceid=ID:id`;
+        items = items.concat(parseGoogleNews(await fetchViaProxy(gn, { timeout: 7000 }), clean));
+      } catch (err) { /* Indonesian press unreachable — fall back to whatever we have */ }
+    }
+
+    const seen = new Set();
+    return items
+      .filter(n => {
+        const key = n.title.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      })
+      .sort((a, b) => b.ts - a.ts)
+      .slice(0, 8);
   }
 
   function headlineLine(n) {
@@ -1552,8 +1592,9 @@ function bindUI() {
         return;
       }
 
+      // Send the exchange-agnostic code so the answer never reads "TLKM.JK".
       const data = await aiRequest('/ai-explain-move', {
-        symbol: sym, pct, isUp, lang: state.lang,
+        symbol: sym.replace(/\.JK$/i, ''), pct, isUp, lang: state.lang,
         newsText: lines.join('\n')
       });
       
