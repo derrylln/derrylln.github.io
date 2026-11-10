@@ -2058,3 +2058,27 @@ body, html {
 
 [data-theme="dark"] .pf-stat { background: rgba(255, 255, 255, 0.04); }
 [data-theme="dark"] .pf-form input { background: var(--bg); color: var(--ink); }
+
+.pf-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+.pf-toolbar-label {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--muted);
+}
+.pf-cur-switch {
+  display: inline-flex; border: 1px solid var(--rule); border-radius: 8px;
+  overflow: hidden; background: var(--bg-soft);
+}
+.pf-cur-switch button {
+  padding: 6px 14px; border: none; background: transparent; cursor: pointer;
+  font-size: 12px; font-weight: 700; font-family: var(--sans);
+  color: var(--muted); transition: background 0.15s, color 0.15s;
+}
+.pf-cur-switch button + button { border-left: 1px solid var(--rule); }
+.pf-cur-switch button:hover { color: var(--ink); }
+.pf-cur-switch button.active { background: var(--ink); color: var(--bg); }
+
+.pf-fx { margin: -6px 0 16px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pf-warn { font-size: 11px; font-weight: 700; color: var(--red); }

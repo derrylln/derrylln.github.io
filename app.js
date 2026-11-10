@@ -103,7 +103,11 @@ const I18N = {
       colSym: 'Symbol', colShares: 'Shares', colCost: 'Avg Cost', colLast: 'Last', colValue: 'Value', colPl: 'P/L',
       remove: 'Remove', note: 'Prices from Yahoo Finance and may be delayed. Holdings are saved in this browser only.',
       invalidSym: 'Enter a valid ticker, e.g. AAPL or BBCA.JK.', invalidQty: 'Shares must be greater than zero.',
-      invalidCost: 'Average cost cannot be negative.'
+      invalidCost: 'Average cost cannot be negative.',
+      curLabel: 'Show in', curAuto: 'Auto',
+      notFound: 'No price found for {sym}. Check the ticker — IDX stocks need .JK, e.g. CUAN.JK.',
+      unresolved: 'No price found',
+      fxNote: 'Converted at 1 USD = {rate}'
     }
   },
   id: {
@@ -124,7 +128,11 @@ const I18N = {
       colSym: 'Simbol', colShares: 'Lembar', colCost: 'Harga Rata²', colLast: 'Terakhir', colValue: 'Nilai', colPl: 'L/R',
       remove: 'Hapus', note: 'Harga dari Yahoo Finance dan dapat tertunda. Posisi hanya tersimpan di peramban ini.',
       invalidSym: 'Masukkan ticker yang valid, mis. AAPL atau BBCA.JK.', invalidQty: 'Jumlah lembar harus lebih dari nol.',
-      invalidCost: 'Harga rata-rata tidak boleh negatif.'
+      invalidCost: 'Harga rata-rata tidak boleh negatif.',
+      curLabel: 'Tampilkan dalam', curAuto: 'Otomatis',
+      notFound: 'Harga {sym} tidak ditemukan. Periksa ticker — saham IDX perlu .JK, mis. CUAN.JK.',
+      unresolved: 'Harga tidak ditemukan',
+      fxNote: 'Dikonversi pada 1 USD = {rate}'
     }
   }
 };
@@ -845,8 +853,11 @@ async function searchStocks(query) {
 }
 
 /* PORTFOLIO TRACKER */
-const PF = { store: 'finwire.portfolio.v1', quotes: 'finwire.portfolio.quotes.v1', maxAge: 5 * 60 * 1000 };
+const PF = { store: 'finwire.portfolio.v1', quotes: 'finwire.portfolio.quotes.v1', cur: 'finwire.portfolio.currency.v1', fx: 'finwire.portfolio.fx.v1', maxAge: 5 * 60 * 1000, fxSymbol: 'IDR=X' };
 const pfQuotes = loadJSON(PF.quotes, {}) || {};
+const pfSavedCur = loadJSON(PF.cur, 'auto');
+let pfCurMode = (pfSavedCur === 'USD' || pfSavedCur === 'IDR') ? pfSavedCur : 'auto';
+let pfFx = loadJSON(PF.fx, null);
 let pfMessage = '';
 
 const portfolio = (function () {
@@ -862,20 +873,107 @@ const portfolio = (function () {
 function savePortfolio() { saveJSON(PF.store, portfolio); }
 function pfCurrency(symbol) { return /\.JK$/i.test(symbol) ? 'IDR' : 'USD'; }
 function pfMoney(value, currency) {
-  if (!isFinite(value)) return '—';
+  if (value == null || !isFinite(value)) return '—';
   if (currency === 'IDR') return 'Rp ' + Math.round(value).toLocaleString('id-ID');
   return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function pfSignedMoney(value, currency) { return (value < 0 ? '-' : '+') + pfMoney(Math.abs(value), currency); }
+/* Per-share prices need extra decimals once a cheap IDR stock is shown in USD. */
+function pfPrice(value, currency) {
+  if (value == null || !isFinite(value)) return '—';
+  if (currency !== 'IDR' && Math.abs(value) < 1 && value !== 0) {
+    return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  }
+  return pfMoney(value, currency);
+}
 function pfPctText(value) { return (value == null || !isFinite(value)) ? '' : (value > 0 ? '+' : '') + value.toFixed(2) + '%'; }
 
-function pfHoldingStats(h) {
+function pfRate() { return (pfFx && isFinite(pfFx.rate) && pfFx.rate > 0) ? pfFx.rate : null; }
+
+function pfConvert(amount, from, to) {
+  if (amount == null || !isFinite(amount)) return null;
+  if (!from || !to || from === to) return amount;
+  const rate = pfRate(); if (!rate) return null;
+  if (from === 'USD' && to === 'IDR') return amount * rate;
+  if (from === 'IDR' && to === 'USD') return amount / rate;
+  return null;
+}
+
+/* One holding's numbers, converted into whatever currency is on display. */
+function pfHoldingView(h) {
+  const src = pfCurrency(h.symbol);
+  const target = pfCurMode === 'auto' ? src : pfCurMode;
   const q = pfQuotes[h.symbol] || null;
   const price = (q && isFinite(q.price)) ? q.price : null;
-  const cost = h.avgCost * h.shares;
-  const value = price == null ? null : price * h.shares;
-  const pl = value == null ? null : value - cost;
-  return { q: q, price: price, cost: cost, value: value, pl: pl, plPct: (pl != null && cost > 0) ? (pl / cost) * 100 : null };
+  const pending = src !== target && !pfRate();
+  const cost = pending ? null : pfConvert(h.avgCost * h.shares, src, target);
+  const value = (price == null || pending) ? null : pfConvert(price * h.shares, src, target);
+  const pl = (value == null || cost == null) ? null : value - cost;
+  return {
+    q: q, src: src, target: target, pending: pending, failed: !!(q && q.failed),
+    price: (price == null || pending) ? null : pfConvert(price, src, target),
+    cost: cost, value: value, pl: pl,
+    plPct: (pl != null && cost > 0) ? (pl / cost) * 100 : null
+  };
+}
+
+/* Yahoo only knows IDX listings under their .JK suffix, so a bare "CUAN" 404s.
+   Try what was typed, then retry with the Jakarta suffix before giving up. */
+async function pfLookup(symbol) {
+  const direct = await fetchStockDetails(symbol);
+  if (direct && isFinite(direct.price) && direct.price > 0) {
+    return { symbol: String(direct.symbol || symbol).toUpperCase(), quote: direct };
+  }
+  if (!/\./.test(symbol)) {
+    const alt = symbol + '.JK';
+    const jk = await fetchStockDetails(alt);
+    if (jk && isFinite(jk.price) && jk.price > 0) return { symbol: alt, quote: jk };
+  }
+  return null;
+}
+
+/* Save a quote and adopt the exchange-qualified symbol Yahoo reported. */
+function pfApplyQuote(symbol, hit) {
+  const resolved = hit.symbol;
+  if (resolved !== symbol) {
+    const target = portfolio.filter(function (h) { return h.symbol === resolved; })[0];
+    const source = portfolio.filter(function (h) { return h.symbol === symbol; })[0];
+    if (target && source && target !== source) {
+      const total = target.shares + source.shares;
+      target.avgCost = ((target.avgCost * target.shares) + (source.avgCost * source.shares)) / total;
+      target.shares = total;
+      portfolio.splice(portfolio.indexOf(source), 1);
+    } else if (source) { source.symbol = resolved; }
+    delete pfQuotes[symbol];
+    savePortfolio();
+  }
+  pfQuotes[resolved] = { price: hit.quote.price, pct: isFinite(hit.quote.pct) ? hit.quote.pct : null, name: hit.quote.name, ts: Date.now() };
+  return resolved;
+}
+
+function pfMarkFailed(symbol) { pfQuotes[symbol] = { price: null, failed: true, name: '', ts: Date.now() }; }
+
+function pfSyncCurSwitch() {
+  $$('#pfCurSwitch button').forEach(function (b) {
+    const on = b.getAttribute('data-pf-cur') === pfCurMode;
+    b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+async function refreshFxRate(force) {
+  if (!force && pfFx && isFinite(pfFx.rate) && pfFx.rate > 0 && (Date.now() - pfFx.ts) < PF.maxAge) return pfFx.rate;
+  const d = await fetchStockDetails(PF.fxSymbol);
+  if (d && isFinite(d.price) && d.price > 0) { pfFx = { rate: d.price, ts: Date.now() }; saveJSON(PF.fx, pfFx); }
+  return pfRate();
+}
+
+function setPfCurrencyMode(mode) {
+  if (mode !== 'auto' && mode !== 'USD' && mode !== 'IDR') return;
+  if (mode === pfCurMode) return;
+  pfCurMode = mode;
+  saveJSON(PF.cur, pfCurMode);
+  renderPortfolio();
+  if (pfCurMode !== 'auto' && !pfRate()) refreshFxRate().then(renderPortfolio);
 }
 
 function renderPortfolio() {
@@ -891,6 +989,14 @@ function renderPortfolio() {
           <span>${esc(p.title)}</span>
           <span class="pf-subtitle">${esc(p.subtitle)}</span>
         </div>
+        <div class="pf-toolbar">
+          <span class="pf-toolbar-label">${esc(p.curLabel)}</span>
+          <div class="pf-cur-switch" id="pfCurSwitch" role="group" aria-label="${esc(p.curLabel)}">
+            <button type="button" data-pf-cur="auto">${esc(p.curAuto)}</button>
+            <button type="button" data-pf-cur="USD">USD</button>
+            <button type="button" data-pf-cur="IDR">IDR</button>
+          </div>
+        </div>
         <form class="pf-form" id="pfForm" autocomplete="off">
           <input id="pfSymbol" type="text" spellcheck="false" placeholder="${esc(p.symPh)}" aria-label="${esc(p.symPh)}" />
           <input id="pfShares" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.sharesPh)}" aria-label="${esc(p.sharesPh)}" />
@@ -904,50 +1010,57 @@ function renderPortfolio() {
     host.dataset.ready = '1';
   }
 
+  pfSyncCurSwitch();
   const msgEl = $('#pfMsg'); if (msgEl) msgEl.textContent = pfMessage || '';
   const body = $('#portfolioBody'); if (!body) return;
 
   const sorted = portfolio.slice().sort(function (a, b) { return a.symbol.localeCompare(b.symbol); });
   if (!sorted.length) { body.innerHTML = `<div class="pf-empty">${esc(p.empty)}</div>`; return; }
 
-  const currencies = [];
-  sorted.forEach(function (h) { const c = pfCurrency(h.symbol); if (currencies.indexOf(c) === -1) currencies.push(c); });
+  const views = sorted.map(function (h) { return { h: h, v: pfHoldingView(h) }; });
+  const groups = [];
+  views.forEach(function (row) { if (groups.indexOf(row.v.target) === -1) groups.push(row.v.target); });
 
-  const summaryHtml = currencies.map(function (cur) {
-    const holdings = sorted.filter(function (h) { return pfCurrency(h.symbol) === cur; });
-    let value = 0, cost = 0, priced = 0;
-    holdings.forEach(function (h) {
-      const st = pfHoldingStats(h);
-      cost += st.cost;
-      if (st.value != null) { value += st.value; priced++; }
+  const summaryHtml = groups.map(function (cur) {
+    const rows = views.filter(function (row) { return row.v.target === cur; });
+    let value = 0, cost = 0, priced = 0, pending = false;
+    rows.forEach(function (row) {
+      if (row.v.pending) pending = true;
+      if (row.v.cost != null) cost += row.v.cost;
+      if (row.v.value != null) { value += row.v.value; priced++; }
     });
-    const pl = priced ? value - cost : null;
+    const pl = (priced && !pending) ? value - cost : null;
     const plPct = (pl != null && cost > 0) ? (pl / cost) * 100 : null;
     const plClass = pl == null ? '' : (pl >= 0 ? 'up' : 'down');
+    const valueText = pending ? '…' : (priced ? pfMoney(value, cur) : '—');
+    const tag = (groups.length > 1 || pfCurMode !== 'auto') ? `<div class="pf-cur-tag">${cur}</div>` : '';
     return `
       <div class="pf-group">
-        ${currencies.length > 1 ? `<div class="pf-cur-tag">${cur}</div>` : ''}
+        ${tag}
         <div class="pf-summary">
-          <div class="pf-stat"><span>${esc(p.marketValue)}</span><strong>${priced ? pfMoney(value, cur) : '—'}</strong></div>
-          <div class="pf-stat"><span>${esc(p.costBasis)}</span><strong>${pfMoney(cost, cur)}</strong></div>
-          <div class="pf-stat"><span>${esc(p.totalPl)}</span><strong class="${plClass}">${pl == null ? '—' : pfSignedMoney(pl, cur) + ' (' + pfPctText(plPct) + ')'}</strong></div>
+          <div class="pf-stat"><span>${esc(p.marketValue)}</span><strong>${valueText}</strong></div>
+          <div class="pf-stat"><span>${esc(p.costBasis)}</span><strong>${pending ? '…' : pfMoney(cost, cur)}</strong></div>
+          <div class="pf-stat"><span>${esc(p.totalPl)}</span><strong class="${plClass}">${pl == null ? (pending ? '…' : '—') : pfSignedMoney(pl, cur) + ' (' + pfPctText(plPct) + ')'}</strong></div>
         </div>
       </div>`;
-  }).join('');
+  }).join('') + (pfCurMode !== 'auto' && pfRate() ? `<p class="pf-fx">${esc((p.fxNote || '').replace('{rate}', pfMoney(pfRate(), 'IDR')))}</p>` : '');
 
-  const rowsHtml = sorted.map(function (h) {
-    const cur = pfCurrency(h.symbol);
-    const st = pfHoldingStats(h);
-    const cls = st.pl == null ? '' : (st.pl >= 0 ? 'pf-up' : 'pf-down');
-    const dayPct = (st.q && isFinite(st.q.pct)) ? `<div class="pf-day ${st.q.pct >= 0 ? 'pf-up' : 'pf-down'}">${pfPctText(st.q.pct)}</div>` : '';
+  const rowsHtml = views.map(function (row) {
+    const h = row.h, v = row.v, cur = v.target;
+    const cls = v.pl == null ? '' : (v.pl >= 0 ? 'pf-up' : 'pf-down');
+    const dayPct = (v.q && isFinite(v.q.pct)) ? `<div class="pf-day ${v.q.pct >= 0 ? 'pf-up' : 'pf-down'}">${pfPctText(v.q.pct)}</div>` : '';
+    const lastCell = v.price != null ? pfPrice(v.price, cur) + dayPct : (v.failed ? `<span class="pf-warn">${esc(p.unresolved)}</span>` : '…');
+    const avgText = v.cost == null ? (v.pending ? '…' : '—') : pfPrice(pfConvert(h.avgCost, v.src, cur), cur);
+    const valueCell = v.value != null ? pfMoney(v.value, cur) : (v.pending || !v.failed ? '…' : '—');
+    const plCell = v.pl != null ? pfSignedMoney(v.pl, cur) + `<div class="pf-pct">${pfPctText(v.plPct)}</div>` : (v.pending || !v.failed ? '…' : '—');
     return `
       <tr>
-        <td><div class="pf-sym">${esc(h.symbol)}</div><div class="pf-name">${esc((st.q && st.q.name) || '')}</div></td>
+        <td><div class="pf-sym">${esc(h.symbol)}</div><div class="pf-name">${esc((v.q && v.q.name) || '')}</div></td>
         <td class="num">${h.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
-        <td class="num">${pfMoney(h.avgCost, cur)}</td>
-        <td class="num">${st.price == null ? '…' : pfMoney(st.price, cur)}${dayPct}</td>
-        <td class="num">${st.value == null ? '…' : pfMoney(st.value, cur)}</td>
-        <td class="num ${cls}">${st.pl == null ? '…' : pfSignedMoney(st.pl, cur)}<div class="pf-pct">${pfPctText(st.plPct)}</div></td>
+        <td class="num">${avgText}</td>
+        <td class="num">${lastCell}</td>
+        <td class="num">${valueCell}</td>
+        <td class="num ${cls}">${plCell}</td>
         <td class="num"><button type="button" class="pf-remove" data-pf-remove="${esc(h.symbol)}" aria-label="${esc(p.remove)}" title="${esc(p.remove)}">×</button></td>
       </tr>`;
   }).join('');
@@ -964,17 +1077,20 @@ function renderPortfolio() {
     </div>`;
 }
 
+function pfNeedsQuote(symbol, force) {
+  const q = pfQuotes[symbol];
+  if (force || !q) return true;
+  if (Date.now() - q.ts > PF.maxAge) return true;
+  return !isFinite(q.price) && !q.failed;
+}
+
 async function refreshPortfolioQuotes(symbols, force) {
-  const list = (symbols || portfolio.map(function (h) { return h.symbol; })).filter(function (symbol) {
-    const q = pfQuotes[symbol];
-    return force || !q || !isFinite(q.price) || (Date.now() - q.ts) > PF.maxAge;
-  });
+  const list = (symbols || portfolio.map(function (h) { return h.symbol; })).filter(function (s) { return pfNeedsQuote(s, force); });
   if (!list.length) return;
   for (let i = 0; i < list.length; i++) {
-    const d = await fetchStockDetails(list[i]);
-    if (d && isFinite(d.price) && d.price > 0) {
-      pfQuotes[list[i]] = { price: d.price, pct: isFinite(d.pct) ? d.pct : null, name: d.name, ts: Date.now() };
-    }
+    const sym = list[i];
+    const hit = await pfLookup(sym);
+    if (hit) pfApplyQuote(sym, hit); else pfMarkFailed(sym);
     if (i < list.length - 1) await new Promise(function (r) { setTimeout(r, 60); });
   }
   saveJSON(PF.quotes, pfQuotes);
@@ -982,11 +1098,11 @@ async function refreshPortfolioQuotes(symbols, force) {
 
 async function refreshPortfolio() {
   renderPortfolio();
-  await refreshPortfolioQuotes();
+  await Promise.all([refreshPortfolioQuotes(), pfCurMode === 'auto' ? Promise.resolve() : refreshFxRate()]);
   renderPortfolio();
 }
 
-function addHolding(rawSymbol, rawShares, rawCost) {
+async function addHolding(rawSymbol, rawShares, rawCost) {
   const p = (I18N[state.lang] || I18N.en).portfolio;
   const symbol = String(rawSymbol == null ? '' : rawSymbol).toUpperCase().replace(/\s+/g, '');
   const shares = Number(String(rawShares == null ? '' : rawShares).replace(/,/g, ''));
@@ -1009,7 +1125,13 @@ function addHolding(rawSymbol, rawShares, rawCost) {
   savePortfolio();
   ['#pfSymbol', '#pfShares', '#pfCost'].forEach(function (sel) { const el = $(sel); if (el) el.value = ''; });
   renderPortfolio();
-  refreshPortfolioQuotes([symbol], true).then(renderPortfolio);
+
+  const hit = await pfLookup(symbol);
+  if (hit) pfApplyQuote(symbol, hit);
+  else { pfMarkFailed(symbol); pfMessage = (p.notFound || '').replace('{sym}', symbol); }
+  saveJSON(PF.quotes, pfQuotes);
+  if (pfCurMode !== 'auto' && !pfRate()) await refreshFxRate();
+  renderPortfolio();
 }
 
 function removeHolding(symbol) {
@@ -1096,6 +1218,8 @@ function bindUI() {
       addHolding($('#pfSymbol').value, $('#pfShares').value, $('#pfCost').value);
     });
     pfHost.addEventListener('click', (e) => {
+      const curBtn = e.target.closest('[data-pf-cur]');
+      if (curBtn) { setPfCurrencyMode(curBtn.getAttribute('data-pf-cur')); return; }
       const removeBtn = e.target.closest('[data-pf-remove]');
       if (!removeBtn) return;
       removeHolding(removeBtn.getAttribute('data-pf-remove'));
