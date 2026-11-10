@@ -1,0 +1,12 @@
+# Cloudflare Worker that powers the CORS proxy and AI features of FINWIRE.
+#
+# Keep `name` exactly as it is: index.html/app.js point at
+# https://finwire-smart-proxy.derrylnnn.workers.dev
+name = "finwire-smart-proxy"
+main = "src/index.js"
+compatibility_date = "2026-11-09"
+workers_dev = true
+
+# Logs for proxy failures: `npx wrangler tail finwire-smart-proxy`
+[observability]
+enabled = true
