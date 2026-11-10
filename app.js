@@ -104,7 +104,7 @@ const I18N = {
       remove: 'Remove', note: 'Prices from Yahoo Finance and may be delayed. Holdings are saved in this browser only.',
       invalidSym: 'Enter a valid ticker, e.g. AAPL or BBCA.JK.', invalidQty: 'Shares must be greater than zero.',
       invalidCost: 'Average cost cannot be negative.',
-      curLabel: 'Show in', curAuto: 'Auto',
+      curLabel: 'Show in', curAuto: 'Auto', costIn: 'Cost in',
       notFound: 'No price found for {sym}. Check the ticker — IDX stocks need .JK, e.g. CUAN.JK.',
       unresolved: 'No price found',
       fxNote: 'Converted at 1 USD = {rate}'
@@ -129,7 +129,7 @@ const I18N = {
       remove: 'Hapus', note: 'Harga dari Yahoo Finance dan dapat tertunda. Posisi hanya tersimpan di peramban ini.',
       invalidSym: 'Masukkan ticker yang valid, mis. AAPL atau BBCA.JK.', invalidQty: 'Jumlah lembar harus lebih dari nol.',
       invalidCost: 'Harga rata-rata tidak boleh negatif.',
-      curLabel: 'Tampilkan dalam', curAuto: 'Otomatis',
+      curLabel: 'Tampilkan dalam', curAuto: 'Otomatis', costIn: 'Harga dalam',
       notFound: 'Harga {sym} tidak ditemukan. Periksa ticker — saham IDX perlu .JK, mis. CUAN.JK.',
       unresolved: 'Harga tidak ditemukan',
       fxNote: 'Dikonversi pada 1 USD = {rate}'
@@ -465,12 +465,12 @@ async function fetchStockDetails(symbol) {
     const pct = (price && prevClose) ? ((price - prevClose) / prevClose) * 100 : 0;
 
     return { 
-      symbol: meta.symbol, name: meta.shortName || meta.symbol, price: price, prevClose: prevClose, pct: pct,
+      symbol: meta.symbol, name: meta.shortName || meta.symbol, price: price, prevClose: prevClose, pct: pct, currency: meta.currency || null,
       volume: meta.regularMarketVolume, dayHigh: meta.regularMarketDayHigh, dayLow: meta.regularMarketDayLow, 
       week52High: meta.fiftyTwoWeekHigh, week52Low: meta.fiftyTwoWeekLow 
     };
   } catch (e) { 
-    return { symbol: symbol, name: symbol, price: null, prevClose: null, pct: 0, volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null };
+    return { symbol: symbol, name: symbol, price: null, prevClose: null, pct: 0, currency: null, volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null };
   }
 }
 
@@ -853,10 +853,14 @@ async function searchStocks(query) {
 }
 
 /* PORTFOLIO TRACKER */
-const PF = { store: 'finwire.portfolio.v1', quotes: 'finwire.portfolio.quotes.v1', cur: 'finwire.portfolio.currency.v1', fx: 'finwire.portfolio.fx.v1', maxAge: 5 * 60 * 1000, fxSymbol: 'IDR=X' };
+const PF = { store: 'finwire.portfolio.v1', quotes: 'finwire.portfolio.quotes.v1', cur: 'finwire.portfolio.currency.v1', fx: 'finwire.portfolio.fx.v1', incur: 'finwire.portfolio.costcur.v1', maxAge: 5 * 60 * 1000, fxSymbol: 'IDR=X' };
 const pfQuotes = loadJSON(PF.quotes, {}) || {};
 const pfSavedCur = loadJSON(PF.cur, 'auto');
 let pfCurMode = (pfSavedCur === 'USD' || pfSavedCur === 'IDR') ? pfSavedCur : 'auto';
+const pfSavedInCur = loadJSON(PF.incur, 'auto');
+/* First visit follows the display currency: someone reading rupiah usually
+   quotes a rupiah cost too. */
+let pfInCur = (pfSavedInCur === 'USD' || pfSavedInCur === 'IDR') ? pfSavedInCur : (pfCurMode === 'auto' ? 'auto' : pfCurMode);
 let pfFx = loadJSON(PF.fx, null);
 let pfMessage = '';
 
@@ -864,10 +868,13 @@ const portfolio = (function () {
   const saved = loadJSON(PF.store, []);
   if (!Array.isArray(saved)) return [];
   return saved.map(function (h) {
-    return { symbol: String((h && h.symbol) || '').toUpperCase().trim(), shares: Number(h && h.shares), avgCost: Number(h && h.avgCost) };
+    return {
+      symbol: String((h && h.symbol) || '').toUpperCase().trim(), shares: Number(h && h.shares), avgCost: Number(h && h.avgCost),
+      avgCur: (h && (h.avgCur === 'IDR' || h.avgCur === 'USD')) ? h.avgCur : null
+    };
   }).filter(function (h) {
     return h.symbol && isFinite(h.shares) && h.shares > 0 && isFinite(h.avgCost) && h.avgCost >= 0;
-  });
+  }).map(function (h) { h.avgCur = h.avgCur || pfCurrency(h.symbol); return h; });
 })();
 
 function savePortfolio() { saveJSON(PF.store, portfolio); }
@@ -899,19 +906,28 @@ function pfConvert(amount, from, to) {
   return null;
 }
 
-/* One holding's numbers, converted into whatever currency is on display. */
+function pfQuoteCurrency(quote, symbol) {
+  const c = quote && quote.currency;
+  return (c === 'IDR' || c === 'USD') ? c : pfCurrency(symbol);
+}
+
+/* One holding's numbers, converted into whatever currency is on display.
+   The cost keeps the currency it was entered in; the quote has its own. */
 function pfHoldingView(h) {
-  const src = pfCurrency(h.symbol);
-  const target = pfCurMode === 'auto' ? src : pfCurMode;
   const q = pfQuotes[h.symbol] || null;
+  const src = pfQuoteCurrency(q, h.symbol);
+  const costCur = h.avgCur || pfCurrency(h.symbol);
+  const target = pfCurMode === 'auto' ? src : pfCurMode;
   const price = (q && isFinite(q.price)) ? q.price : null;
-  const pending = src !== target && !pfRate();
-  const cost = pending ? null : pfConvert(h.avgCost * h.shares, src, target);
-  const value = (price == null || pending) ? null : pfConvert(price * h.shares, src, target);
+  const costPending = costCur !== target && !pfRate();
+  const pricePending = src !== target && !pfRate();
+  const cost = costPending ? null : pfConvert(h.avgCost * h.shares, costCur, target);
+  const value = (price == null || pricePending) ? null : pfConvert(price * h.shares, src, target);
   const pl = (value == null || cost == null) ? null : value - cost;
   return {
-    q: q, src: src, target: target, pending: pending, failed: !!(q && q.failed),
-    price: (price == null || pending) ? null : pfConvert(price, src, target),
+    q: q, src: src, target: target, pending: costPending || pricePending, failed: !!(q && q.failed),
+    price: (price == null || pricePending) ? null : pfConvert(price, src, target),
+    avg: costPending ? null : pfConvert(h.avgCost, costCur, target),
     cost: cost, value: value, pl: pl,
     plPct: (pl != null && cost > 0) ? (pl / cost) * 100 : null
   };
@@ -932,6 +948,16 @@ async function pfLookup(symbol) {
   return null;
 }
 
+/* A rupiah price almost always means an IDX listing, so try the Jakarta
+   suffix first — bare BBCA is a US ETF, BBCA.JK is Bank Central Asia. */
+async function pfLookupIdr(symbol) {
+  if (!/\./.test(symbol)) {
+    const jk = await fetchStockDetails(symbol + '.JK');
+    if (jk && isFinite(jk.price) && jk.price > 0) return { symbol: symbol + '.JK', quote: jk };
+  }
+  return pfLookup(symbol);
+}
+
 /* Save a quote and adopt the exchange-qualified symbol Yahoo reported. */
 function pfApplyQuote(symbol, hit) {
   const resolved = hit.symbol;
@@ -940,14 +966,20 @@ function pfApplyQuote(symbol, hit) {
     const source = portfolio.filter(function (h) { return h.symbol === symbol; })[0];
     if (target && source && target !== source) {
       const total = target.shares + source.shares;
-      target.avgCost = ((target.avgCost * target.shares) + (source.avgCost * source.shares)) / total;
+      const targetCur = target.avgCur || pfCurrency(target.symbol);
+      const sourceCur = source.avgCur || pfCurrency(source.symbol);
+      const conv = sourceCur === targetCur ? source.avgCost : pfConvert(source.avgCost, sourceCur, targetCur);
+      target.avgCost = ((target.avgCost * target.shares) + ((conv == null ? source.avgCost : conv) * source.shares)) / total;
       target.shares = total;
       portfolio.splice(portfolio.indexOf(source), 1);
     } else if (source) { source.symbol = resolved; }
     delete pfQuotes[symbol];
     savePortfolio();
   }
-  pfQuotes[resolved] = { price: hit.quote.price, pct: isFinite(hit.quote.pct) ? hit.quote.pct : null, name: hit.quote.name, ts: Date.now() };
+  pfQuotes[resolved] = {
+    price: hit.quote.price, pct: isFinite(hit.quote.pct) ? hit.quote.pct : null, name: hit.quote.name,
+    currency: pfQuoteCurrency(hit.quote, resolved), ts: Date.now()
+  };
   return resolved;
 }
 
@@ -958,6 +990,37 @@ function pfSyncCurSwitch() {
     const on = b.getAttribute('data-pf-cur') === pfCurMode;
     b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
+}
+
+/* Which currency the typed average cost is read in. "Auto" follows the
+   ticker, so a .JK listing is taken as rupiah without any extra step. */
+function pfInputCurrency() {
+  if (pfInCur === 'USD' || pfInCur === 'IDR') return pfInCur;
+  const typed = (($('#pfSymbol') || {}).value || '').toUpperCase().replace(/\s+/g, '');
+  if (!typed) return null;
+  const q = pfQuotes[typed];
+  if (q && (q.currency === 'IDR' || q.currency === 'USD')) return q.currency;
+  if (/\.JK$/.test(typed)) return 'IDR';
+  return null;
+}
+
+function pfSyncInputCur() {
+  $$('#pfCostCur button').forEach(function (b) {
+    const on = b.getAttribute('data-pf-in') === pfInCur;
+    b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  const el = $('#pfCost'); if (!el) return;
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const cur = pfInputCurrency();
+  const text = cur ? p.costPh + ' (' + cur + ')' : p.costPh;
+  el.setAttribute('placeholder', text); el.setAttribute('aria-label', text);
+}
+
+function setPfInputCurrency(mode) {
+  if (mode !== 'auto' && mode !== 'USD' && mode !== 'IDR') return;
+  pfInCur = mode;
+  saveJSON(PF.incur, pfInCur);
+  pfSyncInputCur();
 }
 
 async function refreshFxRate(force) {
@@ -1000,7 +1063,14 @@ function renderPortfolio() {
         <form class="pf-form" id="pfForm" autocomplete="off">
           <input id="pfSymbol" type="text" spellcheck="false" placeholder="${esc(p.symPh)}" aria-label="${esc(p.symPh)}" />
           <input id="pfShares" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.sharesPh)}" aria-label="${esc(p.sharesPh)}" />
-          <input id="pfCost" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.costPh)}" aria-label="${esc(p.costPh)}" />
+          <div class="pf-cost">
+            <input id="pfCost" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.costPh)}" aria-label="${esc(p.costPh)}" />
+            <div class="pf-cost-cur" id="pfCostCur" role="group" aria-label="${esc(p.costIn)}" title="${esc(p.costIn)}">
+              <button type="button" data-pf-in="auto">${esc(p.curAuto)}</button>
+              <button type="button" data-pf-in="USD">USD</button>
+              <button type="button" data-pf-in="IDR">IDR</button>
+            </div>
+          </div>
           <button type="submit">${esc(p.add)}</button>
         </form>
         <div id="pfMsg" class="pf-msg"></div>
@@ -1010,7 +1080,7 @@ function renderPortfolio() {
     host.dataset.ready = '1';
   }
 
-  pfSyncCurSwitch();
+  pfSyncCurSwitch(); pfSyncInputCur();
   const msgEl = $('#pfMsg'); if (msgEl) msgEl.textContent = pfMessage || '';
   const body = $('#portfolioBody'); if (!body) return;
 
@@ -1043,14 +1113,14 @@ function renderPortfolio() {
           <div class="pf-stat"><span>${esc(p.totalPl)}</span><strong class="${plClass}">${pl == null ? (pending ? '…' : '—') : pfSignedMoney(pl, cur) + ' (' + pfPctText(plPct) + ')'}</strong></div>
         </div>
       </div>`;
-  }).join('') + (pfCurMode !== 'auto' && pfRate() ? `<p class="pf-fx">${esc((p.fxNote || '').replace('{rate}', pfMoney(pfRate(), 'IDR')))}</p>` : '');
+  }).join('') + (pfRate() && pfNeedsFx() ? `<p class="pf-fx">${esc((p.fxNote || '').replace('{rate}', pfMoney(pfRate(), 'IDR')))}</p>` : '');
 
   const rowsHtml = views.map(function (row) {
     const h = row.h, v = row.v, cur = v.target;
     const cls = v.pl == null ? '' : (v.pl >= 0 ? 'pf-up' : 'pf-down');
     const dayPct = (v.q && isFinite(v.q.pct)) ? `<div class="pf-day ${v.q.pct >= 0 ? 'pf-up' : 'pf-down'}">${pfPctText(v.q.pct)}</div>` : '';
     const lastCell = v.price != null ? pfPrice(v.price, cur) + dayPct : (v.failed ? `<span class="pf-warn">${esc(p.unresolved)}</span>` : '…');
-    const avgText = v.cost == null ? (v.pending ? '…' : '—') : pfPrice(pfConvert(h.avgCost, v.src, cur), cur);
+    const avgText = v.avg == null ? (v.pending ? '…' : '—') : pfPrice(v.avg, cur);
     const valueCell = v.value != null ? pfMoney(v.value, cur) : (v.pending || !v.failed ? '…' : '—');
     const plCell = v.pl != null ? pfSignedMoney(v.pl, cur) + `<div class="pf-pct">${pfPctText(v.plPct)}</div>` : (v.pending || !v.failed ? '…' : '—');
     return `
@@ -1096,41 +1166,67 @@ async function refreshPortfolioQuotes(symbols, force) {
   saveJSON(PF.quotes, pfQuotes);
 }
 
+/* A rate is needed whenever something has to cross currencies: a fixed display
+   currency, or a cost entered in a different currency than the quote. */
+function pfNeedsFx() {
+  if (pfCurMode !== 'auto') return true;
+  return portfolio.some(function (h) {
+    const q = pfQuotes[h.symbol] || null;
+    return (h.avgCur || pfCurrency(h.symbol)) !== pfQuoteCurrency(q, h.symbol);
+  });
+}
+
 async function refreshPortfolio() {
   renderPortfolio();
-  await Promise.all([refreshPortfolioQuotes(), pfCurMode === 'auto' ? Promise.resolve() : refreshFxRate()]);
+  await Promise.all([refreshPortfolioQuotes(), pfNeedsFx() ? refreshFxRate() : Promise.resolve()]);
   renderPortfolio();
 }
 
-async function addHolding(rawSymbol, rawShares, rawCost) {
+async function addHolding(rawSymbol, rawShares, rawCost, rawCur) {
   const p = (I18N[state.lang] || I18N.en).portfolio;
   const symbol = String(rawSymbol == null ? '' : rawSymbol).toUpperCase().replace(/\s+/g, '');
   const shares = Number(String(rawShares == null ? '' : rawShares).replace(/,/g, ''));
   const avgCost = Number(String(rawCost == null ? '' : rawCost).replace(/,/g, ''));
+  const fixedCur = (rawCur === 'USD' || rawCur === 'IDR') ? rawCur : null;
 
   if (!/^[A-Z0-9.^=-]{1,15}$/.test(symbol)) { pfMessage = p.invalidSym; renderPortfolio(); return; }
   if (!isFinite(shares) || shares <= 0) { pfMessage = p.invalidQty; renderPortfolio(); return; }
   if (!isFinite(avgCost) || avgCost < 0) { pfMessage = p.invalidCost; renderPortfolio(); return; }
 
-  const existing = portfolio.filter(function (h) { return h.symbol === symbol; })[0];
-  if (existing) {
-    const totalShares = existing.shares + shares;
-    existing.avgCost = ((existing.avgCost * existing.shares) + (avgCost * shares)) / totalShares;
-    existing.shares = totalShares;
-  } else {
-    portfolio.push({ symbol: symbol, shares: shares, avgCost: avgCost });
+  pfMessage = '';
+  /* With "Auto" the ticker is resolved first, so a bare IDX symbol such as
+     CUAN is read in rupiah instead of being taken for dollars. */
+  let hit = null, resolved = symbol, costCur = fixedCur;
+  const lookup = function () { return fixedCur === 'IDR' ? pfLookupIdr(symbol) : pfLookup(symbol); };
+  if (!costCur) {
+    hit = await lookup();
+    if (hit) { resolved = hit.symbol; costCur = pfQuoteCurrency(hit.quote, hit.symbol); }
+    else costCur = pfCurrency(symbol);
   }
 
-  pfMessage = '';
+  const existing = portfolio.filter(function (h) { return h.symbol === resolved; })[0]
+    || portfolio.filter(function (h) { return h.symbol === symbol; })[0];
+  if (existing) {
+    const totalShares = existing.shares + shares;
+    const prevCur = existing.avgCur || pfCurrency(existing.symbol);
+    const conv = prevCur === costCur ? existing.avgCost : pfConvert(existing.avgCost, prevCur, costCur);
+    const prevCost = conv == null ? existing.avgCost : conv;
+    existing.avgCost = ((prevCost * existing.shares) + (avgCost * shares)) / totalShares;
+    existing.shares = totalShares;
+    existing.avgCur = costCur;
+  } else {
+    portfolio.push({ symbol: resolved, shares: shares, avgCost: avgCost, avgCur: costCur });
+  }
+
   savePortfolio();
   ['#pfSymbol', '#pfShares', '#pfCost'].forEach(function (sel) { const el = $(sel); if (el) el.value = ''; });
   renderPortfolio();
 
-  const hit = await pfLookup(symbol);
-  if (hit) pfApplyQuote(symbol, hit);
-  else { pfMarkFailed(symbol); pfMessage = (p.notFound || '').replace('{sym}', symbol); }
+  if (!hit) hit = await lookup();
+  if (hit) pfApplyQuote(resolved, hit);
+  else { pfMarkFailed(resolved); pfMessage = (p.notFound || '').replace('{sym}', symbol); }
   saveJSON(PF.quotes, pfQuotes);
-  if (pfCurMode !== 'auto' && !pfRate()) await refreshFxRate();
+  if (pfNeedsFx() && !pfRate()) await refreshFxRate();
   renderPortfolio();
 }
 
@@ -1215,11 +1311,16 @@ function bindUI() {
     pfHost.addEventListener('submit', (e) => {
       if (!e.target || e.target.id !== 'pfForm') return;
       e.preventDefault();
-      addHolding($('#pfSymbol').value, $('#pfShares').value, $('#pfCost').value);
+      addHolding($('#pfSymbol').value, $('#pfShares').value, $('#pfCost').value, pfInCur);
+    });
+    pfHost.addEventListener('input', (e) => {
+      if (e.target && e.target.id === 'pfSymbol') pfSyncInputCur();
     });
     pfHost.addEventListener('click', (e) => {
       const curBtn = e.target.closest('[data-pf-cur]');
       if (curBtn) { setPfCurrencyMode(curBtn.getAttribute('data-pf-cur')); return; }
+      const inBtn = e.target.closest('[data-pf-in]');
+      if (inBtn) { setPfInputCurrency(inBtn.getAttribute('data-pf-in')); return; }
       const removeBtn = e.target.closest('[data-pf-remove]');
       if (!removeBtn) return;
       removeHolding(removeBtn.getAttribute('data-pf-remove'));
