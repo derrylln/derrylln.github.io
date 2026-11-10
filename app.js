@@ -165,8 +165,10 @@ function categorizeArticle(article) {
 }
 
 /* CORS PROXY LAYER */
+const WORKER_BASE = 'https://finwire-smart-proxy.derrylnnn.workers.dev';
+const AI_TIMEOUT_MS = 30000;
 const PROXIES = [
-  (u) => `https://finwire-smart-proxy.derrylnnn.workers.dev/?url=${encodeURIComponent(u)}`
+  (u) => `${WORKER_BASE}/?url=${encodeURIComponent(u)}`
 ];
 let preferredProxy = 0;
 async function fetchViaProxy(targetUrl, options) {
@@ -1281,6 +1283,39 @@ async function getFullArticleText(url) {
   }
 }
 
+/* AI calls go through the worker. A cold Gemini start can take 20s, so keep a
+   hard limit and narrate the wait — a silent button reads as "it's broken". */
+async function aiRequest(path, payload) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+  try {
+    const res = await fetch(WORKER_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error((data && data.error) || ('Server error ' + res.status));
+    if (!data) throw new Error('Empty response from AI');
+    return data;
+  } finally { clearTimeout(timer); }
+}
+
+function aiErrorText(err) {
+  if (err && err.name === 'AbortError') return 'AI took longer than 30 seconds. Please try again.';
+  return (err && err.message) ? err.message : 'Could not reach the AI service.';
+}
+
+/* Rewrites the label every second so a slow answer still looks alive. */
+function startClock(el, label) {
+  const t0 = Date.now();
+  const tick = () => { el.textContent = `${label} ${Math.round((Date.now() - t0) / 1000)}s`; };
+  tick();
+  const id = setInterval(tick, 1000);
+  return () => clearInterval(id);
+}
+
 function bindUI() {
   if ($('#navNews')) $('#navNews').addEventListener('click', () => switchView('news'));
   if ($('#navStocks')) $('#navStocks').addEventListener('click', () => switchView('stocks'));
@@ -1395,7 +1430,7 @@ function bindUI() {
     }
 
     btn.disabled = true;
-    btn.innerHTML = '✨ Scraping...';
+    let stopClock = startClock(btn, '✨ Reading article...');
     
     try {
       const card = btn.closest('.card');
@@ -1410,20 +1445,10 @@ function bindUI() {
           textToSummarize = btn.getAttribute('data-text');
       }
 
-      btn.innerHTML = '✨ Thinking...';
+      stopClock();
+      stopClock = startClock(btn, '✨ Thinking...');
       
-      const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: textToSummarize, lang: state.lang })
-      });
-      
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Worker Error ${res.status}: ${errText}`);
-      }
-      
-      const data = await res.json();
+      const data = await aiRequest('/ai-summarize', { text: textToSummarize, lang: state.lang });
       
       if (data && data.summary) {
         targetEl.innerHTML = `<strong>AI Summary:</strong> ${esc(data.summary)}`;
@@ -1436,9 +1461,10 @@ function bindUI() {
         targetEl.style.display = 'block';
       }
     } catch (err) {
-      targetEl.innerHTML = `<em>Failed: ${esc(err.message)}</em>`;
+      targetEl.innerHTML = `<em>Failed: ${esc(aiErrorText(err))}</em>`;
       targetEl.style.display = 'block';
     } finally {
+      stopClock();
       btn.disabled = false;
       btn.innerHTML = '✨ AI Summary';
     }
@@ -1481,14 +1507,9 @@ function bindUI() {
     
     const recentNews = relatedArticles.map(a => `- ${a.title}`).join('\n');
 
+    const stopClock = startClock(textEl, '✨ Analyzing news...');
     try {
-      const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-explain-move', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbol: sym, pct, isUp, newsText: recentNews, lang: state.lang })
-      });
-      
-      const data = await res.json();
+      const data = await aiRequest('/ai-explain-move', { symbol: sym, pct, isUp, newsText: recentNews, lang: state.lang });
       
       if (data && data.summary) {
         textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(data.summary)}`;
@@ -1496,7 +1517,9 @@ function bindUI() {
         textEl.innerHTML = `<em>Could not analyze the move.</em>`;
       }
     } catch (err) {
-      textEl.innerHTML = `<em>Failed to connect to AI.</em>`;
+      textEl.innerHTML = `<em>${esc(aiErrorText(err))}</em>`;
+    } finally {
+      stopClock();
     }
   });
 
@@ -1512,16 +1535,11 @@ function bindUI() {
 
       briefingBtn.disabled = true;
       briefingBtn.innerHTML = '✨ Analyzing 15 articles...';
-      contentEl.style.display = 'none';
+      contentEl.style.display = 'block';
+      const stopClock = startClock(contentEl, '✨ Reading the latest headlines...');
 
       try {
-        const res = await fetch('https://finwire-smart-proxy.derrylnnn.workers.dev/ai-summarize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: combinedText, isBriefing: true, lang: state.lang })
-        });
-        
-        const data = await res.json();
+        const data = await aiRequest('/ai-summarize', { text: combinedText, isBriefing: true, lang: state.lang });
         
         if (data && data.summary) {
           let formattedText = data.summary
@@ -1537,9 +1555,11 @@ function bindUI() {
           contentEl.style.display = 'block';
         }
       } catch (err) {
-        contentEl.innerHTML = `<em>Failed to connect to AI.</em>`;
+        stopClock();
+        contentEl.innerHTML = `<em>${esc(aiErrorText(err))}</em>`;
         contentEl.style.display = 'block';
       } finally {
+        stopClock();
         briefingBtn.disabled = false;
         briefingBtn.innerHTML = '✨ Generate Today\'s Market Briefing';
       }
