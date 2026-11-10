@@ -94,7 +94,17 @@ const I18N = {
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
     stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.',
-    cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' }
+    cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' },
+    portfolio: {
+      title: 'Portfolio Tracker', subtitle: 'Your positions, tracked in this browser',
+      symPh: 'Ticker (AAPL, BBCA.JK)', sharesPh: 'Shares', costPh: 'Avg cost / share', add: 'Add',
+      empty: 'No holdings yet. Add a ticker, your share count and the average cost to start tracking.',
+      marketValue: 'Market Value', costBasis: 'Cost Basis', totalPl: 'Total P/L',
+      colSym: 'Symbol', colShares: 'Shares', colCost: 'Avg Cost', colLast: 'Last', colValue: 'Value', colPl: 'P/L',
+      remove: 'Remove', note: 'Prices from Yahoo Finance and may be delayed. Holdings are saved in this browser only.',
+      invalidSym: 'Enter a valid ticker, e.g. AAPL or BBCA.JK.', invalidQty: 'Shares must be greater than zero.',
+      invalidCost: 'Average cost cannot be negative.'
+    }
   },
   id: {
     tagline: 'Pasar · Bisnis · Ekonomi', markAllRead: 'Tandai semua dibaca', watchPh: 'Tambah kata kunci pantauan…',
@@ -105,7 +115,17 @@ const I18N = {
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
     stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.',
-    cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' }
+    cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' },
+    portfolio: {
+      title: 'Pelacak Portofolio', subtitle: 'Posisi Anda, tersimpan di peramban ini',
+      symPh: 'Ticker (AAPL, BBCA.JK)', sharesPh: 'Lembar', costPh: 'Harga rata-rata / lembar', add: 'Tambah',
+      empty: 'Belum ada posisi. Tambahkan ticker, jumlah lembar, dan harga rata-rata untuk mulai melacak.',
+      marketValue: 'Nilai Pasar', costBasis: 'Modal', totalPl: 'Laba/Rugi',
+      colSym: 'Simbol', colShares: 'Lembar', colCost: 'Harga Rata²', colLast: 'Terakhir', colValue: 'Nilai', colPl: 'L/R',
+      remove: 'Hapus', note: 'Harga dari Yahoo Finance dan dapat tertunda. Posisi hanya tersimpan di peramban ini.',
+      invalidSym: 'Masukkan ticker yang valid, mis. AAPL atau BBCA.JK.', invalidQty: 'Jumlah lembar harus lebih dari nol.',
+      invalidCost: 'Harga rata-rata tidak boleh negatif.'
+    }
   }
 };
 
@@ -402,7 +422,7 @@ function applyLang() {
   $$('[data-i18n-ph]').forEach(el => { const key = el.getAttribute('data-i18n-ph'); if (t[key]) el.setAttribute('placeholder', t[key]); });
   $$('[data-i18n-title]').forEach(el => { const key = el.getAttribute('data-i18n-title'); if (t[key]) el.setAttribute('title', t[key]); });
   $$('.lang-toggle button').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-lang') === state.lang));
-  renderFilters(); renderTicker(state.ticker); render(); refreshTimes();
+  renderFilters(); renderTicker(state.ticker); renderPortfolio(); render(); refreshTimes();
 }
 
 /* MARKET DASHBOARD LOGIC */
@@ -414,6 +434,7 @@ function switchView(view) {
     $('#newsView').style.display = 'none'; $('#stocksView').style.display = 'block'; $('#filters').style.display = 'none';
     $('#navNews').classList.remove('active'); $('#navStocks').classList.add('active');
     loadMarketDashboard();
+    refreshPortfolio();
   }
 }
 
@@ -823,6 +844,182 @@ async function searchStocks(query) {
   }
 }
 
+/* PORTFOLIO TRACKER */
+const PF = { store: 'finwire.portfolio.v1', quotes: 'finwire.portfolio.quotes.v1', maxAge: 5 * 60 * 1000 };
+const pfQuotes = loadJSON(PF.quotes, {}) || {};
+let pfMessage = '';
+
+const portfolio = (function () {
+  const saved = loadJSON(PF.store, []);
+  if (!Array.isArray(saved)) return [];
+  return saved.map(function (h) {
+    return { symbol: String((h && h.symbol) || '').toUpperCase().trim(), shares: Number(h && h.shares), avgCost: Number(h && h.avgCost) };
+  }).filter(function (h) {
+    return h.symbol && isFinite(h.shares) && h.shares > 0 && isFinite(h.avgCost) && h.avgCost >= 0;
+  });
+})();
+
+function savePortfolio() { saveJSON(PF.store, portfolio); }
+function pfCurrency(symbol) { return /\.JK$/i.test(symbol) ? 'IDR' : 'USD'; }
+function pfMoney(value, currency) {
+  if (!isFinite(value)) return '—';
+  if (currency === 'IDR') return 'Rp ' + Math.round(value).toLocaleString('id-ID');
+  return '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function pfSignedMoney(value, currency) { return (value < 0 ? '-' : '+') + pfMoney(Math.abs(value), currency); }
+function pfPctText(value) { return (value == null || !isFinite(value)) ? '' : (value > 0 ? '+' : '') + value.toFixed(2) + '%'; }
+
+function pfHoldingStats(h) {
+  const q = pfQuotes[h.symbol] || null;
+  const price = (q && isFinite(q.price)) ? q.price : null;
+  const cost = h.avgCost * h.shares;
+  const value = price == null ? null : price * h.shares;
+  const pl = value == null ? null : value - cost;
+  return { q: q, price: price, cost: cost, value: value, pl: pl, plPct: (pl != null && cost > 0) ? (pl / cost) * 100 : null };
+}
+
+function renderPortfolio() {
+  const host = $('#portfolioPanel'); if (!host) return;
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+
+  if (host.dataset.lang !== state.lang) { host.dataset.lang = state.lang; host.dataset.ready = ''; }
+
+  if (host.dataset.ready !== '1') {
+    host.innerHTML = `
+      <div class="modern-card portfolio-card">
+        <div class="card-title">
+          <span>${esc(p.title)}</span>
+          <span class="pf-subtitle">${esc(p.subtitle)}</span>
+        </div>
+        <form class="pf-form" id="pfForm" autocomplete="off">
+          <input id="pfSymbol" type="text" spellcheck="false" placeholder="${esc(p.symPh)}" aria-label="${esc(p.symPh)}" />
+          <input id="pfShares" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.sharesPh)}" aria-label="${esc(p.sharesPh)}" />
+          <input id="pfCost" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.costPh)}" aria-label="${esc(p.costPh)}" />
+          <button type="submit">${esc(p.add)}</button>
+        </form>
+        <div id="pfMsg" class="pf-msg"></div>
+        <div id="portfolioBody"></div>
+        <p class="pf-note">${esc(p.note)}</p>
+      </div>`;
+    host.dataset.ready = '1';
+  }
+
+  const msgEl = $('#pfMsg'); if (msgEl) msgEl.textContent = pfMessage || '';
+  const body = $('#portfolioBody'); if (!body) return;
+
+  const sorted = portfolio.slice().sort(function (a, b) { return a.symbol.localeCompare(b.symbol); });
+  if (!sorted.length) { body.innerHTML = `<div class="pf-empty">${esc(p.empty)}</div>`; return; }
+
+  const currencies = [];
+  sorted.forEach(function (h) { const c = pfCurrency(h.symbol); if (currencies.indexOf(c) === -1) currencies.push(c); });
+
+  const summaryHtml = currencies.map(function (cur) {
+    const holdings = sorted.filter(function (h) { return pfCurrency(h.symbol) === cur; });
+    let value = 0, cost = 0, priced = 0;
+    holdings.forEach(function (h) {
+      const st = pfHoldingStats(h);
+      cost += st.cost;
+      if (st.value != null) { value += st.value; priced++; }
+    });
+    const pl = priced ? value - cost : null;
+    const plPct = (pl != null && cost > 0) ? (pl / cost) * 100 : null;
+    const plClass = pl == null ? '' : (pl >= 0 ? 'up' : 'down');
+    return `
+      <div class="pf-group">
+        ${currencies.length > 1 ? `<div class="pf-cur-tag">${cur}</div>` : ''}
+        <div class="pf-summary">
+          <div class="pf-stat"><span>${esc(p.marketValue)}</span><strong>${priced ? pfMoney(value, cur) : '—'}</strong></div>
+          <div class="pf-stat"><span>${esc(p.costBasis)}</span><strong>${pfMoney(cost, cur)}</strong></div>
+          <div class="pf-stat"><span>${esc(p.totalPl)}</span><strong class="${plClass}">${pl == null ? '—' : pfSignedMoney(pl, cur) + ' (' + pfPctText(plPct) + ')'}</strong></div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const rowsHtml = sorted.map(function (h) {
+    const cur = pfCurrency(h.symbol);
+    const st = pfHoldingStats(h);
+    const cls = st.pl == null ? '' : (st.pl >= 0 ? 'pf-up' : 'pf-down');
+    const dayPct = (st.q && isFinite(st.q.pct)) ? `<div class="pf-day ${st.q.pct >= 0 ? 'pf-up' : 'pf-down'}">${pfPctText(st.q.pct)}</div>` : '';
+    return `
+      <tr>
+        <td><div class="pf-sym">${esc(h.symbol)}</div><div class="pf-name">${esc((st.q && st.q.name) || '')}</div></td>
+        <td class="num">${h.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
+        <td class="num">${pfMoney(h.avgCost, cur)}</td>
+        <td class="num">${st.price == null ? '…' : pfMoney(st.price, cur)}${dayPct}</td>
+        <td class="num">${st.value == null ? '…' : pfMoney(st.value, cur)}</td>
+        <td class="num ${cls}">${st.pl == null ? '…' : pfSignedMoney(st.pl, cur)}<div class="pf-pct">${pfPctText(st.plPct)}</div></td>
+        <td class="num"><button type="button" class="pf-remove" data-pf-remove="${esc(h.symbol)}" aria-label="${esc(p.remove)}" title="${esc(p.remove)}">×</button></td>
+      </tr>`;
+  }).join('');
+
+  body.innerHTML = `${summaryHtml}
+    <div class="pf-table-wrap">
+      <table class="pf-table">
+        <thead><tr>
+          <th>${esc(p.colSym)}</th><th class="num">${esc(p.colShares)}</th><th class="num">${esc(p.colCost)}</th>
+          <th class="num">${esc(p.colLast)}</th><th class="num">${esc(p.colValue)}</th><th class="num">${esc(p.colPl)}</th><th></th>
+        </tr></thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>`;
+}
+
+async function refreshPortfolioQuotes(symbols, force) {
+  const list = (symbols || portfolio.map(function (h) { return h.symbol; })).filter(function (symbol) {
+    const q = pfQuotes[symbol];
+    return force || !q || !isFinite(q.price) || (Date.now() - q.ts) > PF.maxAge;
+  });
+  if (!list.length) return;
+  for (let i = 0; i < list.length; i++) {
+    const d = await fetchStockDetails(list[i]);
+    if (d && isFinite(d.price) && d.price > 0) {
+      pfQuotes[list[i]] = { price: d.price, pct: isFinite(d.pct) ? d.pct : null, name: d.name, ts: Date.now() };
+    }
+    if (i < list.length - 1) await new Promise(function (r) { setTimeout(r, 60); });
+  }
+  saveJSON(PF.quotes, pfQuotes);
+}
+
+async function refreshPortfolio() {
+  renderPortfolio();
+  await refreshPortfolioQuotes();
+  renderPortfolio();
+}
+
+function addHolding(rawSymbol, rawShares, rawCost) {
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const symbol = String(rawSymbol == null ? '' : rawSymbol).toUpperCase().replace(/\s+/g, '');
+  const shares = Number(String(rawShares == null ? '' : rawShares).replace(/,/g, ''));
+  const avgCost = Number(String(rawCost == null ? '' : rawCost).replace(/,/g, ''));
+
+  if (!/^[A-Z0-9.^=-]{1,15}$/.test(symbol)) { pfMessage = p.invalidSym; renderPortfolio(); return; }
+  if (!isFinite(shares) || shares <= 0) { pfMessage = p.invalidQty; renderPortfolio(); return; }
+  if (!isFinite(avgCost) || avgCost < 0) { pfMessage = p.invalidCost; renderPortfolio(); return; }
+
+  const existing = portfolio.filter(function (h) { return h.symbol === symbol; })[0];
+  if (existing) {
+    const totalShares = existing.shares + shares;
+    existing.avgCost = ((existing.avgCost * existing.shares) + (avgCost * shares)) / totalShares;
+    existing.shares = totalShares;
+  } else {
+    portfolio.push({ symbol: symbol, shares: shares, avgCost: avgCost });
+  }
+
+  pfMessage = '';
+  savePortfolio();
+  ['#pfSymbol', '#pfShares', '#pfCost'].forEach(function (sel) { const el = $(sel); if (el) el.value = ''; });
+  renderPortfolio();
+  refreshPortfolioQuotes([symbol], true).then(renderPortfolio);
+}
+
+function removeHolding(symbol) {
+  const idx = portfolio.findIndex(function (h) { return h.symbol === symbol; });
+  if (idx === -1) return;
+  portfolio.splice(idx, 1);
+  savePortfolio();
+  renderPortfolio();
+}
+
 /* DATA LOADING & BINDING */
 async function loadNews(force) {
   const cached = loadJSON(LS.news, null);
@@ -890,6 +1087,20 @@ function bindUI() {
     });
   }
   // -----------------------------------------
+
+  const pfHost = $('#portfolioPanel');
+  if (pfHost) {
+    pfHost.addEventListener('submit', (e) => {
+      if (!e.target || e.target.id !== 'pfForm') return;
+      e.preventDefault();
+      addHolding($('#pfSymbol').value, $('#pfShares').value, $('#pfCost').value);
+    });
+    pfHost.addEventListener('click', (e) => {
+      const removeBtn = e.target.closest('[data-pf-remove]');
+      if (!removeBtn) return;
+      removeHolding(removeBtn.getAttribute('data-pf-remove'));
+    });
+  }
 
   const searchInput = $('#stockSearchInput');
   if ($('#stockSearchBtn')) $('#stockSearchBtn').addEventListener('click', () => searchStocks(searchInput.value.trim()));

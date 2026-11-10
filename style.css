@@ -1963,3 +1963,98 @@ body, html {
   background: var(--bg-soft) !important;
   border-color: var(--rule) !important;
 }
+/* ============================================================
+   PORTFOLIO TRACKER
+   ============================================================ */
+.portfolio-card { margin-bottom: 24px; }
+
+.pf-subtitle {
+  font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: none; letter-spacing: 0;
+}
+
+.pf-form { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+
+.pf-form input {
+  flex: 1 1 150px; min-width: 0;
+  padding: 10px 12px; font-size: 14px; font-family: var(--sans);
+  border: 1px solid var(--rule); border-radius: 8px;
+  background: var(--bg); color: var(--ink); outline: none;
+}
+.pf-form input:focus { border-color: var(--ink); }
+
+.pf-form button {
+  padding: 10px 22px; border: none; border-radius: 8px;
+  background: var(--ink); color: var(--bg);
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.pf-form button:hover { background: var(--red); color: #fff; }
+
+.pf-msg { font-size: 12px; font-weight: 600; color: var(--red); margin: 0 0 12px; }
+.pf-msg:empty { display: none; }
+
+.pf-group + .pf-group { margin-top: 14px; }
+.pf-cur-tag {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+  color: var(--muted); margin-bottom: 6px;
+}
+
+.pf-summary {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px;
+}
+@media (max-width: 640px) { .pf-summary { grid-template-columns: 1fr; } }
+
+.pf-stat {
+  border: 1px solid var(--rule); border-radius: 10px;
+  padding: 12px 14px; background: var(--bg-soft);
+}
+.pf-stat span {
+  display: block; font-size: 10px; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
+}
+.pf-stat strong {
+  font-size: 18px; font-weight: 800; color: var(--ink);
+  font-family: var(--serif); font-variant-numeric: tabular-nums;
+}
+.pf-stat strong.up { color: var(--green); }
+.pf-stat strong.down { color: var(--red); }
+
+.pf-table-wrap { overflow-x: auto; }
+
+.pf-table {
+  width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums;
+}
+.pf-table th {
+  text-align: left; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--muted); font-weight: 700; padding: 8px 10px;
+  border-bottom: 1px solid var(--rule); white-space: nowrap;
+}
+.pf-table td {
+  padding: 10px; font-size: 13px; color: var(--ink);
+  border-bottom: 1px solid var(--rule-2); white-space: nowrap;
+}
+.pf-table tr:last-child td { border-bottom: none; }
+.pf-table th.num, .pf-table td.num { text-align: right; }
+
+.pf-sym { font-weight: 800; color: var(--ink); }
+.pf-name {
+  font-size: 11px; font-weight: 500; color: var(--muted);
+  max-width: 190px; overflow: hidden; text-overflow: ellipsis;
+}
+.pf-day, .pf-pct { font-size: 11px; font-weight: 700; }
+.pf-up { color: var(--green); }
+.pf-down { color: var(--red); }
+
+.pf-remove {
+  width: 26px; height: 26px; line-height: 1; font-size: 15px;
+  border: 1px solid var(--rule); border-radius: 6px;
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.pf-remove:hover { border-color: var(--red); color: var(--red); }
+
+.pf-empty { font-size: 13px; color: var(--muted); padding: 18px 2px; }
+.pf-note { margin: 14px 0 0; font-size: 11px; color: var(--muted); }
+
+[data-theme="dark"] .pf-stat { background: rgba(255, 255, 255, 0.04); }
+[data-theme="dark"] .pf-form input { background: var(--bg); color: var(--ink); }
