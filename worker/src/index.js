@@ -335,12 +335,18 @@ async function handleExplainMove(request, env) {
   const direction = body.isUp ? "UP" : "DOWN";
   const newsText = readText(body.newsText, 8000) || "(no headlines supplied)";
 
-  const prompt = `The asset ${symbol} is currently ${direction} ${pct}% today.
-Here are recent news headlines: \n${newsText}\n\n
-Act as a senior financial analyst. Explain the likely reason for this price movement in 2 concise sentences.
-IMPORTANT: If you see specific news about this exact stock in the headlines, use it.
-If you DO NOT see specific news about this stock, you MUST start your answer with "No specific news found, but likely due to..." and then explain the general market context (e.g., sector trends, macro factors).
-Do NOT invent specific facts about the company that are not in the text.`;
+  const prompt = `You are a market analyst explaining today's price move in ${symbol}, which is ${direction} ${pct}%.
+
+Headlines published about this instrument, newest first. The publisher is in brackets:
+${newsText}
+
+Write at most 2 sentences (55 words max) explaining why the price is ${direction.toLowerCase()} today.
+Every one of these rules is mandatory:
+1. Use only facts stated in the headlines above, and name the publisher in brackets, e.g. [Reuters].
+2. Do not mention macro trends, sector rotation, commodity prices, global cross-currents, geopolitics, investor sentiment or routine volatility unless a headline above explicitly says it.
+3. Never invent events, people, numbers, quotes or dates. No company news that is not in the headlines.
+4. If no headline plausibly explains the move, do not speculate. Reply with exactly: "No headline today explains this move. Most discussed story: <title of the most relevant headline>. Watch the company's filings and disclosures for the reason."
+5. No preamble, no title, no disclaimer.`;
 
   try {
     const summary = await callGemini(prompt, env.GEMINI_API_KEY);

@@ -1603,6 +1603,16 @@ body, html {
   from { opacity: 0; transform: translateY(-5px); }
   to { opacity: 1; transform: translateY(0); }
 }
+.explain-sources {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.explain-sources a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 
 /* Daily Briefing Styling */
 .briefing-container {

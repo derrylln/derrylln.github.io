@@ -1470,6 +1470,29 @@ function bindUI() {
     }
   });
 
+  // Headlines Yahoo publishes about one ticker — far more relevant to a single-stock
+  // move than our own RSS feeds, which are mostly Indonesian macro/business news.
+  async function fetchTickerNews(symbol) {
+    const clean = symbol.replace(/\.JK$/i, '').toUpperCase();
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(symbol)}&newsCount=12&quotesCount=0&enableFuzzyQuery=false`;
+    const raw = await fetchViaProxy(url, { timeout: 7000 });
+    const data = JSON.parse(raw);
+    const items = (data.news || []).filter(n => n && n.title).map(n => ({
+      title: n.title.trim(),
+      publisher: n.publisher || 'Yahoo Finance',
+      link: n.link || '',
+      ts: (n.providerPublishTime || 0) * 1000,
+      tickers: n.relatedTickers || []
+    }));
+    const tagged = items.filter(n => n.tickers.indexOf(clean) !== -1);
+    return (tagged.length ? tagged : items).sort((a, b) => b.ts - a.ts).slice(0, 8);
+  }
+
+  function headlineLine(n) {
+    const age = n.ts ? new Date(n.ts).toISOString().slice(0, 10) : '';
+    return `- [${n.publisher}] ${n.title}${age ? ` (${age})` : ''}`;
+  }
+
   // AI EXPLAIN MOVE LOGIC
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('.explain-btn');
@@ -1493,26 +1516,63 @@ function bindUI() {
     textEl.innerHTML = '✨ Analyzing news for this move...';
     textEl.style.display = 'block';
 
+    // Only articles that actually mention the ticker or the company. Feeding the
+    // model unrelated headlines is what made it answer with invented "macro"
+    // reasons instead of the real story.
     const searchTerms = [sym.replace('.JK', '').toLowerCase(), btn.closest('tr').querySelector('td:nth-child(2)').textContent.toLowerCase()];
-    let relatedArticles = state.articles.filter(a => {
+    const relatedArticles = state.articles.filter(a => {
       const text = (a.title + ' ' + a.summary).toLowerCase();
-      return searchTerms.some(term => text.includes(term));
-    });
-
-    if (relatedArticles.length === 0) {
-        relatedArticles = currentArticles().slice(0, 10);
-    } else {
-        relatedArticles = relatedArticles.slice(0, 5); 
-    }
+      return searchTerms.some(term => term.length > 1 && text.includes(term));
+    }).slice(0, 5);
     
-    const recentNews = relatedArticles.map(a => `- ${a.title}`).join('\n');
-
     const stopClock = startClock(textEl, '✨ Analyzing news...');
+    let sources = [];
     try {
-      const data = await aiRequest('/ai-explain-move', { symbol: sym, pct, isUp, newsText: recentNews, lang: state.lang });
+      let tickerNews = [];
+      try { tickerNews = await fetchTickerNews(sym); } catch (err) { tickerNews = []; }
+
+      // Ticker-specific headlines first: they are what actually explain a single move.
+      const seen = new Set();
+      const lines = [];
+      tickerNews.forEach(n => {
+        const key = n.title.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key); sources.push(n);
+        lines.push(headlineLine(n));
+      });
+      relatedArticles.forEach(a => {
+        const key = (a.title || '').toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        lines.push(`- [FINWIRE] ${a.title}`);
+      });
+
+      if (lines.length === 0) {
+        textEl.innerHTML = `<strong>Why it moved:</strong> No news about ${esc(sym.replace('.JK', ''))} found today. Check the company's filings for the reason.`;
+        return;
+      }
+
+      const data = await aiRequest('/ai-explain-move', {
+        symbol: sym, pct, isUp, lang: state.lang,
+        newsText: lines.join('\n')
+      });
       
       if (data && data.summary) {
-        textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(data.summary)}`;
+        // The older worker prompt forced a "No specific news found, but likely due to…"
+        // prefix even when real company headlines were supplied. Drop it in that case
+        // so the reader is not told the opposite of what the answer is based on.
+        let summary = data.summary.trim();
+        if (sources.length) {
+          const stripped = summary.replace(/^no specific news found,?\s*(but\s+)?(likely\s+)?(due\s+)?to\s*/i, '');
+          if (stripped && stripped !== summary) {
+            summary = stripped.charAt(0).toUpperCase() + stripped.slice(1);
+          }
+        }
+        const links = sources.slice(0, 3).map(n => n.link
+          ? `<a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${esc(n.publisher)}</a>`
+          : esc(n.publisher)).join(' · ');
+        const srcLine = links ? `<div class="explain-sources">Sources: ${links}</div>` : '';
+        textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(summary)}${srcLine}`;
       } else {
         textEl.innerHTML = `<em>Could not analyze the move.</em>`;
       }
