@@ -6,6 +6,7 @@
 const CACHE_TTL       = 15 * 60 * 1000;
 const AUTO_REFRESH_MS = 15 * 60 * 1000;
 const OG_MAX_SCRAPES  = 10; 
+const MAX_ARTICLES    = 3000;
 
 const LS = {
   news: 'finwire.news.v3', ticker: 'finwire.ticker.v3', read: 'finwire.read.v2',
@@ -92,7 +93,8 @@ const I18N = {
     footer: 'FINWIRE — client-side market news aggregator.', justNow: 'just now', minAgo: n => `${n}m ago`,
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
-    stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.'
+    stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.',
+    cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' }
   },
   id: {
     tagline: 'Pasar · Bisnis · Ekonomi', markAllRead: 'Tandai semua dibaca', watchPh: 'Tambah kata kunci pantauan…',
@@ -102,11 +104,12 @@ const I18N = {
     footer: 'FINWIRE — agregator berita pasar berbasis klien.', justNow: 'baru saja', minAgo: n => `${n}m lalu`,
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
-    stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.'
+    stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.',
+    cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' }
   }
 };
 
-const state = { articles: [], ticker: [], filter: 'all', categoryFilter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, loading: false };
+const state = { articles: [], ticker: [], filter: 'all', categoryFilter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, lastKind: '', loading: false };
 
 const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.prototype.slice.call(root.querySelectorAll(sel));
@@ -228,7 +231,7 @@ async function fetchAllNews() {
         const xml = await fetchViaProxy(fetchUrl, { timeout: 6000 }); items = parseFeed(xml, source);
       }
       if (items.length > 0) {
-        state.articles = dedupe([...items, ...state.articles]).sort((a, b) => b.ts - a.ts);
+        state.articles = dedupe([...items, ...state.articles]).sort((a, b) => b.ts - a.ts).slice(0, MAX_ARTICLES);
         newArticlesFound = true; render(); enrichImages(items);
       }
     } catch (err) { console.warn('[FINWIRE] feed failed:', source.id, err.message); }
@@ -373,7 +376,8 @@ function updateStatusLabel(kind, ts) {
 function renderFilters() {
   const bar = $('#filters'); if (!bar) return; const t = I18N[state.lang];
   const sourceChips = SOURCES.map(s => `<button type="button" class="chip${state.filter === s.id ? ' active' : ''}" data-filter="${esc(s.id)}">${esc(s.label)}</button>`).join('');
-  const catChips = CATEGORIES.map(c => `<button type="button" class="chip cat-chip${state.categoryFilter === c.id ? ' active' : ''}" data-cat-filter="${esc(c.id)}">${esc(c.label)}</button>`).join('');
+  const catLabel = (c) => (t.cats && t.cats[c.id]) || c.label;
+  const catChips = CATEGORIES.map(c => `<button type="button" class="chip cat-chip${state.categoryFilter === c.id ? ' active' : ''}" data-cat-filter="${esc(c.id)}">${esc(catLabel(c))}</button>`).join('');
 
   bar.innerHTML = `
     <div class="filters-inner" style="border-bottom: none; padding-bottom: 0;">
@@ -396,6 +400,7 @@ function applyLang() {
   const t = I18N[state.lang]; document.documentElement.lang = state.lang;
   $$('[data-i18n]').forEach(el => { const key = el.getAttribute('data-i18n'); if (t[key]) el.textContent = t[key]; });
   $$('[data-i18n-ph]').forEach(el => { const key = el.getAttribute('data-i18n-ph'); if (t[key]) el.setAttribute('placeholder', t[key]); });
+  $$('[data-i18n-title]').forEach(el => { const key = el.getAttribute('data-i18n-title'); if (t[key]) el.setAttribute('title', t[key]); });
   $$('.lang-toggle button').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-lang') === state.lang));
   renderFilters(); renderTicker(state.ticker); render(); refreshTimes();
 }
@@ -428,13 +433,15 @@ async function fetchStockDetails(symbol) {
     if (validQuotes.length >= 2) prevClose = validQuotes[validQuotes.length - 2];
     if (!price && validQuotes.length > 0) price = validQuotes[validQuotes.length - 1];
 
+    const pct = (price && prevClose) ? ((price - prevClose) / prevClose) * 100 : 0;
+
     return { 
-      symbol: meta.symbol, name: meta.shortName || meta.symbol, price: price, prevClose: prevClose, 
+      symbol: meta.symbol, name: meta.shortName || meta.symbol, price: price, prevClose: prevClose, pct: pct,
       volume: meta.regularMarketVolume, dayHigh: meta.regularMarketDayHigh, dayLow: meta.regularMarketDayLow, 
       week52High: meta.fiftyTwoWeekHigh, week52Low: meta.fiftyTwoWeekLow 
     };
   } catch (e) { 
-    return { symbol: symbol, name: symbol, price: null, prevClose: null, volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null };
+    return { symbol: symbol, name: symbol, price: null, prevClose: null, pct: 0, volume: null, dayHigh: null, dayLow: null, week52High: null, week52Low: null };
   }
 }
 
@@ -486,9 +493,26 @@ function generateMoversTable(title, stocks, headerClass) {
 }
 
 let ihsgChart, sp500Chart; 
+const chartInstances = [];
+
+function destroyCharts() {
+  chartInstances.forEach(c => { try { c.destroy(); } catch (e) {} });
+  chartInstances.length = 0;
+  ihsgChart = null; sp500Chart = null;
+}
+
+function applyChartTheme(theme) {
+  const isDark = theme === 'dark';
+  chartInstances.forEach(c => {
+    try {
+      c.updateOptions({ theme: { mode: isDark ? 'dark' : 'light' }, grid: { borderColor: isDark ? '#334155' : '#f1f3f5' } });
+    } catch (e) {}
+  });
+}
 
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
+  destroyCharts();
   
   // Inject the loading bar UI
   dash.innerHTML = `
@@ -700,12 +724,14 @@ async function loadMarketDashboard() {
 
     summaryData.forEach(d => {
       if (!d.data) return;
-      new ApexCharts(document.querySelector(`#spark-${d.symbol.replace('^', '').replace('=', '')}`), {
+      const sparkChart = new ApexCharts(document.querySelector(`#spark-${d.symbol.replace('^', '').replace('=', '')}`), {
         series: [{ data: d.spark.map(p => p.y) }], chart: { type: 'area', height: 50, sparkline: { enabled: true } },
         theme: chartTheme,
         stroke: { curve: 'smooth', width: 2 }, colors: [d.data.pct >= 0 ? '#22c55e' : '#ef4444'],
         fill: { type: 'gradient', gradient: { opacityFrom: 0.4, opacityTo: 0 } }, tooltip: { enabled: false }
-      }).render();
+      });
+      sparkChart.render();
+      chartInstances.push(sparkChart);
     });
 
     ihsgChart = new ApexCharts(document.querySelector("#mainChart"), {
@@ -716,6 +742,7 @@ async function loadMarketDashboard() {
       xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 }
     });
     ihsgChart.render();
+    chartInstances.push(ihsgChart);
 
     sp500Chart = new ApexCharts(document.querySelector("#sp500Chart"), {
       series: [{ name: 'S&P 500', data: sp500ChartData }], chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'Inter' },
@@ -725,6 +752,7 @@ async function loadMarketDashboard() {
       xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 }
     });
     sp500Chart.render();
+    chartInstances.push(sp500Chart);
 
     document.querySelectorAll('.chart-controls').forEach(control => {
       control.addEventListener('click', async (e) => {
@@ -755,6 +783,7 @@ async function loadMarketDashboard() {
 async function searchStocks(query) {
   if (!query) { loadMarketDashboard(); return; }
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
+  destroyCharts();
   dash.innerHTML = `<div class="stock-loading">${t.stockSearch}</div>`;
 
   try {
@@ -804,7 +833,7 @@ async function loadNews(force) {
   } else { updateStatusLabel('loading'); }
   try {
     await fetchAllNews(); state.lastTs = Date.now(); state.lastKind = 'live';
-    saveJSON(LS.news, { ts: Date.now(), articles: state.articles }); updateStatusLabel('live', state.lastTs);
+    saveJSON(LS.news, { ts: Date.now(), articles: state.articles.slice(0, MAX_ARTICLES) }); updateStatusLabel('live', state.lastTs);
   } catch (err) { if (!cached || !cached.articles) updateStatusLabel('error'); }
 }
 
@@ -854,9 +883,9 @@ function bindUI() {
       // Update Icon
       themeToggleBtn.innerHTML = newTheme === 'dark' ? '<span aria-hidden="true">☀️</span>' : '<span aria-hidden="true">🌙</span>';
       
-      // Re-render charts if on Market page to apply new colors
+      // Re-theme existing charts if on Market page (do not refetch data)
       if ($('#stocksView').style.display !== 'none') {
-        loadMarketDashboard();
+        applyChartTheme(newTheme);
       }
     });
   }
@@ -922,6 +951,7 @@ function bindUI() {
     
     const targetId = btn.getAttribute('data-target');
     const targetEl = document.getElementById(targetId);
+    if (!targetEl) return;
     
     if (targetEl.style.display === 'block') {
       targetEl.style.display = 'none';
