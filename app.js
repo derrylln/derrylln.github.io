@@ -108,6 +108,11 @@ const I18N = {
       notFound: 'No price found for {sym}. Check the ticker — IDX stocks need .JK, e.g. CUAN.JK.',
       unresolved: 'No price found',
       fxNote: 'Converted at 1 USD = {rate}'
+    },
+    fund: {
+      title: 'Fundamentals', mktCap: 'Market cap', pe: 'P/E', rev: 'Revenue', revGrowth: 'Revenue growth',
+      netIncome: 'Net income', netMargin: 'Net margin', eps: 'EPS', roe: 'ROE', fcf: 'Free cash flow',
+      fy: 'FY', note: 'Latest fiscal year · Yahoo Finance'
     }
   },
   id: {
@@ -133,6 +138,11 @@ const I18N = {
       notFound: 'Harga {sym} tidak ditemukan. Periksa ticker — saham IDX perlu .JK, mis. CUAN.JK.',
       unresolved: 'Harga tidak ditemukan',
       fxNote: 'Dikonversi pada 1 USD = {rate}'
+    },
+    fund: {
+      title: 'Fundamental', mktCap: 'Kap. pasar', pe: 'P/E', rev: 'Pendapatan', revGrowth: 'Pertumbuhan pendapatan',
+      netIncome: 'Laba bersih', netMargin: 'Margin bersih', eps: 'EPS', roe: 'ROE', fcf: 'Arus kas bebas',
+      fy: 'TA', note: 'Tahun fiskal terakhir · Yahoo Finance'
     }
   }
 };
@@ -1470,27 +1480,63 @@ function bindUI() {
     }
   });
 
-  // Headlines Yahoo publishes about one ticker — far more relevant to a single-stock
+  // Headlines published about one ticker — far more relevant to a single-stock
   // move than our own RSS feeds, which are mostly Indonesian macro/business news.
-  // Google News keeps a per-query Indonesian feed and is the only reliable source of
-  // IDX coverage: Yahoo's search returns no news at all for .JK listings.
-  function parseGoogleNews(xml, symbol) {
+  // Yahoo covers US listings; for IDX it returns nothing at all, so the ticker is
+  // instead searched in Bing's Indonesian news feed (Google News' equivalent
+  // throttles us with 503s), falling back to Google when Bing comes up empty.
+  function bingArticleLink(link) {
+    const m = /[?&]url=([^&]+)/.exec(link || '');
+    if (!m) return link || '';
+    try { return decodeURIComponent(m[1]); } catch (e) { return link; }
+  }
+
+  function parseNewsFeed(xml, symbol, isBing) {
     const doc = new DOMParser().parseFromString(xml, 'text/xml');
     const nodes = Array.prototype.slice.call(doc.getElementsByTagName('item'));
     const out = [];
     nodes.forEach(node => {
       let title = textOf(node, ['title']);
-      const link = linkOf(node);
-      const publisher = textOf(node, ['source']) || 'Google News';
+      const rawLink = linkOf(node);
+      let publisher = textOf(node, ['source', 'News:Source']);
+      if (!publisher) {
+        const src = node.getElementsByTagNameNS ? node.getElementsByTagNameNS('*', 'Source')[0] : null;
+        publisher = src ? (src.textContent || '').trim() : '';
+      }
       const ts = Date.parse(textOf(node, ['pubDate'])) || 0;
-      if (!title || !link) return;
-      // The feed is relevance-ranked, so it drags in loose matches; keep only
+      if (!title || !rawLink) return;
+      // These feeds are relevance-ranked, so they drag in loose matches; keep only
       // headlines that actually name the ticker.
       if (title.toLowerCase().indexOf(symbol.toLowerCase()) === -1) return;
-      if (title.endsWith(' - ' + publisher)) title = title.slice(0, title.length - 3 - publisher.length);
-      out.push({ title: title.trim(), publisher, link, ts, tickers: [symbol] });
+      if (publisher && title.endsWith(' - ' + publisher)) title = title.slice(0, title.length - 3 - publisher.length);
+      out.push({
+        title: title.trim(),
+        publisher: publisher || (isBing ? 'Bing News' : 'Google News'),
+        link: isBing ? bingArticleLink(rawLink) : rawLink,
+        ts, tickers: [symbol]
+      });
     });
     return out;
+  }
+
+  // A click on several tickers in a row should not re-hit the news feeds.
+  const tickerNewsCache = new Map();
+  const TICKER_NEWS_TTL = 5 * 60 * 1000;
+
+  async function fetchIdxNews(symbol) {
+    const cached = tickerNewsCache.get(symbol);
+    if (cached && Date.now() - cached.at < TICKER_NEWS_TTL) return cached.items;
+    const feeds = [
+      { url: `https://www.bing.com/news/search?q=${encodeURIComponent(symbol + ' saham')}&format=RSS&setlang=id`, bing: true },
+      { url: `https://news.google.com/rss/search?q=${encodeURIComponent(symbol + ' saham')}&hl=id&gl=ID&ceid=ID:id`, bing: false }
+    ];
+    for (let i = 0; i < feeds.length; i++) {
+      try {
+        const items = parseNewsFeed(await fetchViaProxy(feeds[i].url, { timeout: 7000 }), symbol, feeds[i].bing);
+        if (items.length) { tickerNewsCache.set(symbol, { at: Date.now(), items }); return items; }
+      } catch (err) { /* try the next feed */ }
+    }
+    return [];
   }
 
   async function fetchTickerNews(symbol) {
@@ -1511,10 +1557,8 @@ function bindUI() {
     } catch (err) { items = []; }
 
     if (/\.JK$/i.test(symbol)) {
-      try {
-        const gn = `https://news.google.com/rss/search?q=${encodeURIComponent(clean + ' saham')}&hl=id&gl=ID&ceid=ID:id`;
-        items = items.concat(parseGoogleNews(await fetchViaProxy(gn, { timeout: 7000 }), clean));
-      } catch (err) { /* Indonesian press unreachable — fall back to whatever we have */ }
+      try { items = items.concat(await fetchIdxNews(clean)); }
+      catch (err) { /* Indonesian press unreachable — fall back to whatever we have */ }
     }
 
     const seen = new Set();
@@ -1531,6 +1575,89 @@ function bindUI() {
   function headlineLine(n) {
     const age = n.ts ? new Date(n.ts).toISOString().slice(0, 10) : '';
     return `- [${n.publisher}] ${n.title}${age ? ` (${age})` : ''}`;
+  }
+
+  /* FUNDAMENTALS
+     Yahoo's quoteSummary endpoint now demands a crumb cookie, but the public
+     fundamentals-timeseries feed does not — and it covers IDX listings too. */
+  const fundCache = new Map();
+  const FUND_TYPES = ['trailingMarketCap', 'trailingPeRatio', 'annualTotalRevenue', 'annualNetIncome',
+    'annualDilutedEPS', 'annualFreeCashFlow', 'annualStockholdersEquity'];
+
+  async function fetchFundamentals(symbol) {
+    if (fundCache.has(symbol)) return fundCache.get(symbol);
+    const now = Math.floor(Date.now() / 1000);
+    const url = `https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}` +
+      `?symbol=${encodeURIComponent(symbol)}&type=${FUND_TYPES.join(',')}&period1=1500000000&period2=${now}`;
+    const data = JSON.parse(await fetchViaProxy(url, { timeout: 8000 }));
+    const results = (data.timeseries && data.timeseries.result) || [];
+    const series = {};
+    results.forEach(r => {
+      const type = r && r.meta && r.meta.type && r.meta.type[0];
+      if (!type) return;
+      const points = (r[type] || []).filter(v => v && v.reportedValue && isFinite(v.reportedValue.raw))
+        .map(v => ({ raw: v.reportedValue.raw, date: v.asOfDate, currency: v.currencyCode || null }))
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      if (points.length) series[type] = points;
+    });
+
+    const last = k => (series[k] ? series[k][series[k].length - 1] : null);
+    const revenue = series.annualTotalRevenue || [];
+    const revNow = last('annualTotalRevenue');
+    const revPrev = revenue.length > 1 ? revenue[revenue.length - 2] : null;
+    const netIncome = last('annualNetIncome');
+    const equity = last('annualStockholdersEquity');
+    const fund = {
+      mktCap: last('trailingMarketCap'),
+      pe: last('trailingPeRatio'),
+      revenue: revNow,
+      netIncome: netIncome,
+      eps: last('annualDilutedEPS'),
+      fcf: last('annualFreeCashFlow'),
+      revenueGrowth: (revNow && revPrev && revPrev.raw) ? ((revNow.raw / revPrev.raw) - 1) * 100 : null,
+      netMargin: (netIncome && revNow && revNow.raw) ? (netIncome.raw / revNow.raw) * 100 : null,
+      roe: (netIncome && equity && equity.raw) ? (netIncome.raw / equity.raw) * 100 : null,
+      currency: (revNow && revNow.currency) || (netIncome && netIncome.currency) || (fundCurrencySymbol(symbol))
+    };
+    fundCache.set(symbol, fund);
+    return fund;
+  }
+
+  function fundCurrencySymbol(symbol) { return /\.JK$/i.test(symbol) ? 'IDR' : null; }
+
+  function compactNum(raw, currency) {
+    if (!isFinite(raw)) return '—';
+    const prefix = currency === 'IDR' ? 'Rp ' : currency === 'USD' ? '$' : (currency ? currency + ' ' : '');
+    const abs = Math.abs(raw);
+    if (abs >= 1e12) return prefix + (raw / 1e12).toFixed(2) + 'T';
+    if (abs >= 1e9) return prefix + (raw / 1e9).toFixed(1) + 'B';
+    if (abs >= 1e6) return prefix + (raw / 1e6).toFixed(1) + 'M';
+    return prefix + raw.toLocaleString('en-US', { maximumFractionDigits: 2 });
+  }
+
+  function fundamentalsHTML(fund, lang, symbol) {
+    if (!fund) return '';
+    const t = I18N[lang].fund;
+    const items = [];
+    if (fund.mktCap) items.push([t.mktCap, compactNum(fund.mktCap.raw, fund.currency)]);
+    if (fund.pe) items.push([t.pe, fund.pe.raw.toFixed(1)]);
+    if (fund.revenue) items.push([t.rev, compactNum(fund.revenue.raw, fund.currency)]);
+    if (fund.revenueGrowth !== null) items.push([t.revGrowth, (fund.revenueGrowth >= 0 ? '+' : '') + fund.revenueGrowth.toFixed(1) + '%']);
+    if (fund.netIncome) items.push([t.netIncome, compactNum(fund.netIncome.raw, fund.currency)]);
+    if (fund.netMargin !== null) items.push([t.netMargin, fund.netMargin.toFixed(1) + '%']);
+    if (fund.eps) items.push([t.eps, compactNum(fund.eps.raw, fund.currency)]);
+    if (fund.roe !== null) items.push([t.roe, fund.roe.toFixed(1) + '%']);
+    if (fund.fcf) items.push([t.fcf, compactNum(fund.fcf.raw, fund.currency)]);
+    if (!items.length) return '';
+
+    const fy = (fund.revenue && fund.revenue.date) ? t.fy + ' ' + String(fund.revenue.date).slice(0, 4) : '';
+    const cells = items.map(([label, value]) =>
+      `<div class="ef-item"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
+    return `<div class="explain-fundamentals">
+      <div class="ef-head">${esc(t.title)}${fy ? ` · ${esc(fy)}` : ''}</div>
+      <div class="ef-grid">${cells}</div>
+      <div class="ef-note">${esc(t.note)}</div>
+    </div>`;
   }
 
   // AI EXPLAIN MOVE LOGIC
@@ -1568,8 +1695,12 @@ function bindUI() {
     const stopClock = startClock(textEl, '✨ Analyzing news...');
     let sources = [];
     try {
-      let tickerNews = [];
-      try { tickerNews = await fetchTickerNews(sym); } catch (err) { tickerNews = []; }
+      // News explains the move; fundamentals show what the company is actually
+      // worth, so both are fetched together and rendered in one box.
+      const [newsRes, fundRes] = await Promise.allSettled([fetchTickerNews(sym), fetchFundamentals(sym)]);
+      const tickerNews = newsRes.status === 'fulfilled' ? newsRes.value : [];
+      const fundHTML = fundRes.status === 'fulfilled'
+        ? fundamentalsHTML(fundRes.value, state.lang, sym) : '';
 
       // Ticker-specific headlines first: they are what actually explain a single move.
       const seen = new Set();
@@ -1584,11 +1715,13 @@ function bindUI() {
         const key = (a.title || '').toLowerCase();
         if (seen.has(key)) return;
         seen.add(key);
-        lines.push(`- [FINWIRE] ${a.title}`);
+        const label = a.sourceLabel || 'FINWIRE';
+        sources.push({ publisher: label, link: a.link || '' });
+        lines.push(`- [${label}] ${a.title}`);
       });
 
       if (lines.length === 0) {
-        textEl.innerHTML = `<strong>Why it moved:</strong> No news about ${esc(sym.replace('.JK', ''))} found today. Check the company's filings for the reason.`;
+        textEl.innerHTML = `<strong>Why it moved:</strong> No news about ${esc(sym.replace('.JK', ''))} found today. Check the company's filings for the reason.${fundHTML}`;
         return;
       }
 
@@ -1613,7 +1746,7 @@ function bindUI() {
           ? `<a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${esc(n.publisher)}</a>`
           : esc(n.publisher)).join(' · ');
         const srcLine = links ? `<div class="explain-sources">Sources: ${links}</div>` : '';
-        textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(summary)}${srcLine}`;
+        textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(summary)}${srcLine}${fundHTML}`;
       } else {
         textEl.innerHTML = `<em>Could not analyze the move.</em>`;
       }
