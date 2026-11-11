@@ -1636,12 +1636,27 @@ body, html {
   border-top: 1px solid var(--rule);
 }
 .ef-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
   margin-bottom: 8px;
+}
+.ef-period {
+  font: inherit;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 2px 6px;
+  cursor: pointer;
 }
 .ef-grid {
   display: grid;
@@ -1671,6 +1686,11 @@ body, html {
   font-size: 10px;
   color: var(--muted);
 }
+.ef-empty {
+  font-size: 11px;
+  color: var(--muted);
+}
+[data-theme="dark"] .ef-period { color: #e2e8f0; border-color: rgba(148, 163, 184, 0.35); }
 [data-theme="dark"] .ef-item strong { color: #e2e8f0; }
 [data-theme="dark"] .explain-fundamentals { border-top-color: rgba(148, 163, 184, 0.3); }
 
