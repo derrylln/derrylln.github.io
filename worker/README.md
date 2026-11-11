@@ -7,6 +7,7 @@ The static site in the repo root calls this Worker for three things:
 | `GET /?url=<encoded>` | CORS proxy for RSS feeds (`api.rss2json.com` is not the only consumer), article HTML for Open Graph images and full-text summaries, and Yahoo Finance chart JSON |
 | `POST /ai-summarize` | Gemini summary of one article, or the morning briefing |
 | `POST /ai-explain-move` | Gemini explanation of a single stock move |
+| `POST /ai-fundamentals` | Gemini read of a company's reported figures (growth, margins, cash, one strength and one weakness) |
 
 `GET /health` returns `{"ok":true}` and is only used to verify a deploy.
 

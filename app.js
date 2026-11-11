@@ -115,6 +115,12 @@ const I18N = {
       fcf: 'Free cash flow', fy: 'FY', period: 'Reporting period', note: 'Yahoo Finance',
       converted: r => `Statement in USD, converted at Rp ${r}/USD`, reportedIn: c => `Statement reported in ${c}`,
       noData: 'No figures reported for this period.'
+    },
+    fundAi: {
+      btn: 'AI', title: 'AI fundamental read', loading: 'Reading the numbers…',
+      failed: 'No analysis came back. Try again.',
+      unavailable: 'The AI analysis endpoint is not deployed on the worker yet.',
+      note: 'Based only on the figures above · Yahoo Finance · not investment advice'
     }
   },
   id: {
@@ -147,6 +153,12 @@ const I18N = {
       fcf: 'Arus kas bebas', fy: 'TA', period: 'Periode laporan', note: 'Yahoo Finance',
       converted: r => `Laporan dalam USD, dikonversi Rp ${r}/USD`, reportedIn: c => `Laporan dalam ${c}`,
       noData: 'Tidak ada angka untuk periode ini.'
+    },
+    fundAi: {
+      btn: 'AI', title: 'Analisis fundamental AI', loading: 'Membaca angka…',
+      failed: 'Analisis tidak tersedia. Coba lagi.',
+      unavailable: 'Endpoint analisis AI belum di-deploy di worker.',
+      note: 'Hanya berdasarkan angka di atas · Yahoo Finance · bukan saran investasi'
     }
   }
 };
@@ -713,6 +725,105 @@ function fundamentalsHTML(fund, lang, symbol) {
   </div>`;
 }
 
+/* AI READ OF THE FIGURES
+   The model gets exactly the lines the panel can show — recent quarters plus
+   the last two fiscal years — so its verdict can only rest on reported numbers. */
+function fundFigureLines(fund, lang) {
+  const t = I18N[lang].fund;
+  const lines = [];
+  if (fund.mktCap) lines.push(`${t.mktCap}: ${compactNum(fund.mktCap.raw, fund.mktCap.currency || fund.currency)}`);
+  if (fund.pe) lines.push(`${t.pe}: ${fund.pe.raw.toFixed(1)}`);
+  const periods = fund.periods.filter(p => p.kind === 'Q').slice(0, 3)
+    .concat(fund.periods.filter(p => p.kind === 'FY').slice(0, 2));
+  periods.forEach(period => {
+    const tag = `[${periodLabel(period, t)}] `;
+    if (period.revenue) lines.push(tag + t.rev + ': ' + compactNum(period.revenue.raw, period.revenue.currency));
+    if (period.growth !== null) lines.push(tag + (period.kind === 'Q' ? t.yoy : t.revGrowth) + ': ' + (period.growth >= 0 ? '+' : '') + period.growth.toFixed(1) + '%');
+    if (period.netIncome) lines.push(tag + t.netIncome + ': ' + compactNum(period.netIncome.raw, period.netIncome.currency));
+    if (period.margin !== null) lines.push(tag + t.netMargin + ': ' + period.margin.toFixed(1) + '%');
+    if (period.eps) lines.push(tag + t.eps + ': ' + compactNum(period.eps.raw, period.eps.currency));
+    if (period.roe !== null) lines.push(tag + t.roe + ': ' + period.roe.toFixed(1) + '%');
+    if (period.fcf) lines.push(tag + t.fcf + ': ' + compactNum(period.fcf.raw, period.fcf.currency));
+  });
+  if (fund.converted) lines.push(t.converted(Math.round(fund.converted.rate).toLocaleString('en-US')));
+  return lines;
+}
+
+let fundAiModal = null;
+
+function ensureFundAiModal() {
+  if (fundAiModal) return fundAiModal;
+  const wrap = document.createElement('div');
+  wrap.className = 'ai-modal';
+  wrap.innerHTML = `<div class="ai-modal-card" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle">
+    <div class="ai-modal-head">
+      <span id="aiModalTitle"></span>
+      <button type="button" class="ai-modal-close" aria-label="Close">×</button>
+    </div>
+    <div class="ai-modal-body"></div>
+    <div class="ai-modal-note"></div>
+  </div>`;
+  wrap.addEventListener('click', (e) => {
+    if (e.target === wrap || (e.target.closest && e.target.closest('.ai-modal-close'))) closeFundAi();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFundAi(); });
+  document.body.appendChild(wrap);
+  fundAiModal = wrap;
+  return wrap;
+}
+
+function closeFundAi() {
+  if (!fundAiModal) return;
+  fundAiModal.classList.remove('open');
+  const stop = fundAiModal.__stopClock;
+  if (stop) { stop(); fundAiModal.__stopClock = null; }
+}
+
+async function openFundAi(symbol, name) {
+  const modal = ensureFundAiModal();
+  const t = I18N[state.lang].fundAi;
+  const title = $('#aiModalTitle', modal);
+  const body = $('.ai-modal-body', modal);
+  const note = $('.ai-modal-note', modal);
+
+  if (modal.__stopClock) { modal.__stopClock(); modal.__stopClock = null; }
+  title.textContent = `${t.title} · ${name || symbol.replace(/\.JK$/i, '')}`;
+  note.textContent = '';
+  body.textContent = '';
+  modal.classList.add('open');
+  modal.__stopClock = startClock(body, t.loading);
+
+  try {
+    const fund = await fetchFundamentals(symbol);
+    const lines = fundFigureLines(fund, state.lang);
+    if (!lines.length) throw new Error(I18N[state.lang].fund.noData);
+    const data = await aiRequest('/ai-fundamentals', {
+      symbol: symbol.replace(/\.JK$/i, ''),
+      name: name || '',
+      lang: state.lang,
+      figures: lines.join('\n')
+    });
+    if (modal.__stopClock) { modal.__stopClock(); modal.__stopClock = null; }
+    body.textContent = (data && data.summary) ? data.summary.trim() : t.failed;
+    note.textContent = t.note;
+  } catch (err) {
+    if (modal.__stopClock) { modal.__stopClock(); modal.__stopClock = null; }
+    const message = aiErrorText(err);
+    // A worker that predates this route answers 404/405 instead of an analysis.
+    body.textContent = /\b(404|405)\b/.test(message) ? t.unavailable : message;
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest ? e.target.closest('.sc-ai') : null;
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const card = btn.closest('.stock-card');
+  const name = card ? ($('.sc-name', card) || {}).textContent : '';
+  openFundAi(btn.getAttribute('data-ai'), name);
+});
+
 // Switching period re-renders from the cached response — no second request.
 document.addEventListener('change', (e) => {
   const select = e.target && e.target.closest ? e.target.closest('.ef-period') : null;
@@ -875,17 +986,24 @@ async function loadMarketDashboard() {
   const buildCards = (list) => list.map(s => {
     if (!s) return '';
     const isUp = s.pct >= 0;
-    return `<a href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank" class="stock-card">
-      <div class="sc-header">
-        <div>
-          <div class="sc-sym">${esc(s.symbol.replace('.JK', ''))}</div>
-          <div class="sc-name">${esc(s.name)}</div>
+    // The AI button is a sibling of the link, not inside it: a button nested in
+    // an anchor is invalid markup and swallows the link's own navigation.
+    return `<div class="stock-card">
+      <a class="sc-body" href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank">
+        <div class="sc-header">
+          <div>
+            <div class="sc-sym">${esc(s.symbol.replace('.JK', ''))}</div>
+            <div class="sc-name">${esc(s.name)}</div>
+          </div>
+          <div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div>
         </div>
-        <div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div>
+        <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
+      </a>
+      <div class="sc-foot">
+        <div class="sc-fund" data-fund="${esc(s.symbol)}"></div>
+        <button type="button" class="sc-ai" data-ai="${esc(s.symbol)}" title="${esc(I18N[state.lang].fundAi.title)}">✨ ${esc(I18N[state.lang].fundAi.btn)}</button>
       </div>
-      <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
-      <div class="sc-fund" data-fund="${esc(s.symbol)}"></div>
-    </a>`;
+    </div>`;
   }).join('');
 
   const vixData = allData['^VIX'];

@@ -55,6 +55,7 @@ export default {
 
     if (url.pathname === "/ai-summarize") return handleSummarize(request, env);
     if (url.pathname === "/ai-explain-move") return handleExplainMove(request, env);
+    if (url.pathname === "/ai-fundamentals") return handleFundamentals(request, env);
     if (url.pathname === "/health") return json({ ok: true, model: GEMINI_MODEL });
 
     return handleProxy(request, url, ctx);
@@ -347,6 +348,44 @@ Every one of these rules is mandatory:
 3. Never invent events, people, numbers, quotes or dates. No company news that is not in the headlines.
 4. If no headline plausibly explains the move, do not speculate. Reply with exactly: "No headline today explains this move. Most discussed story: <title of the most relevant headline>. Watch the company's filings and disclosures for the reason."
 5. No preamble, no title, no disclaimer.`;
+
+  try {
+    const summary = await callGemini(prompt, env.GEMINI_API_KEY);
+    return json({ summary });
+  } catch (error) {
+    return json({ error: error.message }, 502);
+  }
+}
+async function handleFundamentals(request, env) {
+  if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
+  if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
+
+  const body = await readJsonBody(request);
+  if (!body) return json({ error: "Invalid JSON body" }, 400);
+
+  const symbol = readText(body.symbol, 32);
+  if (!symbol) return json({ error: "Missing 'symbol'" }, 400);
+
+  const name = readText(body.name, 80);
+  const figures = readText(body.figures, 4000);
+  if (!figures) return json({ error: "Missing 'figures'" }, 400);
+
+  const targetLang = body.lang === "id" ? "Indonesian (Bahasa Indonesia)" : "English";
+
+  const prompt = `You are an equity analyst giving a short fundamental read on ${symbol}${name ? ` (${name})` : ""}.
+
+Reported figures, one per line. The period is in [brackets]; quarters come first and are the most recent:
+${figures}
+
+Write exactly 3 sentences, 85 words maximum, in ${targetLang}:
+1. What the figures say about the business: growth, profitability, margins and cash generation.
+2. The clearest strength and the clearest weakness visible in these numbers.
+3. What to watch next, only as far as these figures hint at it (for example a margin or cash flow trend).
+
+These rules are mandatory:
+- Use only the figures above. Never add debt, dividends, guidance, valuation opinions, price targets, news or anything not listed.
+- Quote at most two numbers, and keep each currency marker exactly as written.
+- No buy, sell or hold recommendation, no disclaimer, no title, no preamble.`;
 
   try {
     const summary = await callGemini(prompt, env.GEMINI_API_KEY);
