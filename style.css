@@ -1492,6 +1492,12 @@ body, html {
   overflow-x: hidden; /* Stops the horizontal scrolling issue on desktop */
   width: 100%;
 }
+/* overflow-x:hidden turns body into a scroll container, which silently breaks
+   position:sticky for the floating dock. clip prevents the same side-scroll
+   without creating that scroll container. */
+@supports (overflow-x: clip) {
+  body, html { overflow-x: clip; }
+}
 
 /* Sparkline Grid Responsiveness */
 .sparkline-grid {
@@ -2261,4 +2267,185 @@ body, html {
 .pf-form .pf-cost-cur button.active { background: var(--ink); color: var(--bg); }
 @media (max-width: 560px) {
   .pf-cost { flex: 1 1 100%; }
+}
+
+/* ============================================================
+   FLOATING GLASS DOCK  (header · ticker · filters)
+   The masthead is no longer a full-bleed black bar. It is a
+   detached, frosted pill that hovers over the page, so content
+   scrolls behind it and the blur does the work. The ticker and
+   the filter bar get the same treatment so the three pieces
+   read as one floating dock instead of three stacked strips.
+   ============================================================ */
+:root{
+  --glass:rgba(255,255,255,.72);
+  --glass-soft:rgba(255,255,255,.55);
+  --glass-border:rgba(17,20,24,.10);
+  --glass-shadow:0 10px 30px rgba(15,23,42,.10);
+  --glass-inset:inset 0 1px 0 rgba(255,255,255,.70);
+  --pill-top:12px;
+  --pill-h:56px;
+  --dock-inset:16px;
+}
+[data-theme="dark"]{
+  --glass:rgba(15,23,42,.64);
+  --glass-soft:rgba(255,255,255,.06);
+  --glass-border:rgba(255,255,255,.12);
+  --glass-shadow:0 12px 34px rgba(0,0,0,.45);
+  --glass-inset:inset 0 1px 0 rgba(255,255,255,.07);
+}
+
+/* --- the pill --- */
+.masthead{
+  position:sticky;
+  top:0;
+  z-index:100;
+  padding:var(--pill-top) var(--dock-inset) 0;
+  background:transparent;
+  border-bottom:none;
+  color:var(--ink);
+}
+.masthead-inner{
+  max-width:var(--maxw);
+  margin:0 auto;
+  padding:9px 9px 9px 20px;
+  gap:14px;
+  flex-wrap:nowrap;
+  min-height:var(--pill-h);
+  border:1px solid var(--glass-border);
+  border-radius:999px;
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  backdrop-filter:blur(20px) saturate(180%);
+  box-shadow:var(--glass-shadow), var(--glass-inset);
+}
+
+/* --- contents on glass --- */
+.masthead .brand-mark{ border-radius:5px; width:15px; height:15px; }
+.masthead .brand-text{ color:var(--ink); }
+.masthead .tagline{ color:var(--muted); border-left-color:var(--rule); }
+
+.masthead .main-nav{ margin-left:0; }
+.masthead .nav-btn{
+  color:var(--muted);
+  border-radius:999px;
+  padding:8px 14px;
+}
+.masthead .nav-btn:hover{ color:var(--ink); background:var(--glass-soft); }
+.masthead .nav-btn.active{ color:var(--bg); background:var(--ink); }
+
+.masthead .btn{
+  border:1px solid var(--glass-border);
+  background:var(--glass-soft);
+  color:var(--ink);
+  border-radius:999px;
+}
+.masthead .btn:hover{ background:var(--ink); border-color:var(--ink); color:var(--bg); }
+.masthead .btn-mini{
+  width:30px; height:30px;
+  border-radius:999px;
+  background:transparent;
+  border-color:transparent;
+  font-size:17px;
+}
+.masthead .btn-mini:hover{ background:var(--ink); color:var(--bg); }
+
+.masthead .watch-box{
+  border:1px solid var(--glass-border);
+  background:var(--glass-soft);
+  border-radius:999px;
+}
+.masthead .watch-box input{ color:var(--ink); width:150px; }
+.masthead .watch-box input::placeholder{ color:var(--muted); }
+.masthead .watch-box:focus-within{ border-color:var(--ink); }
+
+.masthead .lang-toggle{
+  border:1px solid var(--glass-border);
+  background:var(--glass-soft);
+  border-radius:999px;
+}
+.masthead .lang-toggle button{ color:var(--muted); }
+.masthead .lang-toggle button + button{ border-left:1px solid var(--glass-border); }
+.masthead .lang-toggle button:hover{ color:var(--ink); background:transparent; }
+.masthead .lang-toggle button.active{ color:var(--bg); background:var(--ink); }
+
+/* watchlist chips float under the pill on their own */
+.watch-chips{ padding:10px 4px 0; }
+.chip-watch{
+  background:var(--glass);
+  border:1px solid var(--glass-border);
+  color:var(--ink-2);
+  border-radius:999px;
+  -webkit-backdrop-filter:blur(14px) saturate(160%);
+  backdrop-filter:blur(14px) saturate(160%);
+}
+.chip-watch button{ color:var(--muted); }
+.chip-watch button:hover{ color:var(--red); }
+
+/* --- ticker: a dark glass strip that slides under the pill --- */
+.ticker-wrap{
+  width:calc(100% - (var(--dock-inset) * 2));
+  max-width:var(--maxw);
+  margin:10px auto 0;
+  height:36px;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:999px;
+  background:rgba(11,13,16,.90);
+  -webkit-backdrop-filter:blur(18px) saturate(160%);
+  backdrop-filter:blur(18px) saturate(160%);
+  box-shadow:0 8px 24px rgba(15,23,42,.16), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.ticker-wrap::before{ width:46px; background:linear-gradient(90deg,rgba(11,13,16,.98),rgba(11,13,16,0)); }
+.ticker-wrap::after{ width:46px; background:linear-gradient(270deg,rgba(11,13,16,.98),rgba(11,13,16,0)); }
+.ticker-track{ padding:0 4px; }
+.tk{ padding:0 18px; }
+
+/* --- filter bar: rounded glass, docks just below the pill ---
+   It carries two rows (sources and topics), so it is a rounded
+   slab rather than a pill, with a hairline between the rows. */
+.filters{
+  position:sticky;
+  top:8px;
+  z-index:90;
+  width:calc(100% - (var(--dock-inset) * 2));
+  max-width:var(--maxw);
+  margin:10px auto 0;
+  border:1px solid var(--glass-border);
+  border-radius:22px;
+  background:var(--glass);
+  -webkit-backdrop-filter:blur(20px) saturate(180%);
+  backdrop-filter:blur(20px) saturate(180%);
+  box-shadow:var(--glass-shadow), var(--glass-inset);
+  overflow:hidden;
+}
+.filters-inner{ padding:0 8px; min-height:44px; }
+.filters-inner + .filters-inner{ border-top:1px solid var(--glass-border); }
+@media (min-width:1024px){
+  .filters{ top:calc(var(--pill-top) + var(--pill-h) + 10px); }
+}
+
+/* --- breakpoints: the pill stops being a single row --- */
+@media (max-width:1279px){
+  .masthead .tagline{ display:none; }
+}
+@media (max-width:1023px){
+  .masthead{ position:static; }
+  .masthead-inner{ flex-wrap:wrap; border-radius:26px; padding:12px 14px; gap:10px; }
+  .masthead .watch-box{ flex:1 1 150px; min-width:0; }
+  .masthead .watch-box input{ width:100%; min-width:0; }
+  .masthead .main-nav{ margin-left:0; }
+}
+
+[data-theme="dark"] .masthead{ background:transparent; border-bottom:none; }
+[data-theme="dark"] .ticker-wrap{
+  background:rgba(2,6,23,.74);
+  border-color:rgba(255,255,255,.10);
+  border-bottom:1px solid rgba(255,255,255,.10);
+}
+[data-theme="dark"] .ticker-wrap::before{ background:linear-gradient(90deg,rgba(2,6,23,.95),rgba(2,6,23,0)); }
+[data-theme="dark"] .ticker-wrap::after{ background:linear-gradient(270deg,rgba(2,6,23,.95),rgba(2,6,23,0)); }
+[data-theme="dark"] .filters{
+  background:var(--glass);
+  border-color:var(--glass-border);
+  border-bottom:1px solid var(--glass-border);
 }
