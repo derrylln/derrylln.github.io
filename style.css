@@ -1297,7 +1297,9 @@ button{ font-family:inherit; }
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(15, 23, 42, 0.42);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  backdrop-filter: blur(8px) saturate(1.2);
   z-index: 200;
 }
 .ai-modal.open { display: flex; }
@@ -1305,10 +1307,16 @@ button{ font-family:inherit; }
   width: min(520px, 100%);
   max-height: 82vh;
   overflow: auto;
+  overscroll-behavior: contain;
   background: #fff;
-  border-radius: 6px;
-  padding: 20px 22px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.28);
+  border: 1px solid var(--glass-border);
+  border-radius: 26px;
+  padding: 24px 26px;
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.24), 0 2px 6px rgba(15, 23, 42, 0.06);
+}
+@media (max-width: 560px) {
+  .ai-modal { padding: 14px; }
+  .ai-modal-card { border-radius: 22px; padding: 20px 18px; max-height: 86vh; }
 }
 .ai-modal-head {
   display: flex;
@@ -1326,10 +1334,19 @@ button{ font-family:inherit; }
   color: var(--muted);
   font-size: 20px;
   line-height: 1;
-  padding: 0 2px;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0;
+  margin: -4px -6px 0 0;
+  flex: none;
   cursor: pointer;
+  transition: color 0.15s, background 0.15s;
 }
-.ai-modal-close:hover { color: var(--ink); }
+.ai-modal-close:hover { color: var(--ink); background: var(--glass-soft); }
 .ai-modal-body { font-size: 13.5px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; }
 .ai-modal-note {
   margin-top: 14px;
@@ -1338,7 +1355,9 @@ button{ font-family:inherit; }
   font-size: 10.5px;
   color: var(--muted);
 }
-[data-theme="dark"] .ai-modal-card { background: #111827; }
+[data-theme="dark"] .ai-modal-card { background: #111827; border-color: rgba(148, 163, 184, 0.18); }
+[data-theme="dark"] .ai-modal { background: rgba(2, 6, 23, 0.62); }
+[data-theme="dark"] .ai-modal-close:hover { color: #e2e8f0; background: rgba(148, 163, 184, 0.16); }
 [data-theme="dark"] .ai-modal-body, [data-theme="dark"] .ai-modal-head { color: #e2e8f0; }
 [data-theme="dark"] .sc-ai { background: transparent; color: #94a3b8; border-color: rgba(148, 163, 184, 0.35); }
 
