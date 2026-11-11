@@ -1614,6 +1614,22 @@ body, html {
   text-underline-offset: 2px;
 }
 
+.sc-fund {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sc-fund span { white-space: nowrap; }
+.sc-fund span + span::before {
+  content: '·';
+  margin-right: 10px;
+  color: var(--rule-2, #cbd5e1);
+}
+
 .explain-fundamentals {
   margin-top: 10px;
   padding-top: 10px;

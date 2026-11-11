@@ -551,6 +551,139 @@ function applyChartTheme(theme) {
   });
 }
 
+/* FUNDAMENTALS
+   Yahoo's quoteSummary endpoint now demands a crumb cookie, but the public
+   fundamentals-timeseries feed does not — and it covers IDX listings too. */
+const fundCache = new Map();
+const FUND_TYPES = ['trailingMarketCap', 'trailingPeRatio', 'annualTotalRevenue', 'annualNetIncome',
+  'annualDilutedEPS', 'annualFreeCashFlow', 'annualStockholdersEquity'];
+
+async function fetchFundamentals(symbol) {
+  if (fundCache.has(symbol)) return fundCache.get(symbol);
+  const now = Math.floor(Date.now() / 1000);
+  const url = `https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}` +
+    `?symbol=${encodeURIComponent(symbol)}&type=${FUND_TYPES.join(',')}&period1=1500000000&period2=${now}`;
+  const data = JSON.parse(await fetchViaProxy(url, { timeout: 8000 }));
+  const results = (data.timeseries && data.timeseries.result) || [];
+  const series = {};
+  results.forEach(r => {
+    const type = r && r.meta && r.meta.type && r.meta.type[0];
+    if (!type) return;
+    const points = (r[type] || []).filter(v => v && v.reportedValue && isFinite(v.reportedValue.raw))
+      .map(v => ({ raw: v.reportedValue.raw, date: v.asOfDate, currency: v.currencyCode || null }))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+    if (points.length) series[type] = points;
+  });
+
+  const last = k => (series[k] ? series[k][series[k].length - 1] : null);
+  const revenue = series.annualTotalRevenue || [];
+  const revNow = last('annualTotalRevenue');
+  const revPrev = revenue.length > 1 ? revenue[revenue.length - 2] : null;
+  const netIncome = last('annualNetIncome');
+  const equity = last('annualStockholdersEquity');
+  const fund = {
+    mktCap: last('trailingMarketCap'),
+    pe: last('trailingPeRatio'),
+    revenue: revNow,
+    netIncome: netIncome,
+    eps: last('annualDilutedEPS'),
+    fcf: last('annualFreeCashFlow'),
+    revenueGrowth: (revNow && revPrev && revPrev.raw) ? ((revNow.raw / revPrev.raw) - 1) * 100 : null,
+    netMargin: (netIncome && revNow && revNow.raw) ? (netIncome.raw / revNow.raw) * 100 : null,
+    roe: (netIncome && equity && equity.raw) ? (netIncome.raw / equity.raw) * 100 : null,
+    currency: (revNow && revNow.currency) || (netIncome && netIncome.currency) || (fundCurrencySymbol(symbol))
+  };
+  fundCache.set(symbol, fund);
+  return fund;
+}
+
+function fundCurrencySymbol(symbol) { return /\.JK$/i.test(symbol) ? 'IDR' : null; }
+
+function compactNum(raw, currency) {
+  if (!isFinite(raw)) return '—';
+  const prefix = currency === 'IDR' ? 'Rp ' : currency === 'USD' ? '$' : (currency ? currency + ' ' : '');
+  const abs = Math.abs(raw);
+  if (abs >= 1e12) return prefix + (raw / 1e12).toFixed(2) + 'T';
+  if (abs >= 1e9) return prefix + (raw / 1e9).toFixed(1) + 'B';
+  if (abs >= 1e6) return prefix + (raw / 1e6).toFixed(1) + 'M';
+  return prefix + raw.toLocaleString('en-US', { maximumFractionDigits: 2 });
+}
+
+function fundamentalsHTML(fund, lang, symbol) {
+  if (!fund) return '';
+  const t = I18N[lang].fund;
+  const items = [];
+  if (fund.mktCap) items.push([t.mktCap, compactNum(fund.mktCap.raw, fund.currency)]);
+  if (fund.pe) items.push([t.pe, fund.pe.raw.toFixed(1)]);
+  if (fund.revenue) items.push([t.rev, compactNum(fund.revenue.raw, fund.currency)]);
+  if (fund.revenueGrowth !== null) items.push([t.revGrowth, (fund.revenueGrowth >= 0 ? '+' : '') + fund.revenueGrowth.toFixed(1) + '%']);
+  if (fund.netIncome) items.push([t.netIncome, compactNum(fund.netIncome.raw, fund.currency)]);
+  if (fund.netMargin !== null) items.push([t.netMargin, fund.netMargin.toFixed(1) + '%']);
+  if (fund.eps) items.push([t.eps, compactNum(fund.eps.raw, fund.currency)]);
+  if (fund.roe !== null) items.push([t.roe, fund.roe.toFixed(1) + '%']);
+  if (fund.fcf) items.push([t.fcf, compactNum(fund.fcf.raw, fund.currency)]);
+  if (!items.length) return '';
+
+  const fy = (fund.revenue && fund.revenue.date) ? t.fy + ' ' + String(fund.revenue.date).slice(0, 4) : '';
+  const cells = items.map(([label, value]) =>
+    `<div class="ef-item"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
+  return `<div class="explain-fundamentals">
+    <div class="ef-head">${esc(t.title)}${fy ? ` · ${esc(fy)}` : ''}</div>
+    <div class="ef-grid">${cells}</div>
+    <div class="ef-note">${esc(t.note)}</div>
+  </div>`;
+}
+
+
+/* Market Data shows dozens of cards, so each one asks for its own figures only
+   when it scrolls into view — three requests at a time, cached for the session. */
+const fundQueue = [];
+let fundActive = 0;
+let fundObserver = null;
+
+function hydrateCardFundamentals(root) {
+  const nodes = $$('[data-fund]', root);
+  if (!nodes.length) return;
+  if (!('IntersectionObserver' in window)) { nodes.forEach(queueCardFundamentals); return; }
+  if (!fundObserver) {
+    fundObserver = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        fundObserver.unobserve(entry.target);
+        queueCardFundamentals(entry.target);
+      });
+    }, { rootMargin: '200px' });
+  }
+  nodes.forEach(node => fundObserver.observe(node));
+}
+
+function queueCardFundamentals(node) {
+  fundQueue.push(node);
+  drainFundQueue();
+}
+
+function drainFundQueue() {
+  while (fundActive < 3 && fundQueue.length) {
+    const node = fundQueue.shift();
+    fundActive++;
+    fetchFundamentals(node.getAttribute('data-fund'))
+      .then(fund => renderCardFundamentals(node, fund))
+      .catch(() => { node.innerHTML = ''; })
+      .finally(() => { fundActive--; drainFundQueue(); });
+  }
+}
+
+function renderCardFundamentals(node, fund) {
+  if (!node.isConnected) return;
+  const t = I18N[state.lang].fund;
+  const bits = [];
+  if (fund.pe) bits.push(t.pe + ' ' + fund.pe.raw.toFixed(1));
+  if (fund.mktCap) bits.push(compactNum(fund.mktCap.raw, fund.currency));
+  if (fund.roe !== null) bits.push(t.roe + ' ' + fund.roe.toFixed(0) + '%');
+  if (!bits.length) { node.innerHTML = ''; return; }
+  node.innerHTML = bits.map(b => '<span>' + esc(b) + '</span>').join('');
+}
+
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
   destroyCharts();
@@ -658,6 +791,7 @@ async function loadMarketDashboard() {
         <div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div>
       </div>
       <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
+      <div class="sc-fund" data-fund="${esc(s.symbol)}"></div>
     </a>`;
   }).join('');
 
@@ -758,6 +892,7 @@ async function loadMarketDashboard() {
     
     ${macroPanelHtml}
   `;
+  hydrateCardFundamentals(dash);
 
   if (typeof ApexCharts !== 'undefined') {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
@@ -1575,89 +1710,6 @@ function bindUI() {
   function headlineLine(n) {
     const age = n.ts ? new Date(n.ts).toISOString().slice(0, 10) : '';
     return `- [${n.publisher}] ${n.title}${age ? ` (${age})` : ''}`;
-  }
-
-  /* FUNDAMENTALS
-     Yahoo's quoteSummary endpoint now demands a crumb cookie, but the public
-     fundamentals-timeseries feed does not — and it covers IDX listings too. */
-  const fundCache = new Map();
-  const FUND_TYPES = ['trailingMarketCap', 'trailingPeRatio', 'annualTotalRevenue', 'annualNetIncome',
-    'annualDilutedEPS', 'annualFreeCashFlow', 'annualStockholdersEquity'];
-
-  async function fetchFundamentals(symbol) {
-    if (fundCache.has(symbol)) return fundCache.get(symbol);
-    const now = Math.floor(Date.now() / 1000);
-    const url = `https://query2.finance.yahoo.com/ws/fundamentals-timeseries/v1/finance/timeseries/${encodeURIComponent(symbol)}` +
-      `?symbol=${encodeURIComponent(symbol)}&type=${FUND_TYPES.join(',')}&period1=1500000000&period2=${now}`;
-    const data = JSON.parse(await fetchViaProxy(url, { timeout: 8000 }));
-    const results = (data.timeseries && data.timeseries.result) || [];
-    const series = {};
-    results.forEach(r => {
-      const type = r && r.meta && r.meta.type && r.meta.type[0];
-      if (!type) return;
-      const points = (r[type] || []).filter(v => v && v.reportedValue && isFinite(v.reportedValue.raw))
-        .map(v => ({ raw: v.reportedValue.raw, date: v.asOfDate, currency: v.currencyCode || null }))
-        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
-      if (points.length) series[type] = points;
-    });
-
-    const last = k => (series[k] ? series[k][series[k].length - 1] : null);
-    const revenue = series.annualTotalRevenue || [];
-    const revNow = last('annualTotalRevenue');
-    const revPrev = revenue.length > 1 ? revenue[revenue.length - 2] : null;
-    const netIncome = last('annualNetIncome');
-    const equity = last('annualStockholdersEquity');
-    const fund = {
-      mktCap: last('trailingMarketCap'),
-      pe: last('trailingPeRatio'),
-      revenue: revNow,
-      netIncome: netIncome,
-      eps: last('annualDilutedEPS'),
-      fcf: last('annualFreeCashFlow'),
-      revenueGrowth: (revNow && revPrev && revPrev.raw) ? ((revNow.raw / revPrev.raw) - 1) * 100 : null,
-      netMargin: (netIncome && revNow && revNow.raw) ? (netIncome.raw / revNow.raw) * 100 : null,
-      roe: (netIncome && equity && equity.raw) ? (netIncome.raw / equity.raw) * 100 : null,
-      currency: (revNow && revNow.currency) || (netIncome && netIncome.currency) || (fundCurrencySymbol(symbol))
-    };
-    fundCache.set(symbol, fund);
-    return fund;
-  }
-
-  function fundCurrencySymbol(symbol) { return /\.JK$/i.test(symbol) ? 'IDR' : null; }
-
-  function compactNum(raw, currency) {
-    if (!isFinite(raw)) return '—';
-    const prefix = currency === 'IDR' ? 'Rp ' : currency === 'USD' ? '$' : (currency ? currency + ' ' : '');
-    const abs = Math.abs(raw);
-    if (abs >= 1e12) return prefix + (raw / 1e12).toFixed(2) + 'T';
-    if (abs >= 1e9) return prefix + (raw / 1e9).toFixed(1) + 'B';
-    if (abs >= 1e6) return prefix + (raw / 1e6).toFixed(1) + 'M';
-    return prefix + raw.toLocaleString('en-US', { maximumFractionDigits: 2 });
-  }
-
-  function fundamentalsHTML(fund, lang, symbol) {
-    if (!fund) return '';
-    const t = I18N[lang].fund;
-    const items = [];
-    if (fund.mktCap) items.push([t.mktCap, compactNum(fund.mktCap.raw, fund.currency)]);
-    if (fund.pe) items.push([t.pe, fund.pe.raw.toFixed(1)]);
-    if (fund.revenue) items.push([t.rev, compactNum(fund.revenue.raw, fund.currency)]);
-    if (fund.revenueGrowth !== null) items.push([t.revGrowth, (fund.revenueGrowth >= 0 ? '+' : '') + fund.revenueGrowth.toFixed(1) + '%']);
-    if (fund.netIncome) items.push([t.netIncome, compactNum(fund.netIncome.raw, fund.currency)]);
-    if (fund.netMargin !== null) items.push([t.netMargin, fund.netMargin.toFixed(1) + '%']);
-    if (fund.eps) items.push([t.eps, compactNum(fund.eps.raw, fund.currency)]);
-    if (fund.roe !== null) items.push([t.roe, fund.roe.toFixed(1) + '%']);
-    if (fund.fcf) items.push([t.fcf, compactNum(fund.fcf.raw, fund.currency)]);
-    if (!items.length) return '';
-
-    const fy = (fund.revenue && fund.revenue.date) ? t.fy + ' ' + String(fund.revenue.date).slice(0, 4) : '';
-    const cells = items.map(([label, value]) =>
-      `<div class="ef-item"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`).join('');
-    return `<div class="explain-fundamentals">
-      <div class="ef-head">${esc(t.title)}${fy ? ` · ${esc(fy)}` : ''}</div>
-      <div class="ef-grid">${cells}</div>
-      <div class="ef-note">${esc(t.note)}</div>
-    </div>`;
   }
 
   // AI EXPLAIN MOVE LOGIC
