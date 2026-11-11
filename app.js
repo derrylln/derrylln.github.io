@@ -107,7 +107,11 @@ const I18N = {
       curLabel: 'Show in', curAuto: 'Auto', costIn: 'Cost in',
       notFound: 'No price found for {sym}. Check the ticker — IDX stocks need .JK, e.g. CUAN.JK.',
       unresolved: 'No price found',
-      fxNote: 'Converted at 1 USD = {rate}'
+      fxNote: 'Converted at 1 USD = {rate}',
+      today: 'Today', details: 'Details', aiRead: 'AI fundamental read', whyMoved: 'Why it moved',
+      loadingFund: 'Loading fundamentals…', newsTitle: 'News on your holdings',
+      whyNoNews: 'No news about {sym} today. Check the company filings for the reason.',
+      whyFailed: 'No analysis came back. Try again.'
     },
     fund: {
       title: 'Fundamentals', mktCap: 'Market cap', pe: 'P/E', rev: 'Revenue', revGrowth: 'Revenue growth',
@@ -145,7 +149,11 @@ const I18N = {
       curLabel: 'Tampilkan dalam', curAuto: 'Otomatis', costIn: 'Harga dalam',
       notFound: 'Harga {sym} tidak ditemukan. Periksa ticker — saham IDX perlu .JK, mis. CUAN.JK.',
       unresolved: 'Harga tidak ditemukan',
-      fxNote: 'Dikonversi pada 1 USD = {rate}'
+      fxNote: 'Dikonversi pada 1 USD = {rate}',
+      today: 'Hari ini', details: 'Rincian', aiRead: 'Analisis fundamental AI', whyMoved: 'Kenapa berubah',
+      loadingFund: 'Memuat fundamental…', newsTitle: 'Berita emiten Anda',
+      whyNoNews: 'Belum ada berita {sym} hari ini. Periksa laporan perusahaan untuk penyebabnya.',
+      whyFailed: 'Analisis tidak tersedia. Coba lagi.'
     },
     fund: {
       title: 'Fundamental', mktCap: 'Kap. pasar', pe: 'P/E', rev: 'Pendapatan', revGrowth: 'Pertumbuhan pendapatan',
@@ -404,6 +412,7 @@ function currentArticles() {
 }
 
 function render() {
+  renderHoldingsNews();
   const heroEl = $('#hero'), gridEl = $('#grid'), t = I18N[state.lang]; const list = currentArticles();
   if (!list.length) { if (heroEl) heroEl.innerHTML = ''; if (gridEl) gridEl.innerHTML = `<div class="empty">${esc(t.noArticles)}</div>`; return; }
   
@@ -1253,6 +1262,111 @@ function pfPrice(value, currency) {
 }
 function pfPctText(value) { return (value == null || !isFinite(value)) ? '' : (value > 0 ? '+' : '') + value.toFixed(2) + '%'; }
 
+/* Which holdings are expanded, and the panels already built for them. The
+   table is re-rendered on every quote refresh, so answer text and the
+   fundamentals block are kept as HTML rather than thrown away each time. */
+const pfOpen = new Set();
+const pfDetail = {};
+function pfDetailOf(symbol) {
+  if (!pfDetail[symbol]) pfDetail[symbol] = { fund: '', why: '' };
+  return pfDetail[symbol];
+}
+
+function pfDetailRowHtml(symbol) {
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const d = pfDetailOf(symbol);
+  const open = pfOpen.has(symbol);
+  return `
+    <tr class="pf-detail" data-pf-detail="${esc(symbol)}"${open ? '' : ' hidden'}>
+      <td colspan="7">
+        <div class="pf-detail-inner">
+          <div class="pf-detail-actions">
+            <button type="button" class="pf-act" data-pf-read="${esc(symbol)}">✨ ${esc(p.aiRead)}</button>
+            <button type="button" class="pf-act" data-pf-why="${esc(symbol)}">✨ ${esc(p.whyMoved)}</button>
+          </div>
+          <div class="pf-why-out" data-pf-why-out="${esc(symbol)}"${d.why ? '' : ' hidden'}>${d.why}</div>
+          <div class="pf-fund-out" data-pf-fund-out="${esc(symbol)}">${d.fund}</div>
+        </div>
+      </td>
+    </tr>`;
+}
+
+function pfToggleDetail(symbol) {
+  const row = document.querySelector('[data-pf-detail="' + symbol + '"]');
+  const btn = document.querySelector('[data-pf-open="' + symbol + '"]');
+  if (!row) return;
+  const open = !pfOpen.has(symbol);
+  if (open) pfOpen.add(symbol); else pfOpen.delete(symbol);
+  row.hidden = !open;
+  if (btn) { btn.classList.toggle('open', open); btn.setAttribute('aria-expanded', open ? 'true' : 'false'); }
+  if (open) pfLoadFund(symbol);
+}
+
+/* Fundamentals for a holding are fetched only when its row is opened — the
+   same feed that powers a Market Data card, in the same panel. */
+function pfLoadFund(symbol) {
+  const d = pfDetailOf(symbol);
+  if (d.fund) return;
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const out = document.querySelector('[data-pf-fund-out="' + symbol + '"]');
+  if (out) out.innerHTML = `<div class="pf-fund-loading">${esc(p.loadingFund)}</div>`;
+  fetchFundamentals(symbol)
+    .then(function (fund) {
+      const html = fundamentalsHTML(fund, state.lang, symbol);
+      d.fund = html || `<div class="pf-fund-loading">${esc(I18N[state.lang].fund.noData)}</div>`;
+      const node = document.querySelector('[data-pf-fund-out="' + symbol + '"]');
+      if (node) node.innerHTML = d.fund;
+    })
+    .catch(function () {
+      d.fund = '';
+      const node = document.querySelector('[data-pf-fund-out="' + symbol + '"]');
+      if (node) node.innerHTML = '';
+    });
+}
+
+/* Headlines that name a company you actually own, so the Markets view also
+   answers "is anything happening at my companies" without leaving the page. */
+function pfHoldingTerms() {
+  const terms = [];
+  portfolio.forEach(function (h) {
+    const code = h.symbol.replace(/\.JK$/i, '').toLowerCase();
+    if (code.length > 1) terms.push({ symbol: h.symbol, term: code });
+    const q = pfQuotes[h.symbol];
+    const name = (q && q.name) ? String(q.name).toLowerCase().trim() : '';
+    if (name.length > 3) terms.push({ symbol: h.symbol, term: name });
+  });
+  return terms;
+}
+
+function renderHoldingsNews() {
+  const host = $('#pfNewsPanel'); if (!host) return;
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  if (!portfolio.length) { host.innerHTML = ''; return; }
+  const terms = pfHoldingTerms();
+  const seen = new Set(); const items = [];
+  state.articles.forEach(function (a) {
+    const text = ((a.title || '') + ' ' + (a.summary || '')).toLowerCase();
+    const hit = terms.filter(function (t) { return text.indexOf(t.term) !== -1; })[0];
+    if (!hit) return;
+    const key = (a.title || '').toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    items.push({ a: a, symbol: hit.symbol });
+  });
+  if (!items.length) { host.innerHTML = ''; return; }
+  items.sort(function (x, y) { return (y.a.ts || 0) - (x.a.ts || 0); });
+  host.innerHTML = `<div class="modern-card pf-news-card">
+    <div class="card-title"><span>${esc(p.newsTitle)}</span></div>
+    <ul class="pf-news-list">${items.slice(0, 5).map(function (it) {
+      const a = it.a;
+      const meta = [a.sourceLabel || 'FINWIRE', a.ts ? timeAgo(a.ts, state.lang) : ''].filter(Boolean).join(' · ');
+      return `<li><a href="${esc(a.link || '#')}" target="_blank" rel="noopener noreferrer">
+        <span class="pf-news-sym">${esc(it.symbol.replace(/\.JK$/i, ''))}</span>${esc(a.title || '')}</a>
+        <span class="pf-news-meta">${esc(meta)}</span></li>`;
+    }).join('')}</ul>
+  </div>`;
+}
+
 function pfRate() { return (pfFx && isFinite(pfFx.rate) && pfFx.rate > 0) ? pfFx.rate : null; }
 
 function pfConvert(amount, from, to) {
@@ -1434,7 +1548,8 @@ function renderPortfolio() {
         <div id="pfMsg" class="pf-msg"></div>
         <div id="portfolioBody"></div>
         <p class="pf-note">${esc(p.note)}</p>
-      </div>`;
+      </div>
+      <div id="pfNewsPanel"></div>`;
     host.dataset.ready = '1';
   }
 
@@ -1452,14 +1567,24 @@ function renderPortfolio() {
   const summaryHtml = groups.map(function (cur) {
     const rows = views.filter(function (row) { return row.v.target === cur; });
     let value = 0, cost = 0, priced = 0, pending = false;
+    let day = 0, dayBase = 0, dayCount = 0;
     rows.forEach(function (row) {
       if (row.v.pending) pending = true;
       if (row.v.cost != null) cost += row.v.cost;
       if (row.v.value != null) { value += row.v.value; priced++; }
+      // Today's move in money: back out yesterday's close from the day %.
+      const pct = (row.v.q && isFinite(row.v.q.pct)) ? row.v.q.pct : null;
+      if (row.v.value != null && pct != null && (1 + pct / 100) > 0) {
+        const prev = row.v.value / (1 + pct / 100);
+        day += row.v.value - prev; dayBase += prev; dayCount++;
+      }
     });
     const pl = (priced && !pending) ? value - cost : null;
     const plPct = (pl != null && cost > 0) ? (pl / cost) * 100 : null;
     const plClass = pl == null ? '' : (pl >= 0 ? 'up' : 'down');
+    const dayPct = (dayCount && dayBase > 0) ? (day / dayBase) * 100 : null;
+    const dayClass = dayCount ? (day >= 0 ? 'up' : 'down') : '';
+    const dayText = dayCount ? pfSignedMoney(day, cur) + ' (' + pfPctText(dayPct) + ')' : (pending ? '…' : '—');
     const valueText = pending ? '…' : (priced ? pfMoney(value, cur) : '—');
     const tag = (groups.length > 1 || pfCurMode !== 'auto') ? `<div class="pf-cur-tag">${cur}</div>` : '';
     return `
@@ -1469,6 +1594,7 @@ function renderPortfolio() {
           <div class="pf-stat"><span>${esc(p.marketValue)}</span><strong>${valueText}</strong></div>
           <div class="pf-stat"><span>${esc(p.costBasis)}</span><strong>${pending ? '…' : pfMoney(cost, cur)}</strong></div>
           <div class="pf-stat"><span>${esc(p.totalPl)}</span><strong class="${plClass}">${pl == null ? (pending ? '…' : '—') : pfSignedMoney(pl, cur) + ' (' + pfPctText(plPct) + ')'}</strong></div>
+          <div class="pf-stat"><span>${esc(p.today)}</span><strong class="${dayClass}">${dayText}</strong></div>
         </div>
       </div>`;
   }).join('') + (pfRate() && pfNeedsFx() ? `<p class="pf-fx">${esc((p.fxNote || '').replace('{rate}', pfMoney(pfRate(), 'IDR')))}</p>` : '');
@@ -1489,8 +1615,11 @@ function renderPortfolio() {
         <td class="num">${lastCell}</td>
         <td class="num">${valueCell}</td>
         <td class="num ${cls}">${plCell}</td>
-        <td class="num"><button type="button" class="pf-remove" data-pf-remove="${esc(h.symbol)}" aria-label="${esc(p.remove)}" title="${esc(p.remove)}">×</button></td>
-      </tr>`;
+        <td class="num"><div class="pf-row-actions">
+          <button type="button" class="pf-open${pfOpen.has(h.symbol) ? ' open' : ''}" data-pf-open="${esc(h.symbol)}" aria-expanded="${pfOpen.has(h.symbol) ? 'true' : 'false'}" aria-label="${esc(p.details)}" title="${esc(p.details)}">⌄</button>
+          <button type="button" class="pf-remove" data-pf-remove="${esc(h.symbol)}" aria-label="${esc(p.remove)}" title="${esc(p.remove)}">×</button>
+        </div></td>
+      </tr>${pfDetailRowHtml(h.symbol)}`;
   }).join('');
 
   body.innerHTML = `${summaryHtml}
@@ -1503,6 +1632,9 @@ function renderPortfolio() {
         <tbody>${rowsHtml}</tbody>
       </table>
     </div>`;
+
+  pfOpen.forEach(pfLoadFund);
+  renderHoldingsNews();
 }
 
 function pfNeedsQuote(symbol, force) {
@@ -1697,6 +1829,53 @@ function bindUI() {
   }
   // -----------------------------------------
 
+  /* Why a holding moved — the same news-grounded answer Market Movers gives,
+     built from the ticker's own headlines rather than the macro feed. */
+  async function pfWhyMoved(symbol) {
+    const p = (I18N[state.lang] || I18N.en).portfolio;
+    const out = document.querySelector('[data-pf-why-out="' + symbol + '"]');
+    if (!out) return;
+    out.hidden = false;
+    const q = pfQuotes[symbol] || {};
+    const pct = isFinite(q.pct) ? q.pct : 0;
+    const stop = startClock(out, '✨ ' + p.whyMoved + '…');
+    try {
+      const items = await fetchTickerNews(symbol);
+      const terms = [symbol.replace(/\.JK$/i, '').toLowerCase(), String(q.name || '').toLowerCase()].filter(t => t.length > 1);
+      const related = state.articles.filter(a => {
+        const text = ((a.title || '') + ' ' + (a.summary || '')).toLowerCase();
+        return terms.some(term => text.includes(term));
+      }).slice(0, 4);
+      const seen = new Set(); const lines = []; const sources = [];
+      items.forEach(n => {
+        const key = n.title.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key); sources.push(n); lines.push(headlineLine(n));
+      });
+      related.forEach(a => {
+        const key = (a.title || '').toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        sources.push({ publisher: a.sourceLabel || 'FINWIRE', link: a.link || '' });
+        lines.push('- [' + (a.sourceLabel || 'FINWIRE') + '] ' + a.title);
+      });
+      if (!lines.length) { out.textContent = p.whyNoNews.replace('{sym}', symbol.replace(/\.JK$/i, '')); return; }
+      const data = await aiRequest('/ai-explain-move', {
+        symbol: symbol.replace(/\.JK$/i, ''), pct: pct, isUp: pct >= 0, lang: state.lang, newsText: lines.join('\n')
+      });
+      if (!data || !data.summary) { out.textContent = p.whyFailed; return; }
+      const summary = data.summary.trim().replace(/^no specific news found,?\s*(but\s+)?(likely\s+)?(due\s+)?to\s*/i, '');
+      const links = sources.slice(0, 3).map(n => n.link
+        ? '<a href="' + esc(n.link) + '" target="_blank" rel="noopener noreferrer">' + esc(n.publisher) + '</a>'
+        : esc(n.publisher)).join(' · ');
+      out.innerHTML = '<strong>' + esc(p.whyMoved) + ':</strong> ' + esc(summary) +
+        (links ? '<div class="explain-sources">Sources: ' + links + '</div>' : '');
+      pfDetailOf(symbol).why = out.innerHTML;
+    } catch (err) {
+      out.textContent = aiErrorText(err);
+    } finally { stop(); }
+  }
+
   const pfHost = $('#portfolioPanel');
   if (pfHost) {
     pfHost.addEventListener('submit', (e) => {
@@ -1712,6 +1891,17 @@ function bindUI() {
       if (curBtn) { setPfCurrencyMode(curBtn.getAttribute('data-pf-cur')); return; }
       const inBtn = e.target.closest('[data-pf-in]');
       if (inBtn) { setPfInputCurrency(inBtn.getAttribute('data-pf-in')); return; }
+      const openBtn = e.target.closest('[data-pf-open]');
+      if (openBtn) { pfToggleDetail(openBtn.getAttribute('data-pf-open')); return; }
+      const readBtn = e.target.closest('[data-pf-read]');
+      if (readBtn) {
+        const sym = readBtn.getAttribute('data-pf-read');
+        const q = pfQuotes[sym] || {};
+        openFundAi(sym, q.name || sym.replace(/\.JK$/i, ''));
+        return;
+      }
+      const whyBtn = e.target.closest('[data-pf-why]');
+      if (whyBtn) { pfWhyMoved(whyBtn.getAttribute('data-pf-why')); return; }
       const removeBtn = e.target.closest('[data-pf-remove]');
       if (!removeBtn) return;
       removeHolding(removeBtn.getAttribute('data-pf-remove'));
