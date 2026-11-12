@@ -158,6 +158,7 @@ const I18N = {
     fund: {
       title: 'Fundamentals', mktCap: 'Market cap', pe: 'P/E', rev: 'Revenue', revGrowth: 'Revenue growth',
       yoy: 'Revenue YoY', netIncome: 'Net income', netMargin: 'Net margin', eps: 'EPS', roe: 'ROE',
+      equity: 'Shareholders’ equity', annualised: 'annualised',
       fcf: 'Free cash flow', fy: 'FY', period: 'Reporting period', note: 'Yahoo Finance',
       converted: r => `Statement in USD, converted at Rp ${r}/USD`, reportedIn: c => `Statement reported in ${c}`,
       noData: 'No figures reported for this period.'
@@ -245,6 +246,7 @@ const I18N = {
     fund: {
       title: 'Fundamental', mktCap: 'Kap. pasar', pe: 'P/E', rev: 'Pendapatan', revGrowth: 'Pertumbuhan pendapatan',
       yoy: 'Pendapatan YoY', netIncome: 'Laba bersih', netMargin: 'Margin bersih', eps: 'EPS', roe: 'ROE',
+      equity: 'Ekuitas pemegang saham', annualised: 'disetahunkan',
       fcf: 'Arus kas bebas', fy: 'TA', period: 'Periode laporan', note: 'Yahoo Finance',
       converted: r => `Laporan dalam USD, dikonversi Rp ${r}/USD`, reportedIn: c => `Laporan dalam ${c}`,
       noData: 'Tidak ada angka untuk periode ini.'
@@ -1191,6 +1193,16 @@ async function paintFinBody() {
   if (!list.length) { body.innerHTML = '<div class="fin-empty">' + esc(t.noData) + '</div>'; return; }
 
   const val = p => (p && isFinite(p.raw)) ? compactNum(p.raw, p.currency) : '—';
+  /* Equity is reported every period; return on it is only meaningful once a
+     quarter is put on a yearly footing, so a quarter is annualised and said so. */
+  const roeOf = function (p) {
+    if (!p || !p.netIncome || !p.equity || !isFinite(p.netIncome.raw) || !isFinite(p.equity.raw) || !p.equity.raw) return null;
+    return (p.netIncome.raw / p.equity.raw) * (p.kind === 'Q' ? 4 : 1) * 100;
+  };
+  const roeText = function (p) {
+    const roe = roeOf(p);
+    return roe == null ? '—' : roe.toFixed(1) + '%';
+  };
   const newest = list[0];
   const per = periodLabel(newest, f);
   const tile = function (label, value, sub, growth) {
@@ -1207,6 +1219,8 @@ async function paintFinBody() {
       tile(f.netIncome, val(newest.netIncome), newest.margin == null ? per : per + ' · ' + newest.margin.toFixed(1) + '% ' + f.netMargin, null) +
       tile(f.eps, val(newest.eps), per, null) +
       tile(f.fcf, val(newest.fcf), per, null) +
+      tile(f.equity, val(newest.equity), per, null) +
+      tile(f.roe, roeText(newest), newest.kind === 'Q' ? per + ' · ' + f.annualised : per, null) +
     '</div>' +
     '<div class="fin-charts">' +
       '<div class="fin-chart"><h3>' + esc(t.chartRevenue) + '</h3><div class="fin-chart-meta">' +
@@ -1217,7 +1231,7 @@ async function paintFinBody() {
     '<div class="fin-table-wrap"><table class="fin-table"><thead><tr>' +
       '<th>' + esc(f.period) + '</th><th>' + esc(f.rev) + '</th><th>' + esc(f.revGrowth) + '</th>' +
       '<th>' + esc(f.netIncome) + '</th><th>' + esc(f.netMargin) + '</th><th>' + esc(f.eps) + '</th>' +
-      '<th>' + esc(f.fcf) + '</th></tr></thead><tbody>' +
+      '<th>' + esc(f.fcf) + '</th><th>' + esc(f.equity) + '</th><th>' + esc(f.roe) + '</th></tr></thead><tbody>' +
       list.map(function (p) {
         const g = p.growth;
         return '<tr><td>' + esc(periodLabel(p, f)) + '</td>' +
@@ -1227,7 +1241,9 @@ async function paintFinBody() {
           '<td>' + esc(val(p.netIncome)) + '</td>' +
           '<td>' + (p.margin == null ? '—' : p.margin.toFixed(1) + '%') + '</td>' +
           '<td>' + esc(val(p.eps)) + '</td>' +
-          '<td>' + esc(val(p.fcf)) + '</td></tr>';
+          '<td>' + esc(val(p.fcf)) + '</td>' +
+          '<td>' + esc(val(p.equity)) + '</td>' +
+          '<td>' + esc(roeText(p)) + '</td></tr>';
       }).join('') +
     '</tbody></table></div>';
   paintFinCharts(list.slice().reverse(), f);
