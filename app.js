@@ -115,7 +115,7 @@ const I18N = {
     stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.',
     market: {
       gauges: 'Markets at a glance',
-      performance: 'Performance', performanceSub: 'IHSG and the S&P 500, indexed to the start of the period',
+      performance: 'Performance', performanceSub: 'Selected indexes in their own currency, indexed to the start of the period',
       movers: 'Top movers', gainers: 'Gainers', losers: 'Losers',
       mostActive: 'Most active', watch: 'Market watch', rates: 'Rates & volatility',
       coverage: 'Coverage', coverageSub: 'Open a card for its fundamentals and the AI read',
@@ -152,7 +152,7 @@ const I18N = {
       holdingsTitle: 'Holdings', holdingsSub: 'Open a row for fundamentals and the AI read',
       filterLabel: 'Filter holdings', filterAll: 'All',
       trendEmpty: 'Add a holding to chart performance.', loadingTrend: 'Rebuilding your trend…',
-      chartNote: 'Rebuilt from your holdings as they stand today, at the current exchange rate — not a recorded portfolio history.',
+      chartNote: 'Rebuilt from your holdings as they stand today — not a recorded portfolio history. Index lines are converted at each day’s rate.',
       chartNoteFx: 'Converted at 1 USD = {rate}.'
     },
     fund: {
@@ -198,7 +198,7 @@ const I18N = {
     stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.',
     market: {
       gauges: 'Pasar sekilas',
-      performance: 'Kinerja', performanceSub: 'IHSG dan S&P 500, diindeks dari awal periode',
+      performance: 'Kinerja', performanceSub: 'Indeks terpilih dalam mata uangnya sendiri, diindeks dari awal periode',
       movers: 'Penggerak teratas', gainers: 'Naik', losers: 'Turun',
       mostActive: 'Teraktif', watch: 'Pantauan pasar', rates: 'Suku bunga & volatilitas',
       coverage: 'Liputan', coverageSub: 'Buka kartu untuk fundamental dan analisis AI',
@@ -235,7 +235,7 @@ const I18N = {
       holdingsTitle: 'Kepemilikan', holdingsSub: 'Buka baris untuk fundamental dan analisis AI',
       filterLabel: 'Saring kepemilikan', filterAll: 'Semua',
       trendEmpty: 'Tambahkan posisi untuk melihat grafik kinerja.', loadingTrend: 'Menyusun tren Anda…',
-      chartNote: 'Disusun ulang dari posisi Anda hari ini, dengan kurs saat ini — bukan riwayat portofolio yang tercatat.',
+      chartNote: 'Disusun ulang dari posisi Anda hari ini — bukan riwayat portofolio yang tercatat. Garis indeks dikonversi pada kurs harian.',
       chartNoteFx: 'Dikonversi pada 1 USD = {rate}.'
     },
     fund: {
@@ -804,6 +804,10 @@ function setMarketView(view) {
   if (state.marketView === 'explore') {
     const dash = document.getElementById('stockDashboard');
     if (dash && !dash.dataset.loaded) loadMarketDashboard();
+  } else {
+    /* A chart built while its panel was hidden measures zero width, so the
+       trend is drawn again the moment the holdings view is back on screen. */
+    setTimeout(renderPortfolio, 0);
   }
 }
 
@@ -936,16 +940,68 @@ function pctSeries(points) {
   return clean.map(p => ({ x: p.x, y: ((p.y / base) - 1) * 100 }));
 }
 
-function setBenchLegend(ihsg, spx) {
-  const last = series => (series && series.length) ? series[series.length - 1].y : null;
-  const paint = (id, value) => {
-    const el = document.getElementById(id); if (!el) return;
-    if (value == null || !isFinite(value)) { el.textContent = '—'; el.className = ''; return; }
-    el.textContent = (value > 0 ? '+' : '') + value.toFixed(2) + '%';
-    el.className = value >= 0 ? 'up' : 'down';
-  };
-  paint('benchIhsgLeg', last(ihsg));
-  paint('benchSpxLeg', last(spx));
+function pfBenchChipsHtml() {
+  return PF_BENCH.map(function (b) {
+    const on = pfBenchSel.indexOf(b.id) !== -1;
+    return `<button type="button" class="pf-bench${on ? ' active' : ''}" data-pf-bench="${b.id}" aria-pressed="${on ? 'true' : 'false'}"><i style="background:${b.color}"></i>${esc(b.label)} <b>—</b></button>`;
+  }).join('');
+}
+
+function pfToggleBench(id) {
+  const at = pfBenchSel.indexOf(id);
+  if (at === -1) pfBenchSel.push(id);
+  else if (pfBenchSel.length > 1) pfBenchSel.splice(at, 1);
+  saveJSON(PF_BENCH_KEY, pfBenchSel);
+}
+
+/* The explore board draws the same indexes, so it keeps its own histories and
+   redraws only its chart when a chip changes — reloading the whole board for a
+   toggle would cost another sixty quotes. */
+let marketBenchRange = '6mo';
+const mktBenchCache = Object.create(null);
+
+function pfBenchHistories(range) {
+  const sel = PF_BENCH.filter(function (b) { return pfBenchSel.indexOf(b.id) !== -1; });
+  return Promise.all(sel.map(function (b) {
+    const cacheKey = b.symbol + '|' + range;
+    if (mktBenchCache[cacheKey]) return Promise.resolve(mktBenchCache[cacheKey]);
+    return fetchHistory(b.symbol, range).catch(function () { return []; }).then(function (list) {
+      if (list && list.length) mktBenchCache[cacheKey] = list;
+      return list || [];
+    });
+  })).then(function (lists) {
+    return sel.map(function (b, i) {
+      return { id: b.id, label: b.label, color: b.color, data: pctSeries(lists[i]) };
+    });
+  });
+}
+
+function paintBenchChips(scope, series) {
+  const root = scope || document;
+  Array.prototype.forEach.call(root.querySelectorAll('.pf-bench'), function (btn) {
+    const id = btn.getAttribute('data-pf-bench');
+    const on = pfBenchSel.indexOf(id) !== -1;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    const val = btn.querySelector('b');
+    if (!val) return;
+    const hit = (series || []).filter(function (x) { return x.id === id; })[0];
+    const last = (hit && hit.data.length) ? hit.data[hit.data.length - 1].y : null;
+    if (last == null || !isFinite(last)) { val.textContent = '—'; val.className = ''; return; }
+    val.textContent = (last > 0 ? '+' : '') + last.toFixed(2) + '%';
+    val.className = last >= 0 ? 'up' : 'down';
+  });
+}
+
+async function renderMarketBench(range) {
+  if (range) marketBenchRange = range;
+  const series = await pfBenchHistories(marketBenchRange);
+  paintBenchChips(document.getElementById('benchLegend'), series);
+  if (!benchChart) return;
+  try {
+    benchChart.updateOptions({ colors: series.map(function (x) { return x.color; }) });
+    benchChart.updateSeries(series.map(function (x) { return { name: x.label, data: x.data }; }));
+  } catch (e) {}
 }
 
 let benchChart = null;
@@ -1894,10 +1950,7 @@ async function loadMarketDashboard() {
             </div>
             <div class="chart-controls" id="benchControls">${rangeButtons}</div>
           </div>
-          <div class="mkt-legend">
-            <span class="mkt-legend-item"><i class="mkt-dot ihsg"></i>IHSG <b id="benchIhsgLeg">—</b></span>
-            <span class="mkt-legend-item"><i class="mkt-dot spx"></i>S&amp;P 500 <b id="benchSpxLeg">—</b></span>
-          </div>
+          <div class="mkt-legend" id="benchLegend">${pfBenchChipsHtml()}</div>
           <div id="benchChart"></div>
         </div>
 
@@ -2018,15 +2071,14 @@ async function loadMarketDashboard() {
       chart.render(); chartInstances.push(chart);
     });
 
+    mktBenchCache['^JKSE|6mo'] = mainChartData;
+    mktBenchCache['^GSPC|6mo'] = sp500ChartData;
     benchChart = new ApexCharts(document.getElementById('benchChart'), {
-      series: [
-        { name: 'IHSG', data: pctSeries(mainChartData) },
-        { name: 'S&P 500', data: pctSeries(sp500ChartData) }
-      ],
+      series: [],
       chart: { type: 'line', height: 236, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
       theme: chartTheme,
-      colors: ['#d10a11', '#2563eb'],
-      stroke: { curve: 'smooth', width: 2.5 },
+      colors: [],
+      stroke: { curve: 'smooth', width: 2.2 },
       dataLabels: { enabled: false },
       markers: { size: 0, hover: { size: 4 } },
       grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 },
@@ -2037,7 +2089,7 @@ async function loadMarketDashboard() {
     });
     benchChart.render();
     chartInstances.push(benchChart);
-    setBenchLegend(pctSeries(mainChartData), pctSeries(sp500ChartData));
+    renderMarketBench('6mo');
 
     const controls = document.getElementById('benchControls');
     if (controls) controls.addEventListener('click', async function (e) {
@@ -2047,11 +2099,8 @@ async function loadMarketDashboard() {
       const range = btn.getAttribute('data-range');
       const label = btn.textContent;
       btn.textContent = '…';
-      const [ihsg, spx] = await Promise.all([fetchHistory('^JKSE', range), fetchHistory('^GSPC', range)]);
+      await renderMarketBench(range);
       btn.textContent = label;
-      const ihsgSeries = pctSeries(ihsg), spxSeries = pctSeries(spx);
-      setBenchLegend(ihsgSeries, spxSeries);
-      if (benchChart) benchChart.updateSeries([{ name: 'IHSG', data: ihsgSeries }, { name: 'S&P 500', data: spxSeries }]);
     });
   }
 }
@@ -2250,13 +2299,37 @@ function renderHoldingsNews() {
 
 function pfRate() { return (pfFx && isFinite(pfFx.rate) && pfFx.rate > 0) ? pfFx.rate : null; }
 
+/* Everything converts through USD: USD/IDR comes from the quote feed the
+   portfolio already loads, and any other currency asks for its own pair the
+   first time it is needed (JPY for the Nikkei, say). */
+const pfFxExtra = Object.create(null);
+const pfFxPending = Object.create(null);
+
+function pfUnitsPerUsd(cur) {
+  if (!cur || cur === 'USD') return 1;
+  if (cur === 'IDR') return pfRate();
+  const v = pfFxExtra[cur];
+  return (isFinite(v) && v > 0) ? v : null;
+}
+
+async function pfEnsureFx(cur) {
+  if (!cur || cur === 'USD' || pfUnitsPerUsd(cur)) return pfUnitsPerUsd(cur);
+  if (pfFxPending[cur]) return null;
+  pfFxPending[cur] = true;
+  try {
+    const q = await fetchStockDetails(cur + '=X');
+    if (q && isFinite(q.price) && q.price > 0) pfFxExtra[cur] = q.price;
+  } catch (e) {}
+  pfFxPending[cur] = false;
+  return pfUnitsPerUsd(cur);
+}
+
 function pfConvert(amount, from, to) {
   if (amount == null || !isFinite(amount)) return null;
   if (!from || !to || from === to) return amount;
-  const rate = pfRate(); if (!rate) return null;
-  if (from === 'USD' && to === 'IDR') return amount * rate;
-  if (from === 'IDR' && to === 'USD') return amount / rate;
-  return null;
+  const a = pfUnitsPerUsd(from), b = pfUnitsPerUsd(to);
+  if (!a || !b) return null;
+  return (amount / a) * b;
 }
 
 function pfQuoteCurrency(quote, symbol) {
@@ -2581,7 +2654,7 @@ function pfMoveHtml(views, target) {
    the only way a rupiah portfolio and an index compare fairly. ---- */
 
 const pfTrendState = { range: '6mo', key: '', data: null };
-let pfFxPending = false;
+let pfFxBusy = false;
 let pfTrendChart = null;
 
 function pfDayKey(x) { return new Date(x).toISOString().slice(0, 10); }
@@ -2596,10 +2669,10 @@ function pfLastPct(series) {
    in their own currency, all rebased to 100 at the start of the range so a
    rupiah book and a dollar index share one axis. */
 const PF_BENCH = [
-  { id: 'ihsg', symbol: '^JKSE', label: 'IHSG', color: '#d10a11' },
-  { id: 'spx', symbol: '^GSPC', label: 'S&P 500', color: '#2563eb' },
-  { id: 'ixic', symbol: '^IXIC', label: 'Nasdaq', color: '#7c3aed' },
-  { id: 'n225', symbol: '^N225', label: 'Nikkei 225', color: '#0f766e' }
+  { id: 'ihsg', symbol: '^JKSE', label: 'IHSG', color: '#d10a11', currency: 'IDR' },
+  { id: 'spx', symbol: '^GSPC', label: 'S&P 500', color: '#2563eb', currency: 'USD' },
+  { id: 'ixic', symbol: '^IXIC', label: 'Nasdaq', color: '#7c3aed', currency: 'USD' },
+  { id: 'n225', symbol: '^N225', label: 'Nikkei 225', color: '#0f766e', currency: 'JPY' }
 ];
 const PF_BENCH_KEY = 'finwire.portfolio.bench.v1';
 let pfBenchSel = loadJSON(PF_BENCH_KEY, null);
@@ -2622,6 +2695,15 @@ async function pfLoadTrend(range, target) {
   const benchLists = await Promise.all(selected.map(function (b) {
     return fetchHistory(b.symbol, range).catch(function () { return []; });
   }));
+  /* An index quoted in rupiah and a book valued in dollars are not the same
+     unit, so each line is converted first — at that day's rate where one is
+     available, otherwise at today's — and only then rebased to 100. */
+  const fxLists = await Promise.all(selected.map(function (b) {
+    if (b.currency === target || b.currency === 'USD') return Promise.resolve([]);
+    return fetchHistory(b.currency + '=X', range).catch(function () { return []; });
+  }));
+  await Promise.all(selected.map(function (b) { return pfEnsureFx(b.currency); }));
+  const targetUnits = pfUnitsPerUsd(target);
 
   const calendar = [];
   const seen = Object.create(null);
@@ -2663,9 +2745,23 @@ async function pfLoadTrend(range, target) {
 
   const benches = selected.map(function (b, i) {
     const list = benchLists[i] || [];
-    const first = list.filter(function (p) { return p && isFinite(p.y) && p.y > 0; })[0];
-    const idx = first ? list.map(function (p) {
-      return { x: p.x, y: (p && isFinite(p.y)) ? (p.y / first.y) * 100 : null };
+    const fxMap = Object.create(null);
+    (fxLists[i] || []).forEach(function (p) {
+      if (p && isFinite(p.y) && p.y > 0) fxMap[pfDayKey(p.x)] = p.y;
+    });
+    const fallback = pfUnitsPerUsd(b.currency);
+    let lastFx = null;
+    const converted = list.map(function (p) {
+      if (!p || !isFinite(p.y) || p.y <= 0) return { x: p && p.x, y: null };
+      const day = pfDayKey(p.x);
+      if (fxMap[day] != null) lastFx = fxMap[day];
+      const units = (b.currency === 'USD') ? 1 : (lastFx || fallback);
+      if (!units || !targetUnits) return { x: p.x, y: null };
+      return { x: p.x, y: (p.y / units) * targetUnits };
+    });
+    const first = converted.filter(function (p) { return p.y != null && p.y > 0; })[0];
+    const idx = first ? converted.map(function (p) {
+      return { x: p.x, y: (p.y == null) ? null : (p.y / first.y) * 100 };
     }) : [];
     return { id: b.id, label: b.label, color: b.color, idx: idx, pct: pfLastPct(idx) };
   }).filter(function (b) { return b.idx.length > 1; });
@@ -2827,10 +2923,10 @@ function renderPortfolio() {
   /* Converting IDX positions needs a rate the quotes alone never asked for
      (every holding is priced in its own currency), so ask now and re-render
      once it lands rather than charting half the book. */
-  if (portfolio.some(function (h) { return pfCurrency(h.symbol) !== primaryCur; }) && !pfRate() && !pfFxPending) {
-    pfFxPending = true;
-    refreshFxRate(true).then(function () { pfFxPending = false; renderPortfolio(); })
-      .catch(function () { pfFxPending = false; });
+  if (portfolio.some(function (h) { return pfCurrency(h.symbol) !== primaryCur; }) && !pfRate() && !pfFxBusy) {
+    pfFxBusy = true;
+    refreshFxRate(true).then(function () { pfFxBusy = false; renderPortfolio(); })
+      .catch(function () { pfFxBusy = false; });
   }
   const paneFx = pfRate() && portfolio.some(function (h) { return pfCurrency(h.symbol) !== primaryCur; });
   /* One book, one number: everything converted into the display currency so
@@ -2901,10 +2997,7 @@ function renderPortfolio() {
       </tr>${pfDetailRowHtml(h.symbol)}`;
   }).join('');
 
-  const benchChips = PF_BENCH.map(function (b) {
-    const on = pfBenchSel.indexOf(b.id) !== -1;
-    return `<button type="button" class="pf-bench${on ? ' active' : ''}" data-pf-bench="${b.id}" aria-pressed="${on ? 'true' : 'false'}"><i style="background:${b.color}"></i>${esc(b.label)} <b>—</b></button>`;
-  }).join('');
+  const benchChipsHtml = pfBenchChipsHtml();
 
   const rangeChips = [['3mo', '3M'], ['6mo', '6M'], ['1y', '1Y']].map(function (pair) {
     const on = pfTrendState.range === pair[0];
@@ -2925,7 +3018,7 @@ function renderPortfolio() {
         ${heroStats}
         <div class="mkt-legend" id="pfTrendLegend">
           <span class="mkt-legend-item"><i class="mkt-dot pf"></i>${esc(p.portfolio)} <b id="pfTrendPort">—</b></span>
-          ${benchChips}
+          ${benchChipsHtml}
           <span class="pf-legend-note">${esc(p.perfSub)}</span>
         </div>
         <div id="pfTrendChart"><div class="pf-empty-sm">${esc(p.loadingTrend)}</div></div>
@@ -3243,6 +3336,15 @@ function bindUI() {
     } finally { stop(); }
   }
 
+  const benchDash = $('#stockDashboard');
+  if (benchDash) benchDash.addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-pf-bench]');
+    if (!btn) return;
+    pfToggleBench(btn.getAttribute('data-pf-bench'));
+    renderMarketBench();
+    renderPortfolio();
+  });
+
   const viewTabs = $('#mktViewTabs');
   if (viewTabs) viewTabs.addEventListener('click', function (e) {
     const btn = e.target.closest('[data-mkt-view]');
@@ -3268,12 +3370,9 @@ function bindUI() {
       if (rangeBtn2) { pfTrendState.range = rangeBtn2.getAttribute('data-pf-range'); renderPortfolio(); return; }
       const benchBtn = e.target.closest('[data-pf-bench]');
       if (benchBtn) {
-        const id = benchBtn.getAttribute('data-pf-bench');
-        const at = pfBenchSel.indexOf(id);
-        if (at === -1) pfBenchSel.push(id);
-        else if (pfBenchSel.length > 1) pfBenchSel.splice(at, 1);
-        saveJSON(PF_BENCH_KEY, pfBenchSel);
+        pfToggleBench(benchBtn.getAttribute('data-pf-bench'));
         renderPortfolio();
+        renderMarketBench();
         return;
       }
       const chipBtn = e.target.closest('[data-pf-filter]');
