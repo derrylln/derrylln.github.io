@@ -15,24 +15,31 @@ const LS = {
 };
 
 const SOURCES = [
-  { id: 'bloomberg', label: 'Bloomberg', color: '#111827', url: 'https://feeds.bloomberg.com/markets/news.rss' },
-  { id: 'reuters', label: 'Reuters', color: '#7c2d12', url: 'https://news.google.com/rss/search?q=when:24h+site:reuters.com/business&hl=en-US&gl=US&ceid=US:en' },
-  { id: 'marketwatch', label: 'MarketWatch', color: '#059669', url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories' },
-  { id: 'cnbc', label: 'CNBC Indonesia', color: '#e11d48', url: 'https://www.cnbcindonesia.com/market/rss' },
-  { id: 'kontan', label: 'Kontan', color: '#14532d', url: 'https://investasi.kontan.co.id/rss' },
+  { id: 'bloomberg', label: 'Bloomberg', color: '#111827', url: 'https://feeds.bloomberg.com/markets/news.rss', region: 'global' },
+  { id: 'reuters', label: 'Reuters', color: '#7c2d12', url: 'https://news.google.com/rss/search?q=when:24h+site:reuters.com/business&hl=en-US&gl=US&ceid=US:en', region: 'global' },
+  { id: 'marketwatch', label: 'MarketWatch', color: '#059669', url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', region: 'global' },
+  { id: 'cnbc', label: 'CNBC Indonesia', color: '#e11d48', url: 'https://www.cnbcindonesia.com/market/rss', region: 'id' },
+  { id: 'kontan', label: 'Kontan', color: '#14532d', url: 'https://investasi.kontan.co.id/rss', region: 'id' },
   // The Google News search for this site returns opaque redirect links with no
   // image at all; the publisher's own feed carries a photo enclosure per story.
-  { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://www.idnfinancials.com/feed' },
-  { id: 'antara', label: 'Antara Ekonomi', color: '#b91c1c', url: 'https://www.antaranews.com/rss/ekonomi' },
-  { id: 'cnn_id', label: 'CNN Ekonomi', color: '#dc2626', url: 'https://www.cnnindonesia.com/ekonomi/rss' },
+  { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://www.idnfinancials.com/feed', region: 'id' },
+  { id: 'antara', label: 'Antara Ekonomi', color: '#b91c1c', url: 'https://www.antaranews.com/rss/ekonomi', region: 'id' },
+  { id: 'cnn_id', label: 'CNN Ekonomi', color: '#dc2626', url: 'https://www.cnnindonesia.com/ekonomi/rss', region: 'id' },
   // National and political desks. A resignation, a court ruling or an impeachment
   // never reaches a business-only feed, which left the page blind to the biggest
   // story of the day.
-  { id: 'cnn_nasional', label: 'CNN Nasional', color: '#b91c1c', url: 'https://www.cnnindonesia.com/nasional/rss' },
-  { id: 'cnbc_news', label: 'CNBC News', color: '#9f1239', url: 'https://www.cnbcindonesia.com/news/rss' },
-  { id: 'antara_terkini', label: 'Antara Terkini', color: '#7f1d1d', url: 'https://www.antaranews.com/rss/terkini' },
-  { id: 'tempo_nasional', label: 'Tempo Nasional', color: '#9a3412', url: 'https://rss.tempo.co/nasional', zone: '+07:00' },
-  { id: 'tempo', label: 'Tempo Bisnis', color: '#ea580c', url: 'https://rss.tempo.co/bisnis', zone: '+07:00' }
+  { id: 'cnn_nasional', label: 'CNN Nasional', color: '#b91c1c', url: 'https://www.cnnindonesia.com/nasional/rss', region: 'id' },
+  { id: 'cnbc_news', label: 'CNBC News', color: '#9f1239', url: 'https://www.cnbcindonesia.com/news/rss', region: 'id' },
+  { id: 'antara_terkini', label: 'Antara Terkini', color: '#7f1d1d', url: 'https://www.antaranews.com/rss/terkini', region: 'id' },
+  { id: 'tempo_nasional', label: 'Tempo Nasional', color: '#9a3412', url: 'https://rss.tempo.co/nasional', zone: '+07:00', region: 'id' },
+  { id: 'tempo', label: 'Tempo Bisnis', color: '#ea580c', url: 'https://rss.tempo.co/bisnis', zone: '+07:00', region: 'id' },
+  // Global and US desks: world news, US markets and business, kept separate from
+  // the Indonesian desks by the region filter.
+  { id: 'cnbc_us', label: 'CNBC US', color: '#1e3a8a', url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html', region: 'global' },
+  { id: 'nyt_world', label: 'NYT World', color: '#0f172a', url: 'https://rss.nytimes.com/services/xml/rss/nyt/World.xml', region: 'global' },
+  { id: 'nyt_business', label: 'NYT Business', color: '#1f2937', url: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml', region: 'global' },
+  { id: 'guardian_world', label: 'Guardian World', color: '#0c4a6e', url: 'https://www.theguardian.com/world/rss', region: 'global' },
+  { id: 'wsj_us', label: 'WSJ US Business', color: '#052e16', url: 'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml', region: 'global' }
 ];
 
 const TICKERS = [
@@ -102,6 +109,7 @@ const I18N = {
     errorLabel: 'Could not load feeds.', updated: 'Updated', watch: 'Watch',
     footer: 'FINWIRE — client-side market news aggregator.', justNow: 'just now', minAgo: n => `${n}m ago`,
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
+    regions: { all: 'All regions', id: 'Indonesia', global: 'Global & US' },
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
     stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.',
     cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', politics: 'Politics', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' },
@@ -144,6 +152,7 @@ const I18N = {
     errorLabel: 'Gagal memuat feed.', updated: 'Diperbarui', watch: 'Pantau',
     footer: 'FINWIRE — agregator berita pasar berbasis klien.', justNow: 'baru saja', minAgo: n => `${n}m lalu`,
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
+    regions: { all: 'Semua wilayah', id: 'Indonesia', global: 'Global & AS' },
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
     stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.',
     cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', politics: 'Politik', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' },
@@ -181,7 +190,10 @@ const I18N = {
   }
 };
 
-const state = { articles: [], ticker: [], filter: 'all', categoryFilter: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, lastKind: '', loading: false };
+const SOURCE_BY_ID = {};
+SOURCES.forEach(function (source) { SOURCE_BY_ID[source.id] = source; });
+
+const state = { articles: [], ticker: [], filter: 'all', categoryFilter: 'all', region: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, lastKind: '', loading: false };
 
 const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.prototype.slice.call(root.querySelectorAll(sel));
@@ -618,6 +630,12 @@ function currentArticles() {
   const cutoff = Date.now() - NEWS_MAX_AGE_MS;
   let list = state.articles.filter(a => a.ts >= cutoff);
   if (state.filter !== 'all') list = list.filter(a => a.sourceId === state.filter);
+  if (state.region !== 'all') {
+    list = list.filter(function (a) {
+      const source = SOURCE_BY_ID[a.sourceId];
+      return source && source.region === state.region;
+    });
+  }
   if (state.categoryFilter !== 'all') list = list.filter(a => a.category === state.categoryFilter);
   if (state.unreadOnly) list = list.filter(a => !state.read.has(a.link));
   return list;
@@ -652,15 +670,20 @@ function updateStatusLabel(kind, ts) {
 
 function renderFilters() {
   const bar = $('#filters'); if (!bar) return; const t = I18N[state.lang];
-  const sourceChips = SOURCES.map(s => `<button type="button" class="chip${state.filter === s.id ? ' active' : ''}" data-filter="${esc(s.id)}">${esc(s.label)}</button>`).join('');
+  const regionChips = ['all', 'id', 'global'].map(r => `<button type="button" class="chip region-chip${state.region === r ? ' active' : ''}" data-region="${r}">${esc(t.regions[r])}</button>`).join('');
+  const listedSources = SOURCES.filter(s => state.region === 'all' || s.region === state.region);
+  const sourceChips = listedSources.map(s => `<button type="button" class="chip${state.filter === s.id ? ' active' : ''}" data-filter="${esc(s.id)}">${esc(s.label)}</button>`).join('');
   const catLabel = (c) => (t.cats && t.cats[c.id]) || c.label;
   const catChips = CATEGORIES.map(c => `<button type="button" class="chip cat-chip${state.categoryFilter === c.id ? ' active' : ''}" data-cat-filter="${esc(c.id)}">${esc(catLabel(c))}</button>`).join('');
 
   bar.innerHTML = `
     <div class="filters-inner" style="border-bottom: none; padding-bottom: 0;">
+      ${regionChips}<span class="spacer"></span>
+      <label class="switch"><input type="checkbox" id="unreadToggle"${state.unreadOnly ? ' checked' : ''}><span>${esc(t.unreadOnly)}</span></label>
+    </div>
+    <div class="filters-inner" style="border-bottom: none; padding-bottom: 0;">
       <button type="button" class="chip${state.filter === 'all' ? ' active' : ''}" data-filter="all">${esc(t.all)}</button>
       ${sourceChips}<span class="spacer"></span>
-      <label class="switch"><input type="checkbox" id="unreadToggle"${state.unreadOnly ? ' checked' : ''}><span>${esc(t.unreadOnly)}</span></label>
     </div>
     <div class="filters-inner" style="min-height: 40px; padding-top: 4px; padding-bottom: 8px;">
       ${catChips}
@@ -2127,6 +2150,16 @@ function bindUI() {
   if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchStocks(searchInput.value.trim()); } });
 
   $('#filters').addEventListener('click', (e) => {
+    const regionChip = e.target.closest('.region-chip[data-region]');
+    if (regionChip) {
+      state.region = regionChip.getAttribute('data-region');
+      // A source chip from the other region would now filter to nothing.
+      const allowed = SOURCES.filter(s => state.region === 'all' || s.region === state.region).map(s => s.id);
+      if (state.filter !== 'all' && allowed.indexOf(state.filter) === -1) state.filter = 'all';
+      renderFilters(); render();
+      return;
+    }
+
     const chip = e.target.closest('.chip[data-filter]'); 
     if (chip) {
       state.filter = chip.getAttribute('data-filter');
