@@ -2760,9 +2760,10 @@ function renderPortfolio() {
   const dayClass = book.dayed ? (book.day >= 0 ? 'up' : 'down') : '';
 
   const heroDelta = `<div class="pf-hero-delta ${plClass}">${bookPl == null ? '—' : pfSignedMoney(bookPl, primaryCur) + ' (' + pfPctText(bookPlPct) + ')'}<span>${esc(p.netPl)}</span></div>`;
+  /* The gain already sits under the value, so the strip carries the two facts
+     that are not repeated anywhere else. */
   const heroStats = `<div class="pf-hero-stats">
       <span><em>${esc(p.invested)}</em><strong>${book.costed ? pfMoney(book.cost, primaryCur) : '—'}</strong></span>
-      <span><em>${esc(p.netPl)}</em><strong class="${plClass}">${bookPl == null ? '—' : pfSignedMoney(bookPl, primaryCur)}</strong></span>
       <span><em>${esc(p.today)}</em><strong class="${dayClass}">${book.dayed ? pfSignedMoney(book.day, primaryCur) + '<i>' + pfPctText(bookDayPct) + '</i>' : '—'}</strong></span>
     </div>`;
 
