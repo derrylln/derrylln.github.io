@@ -2288,6 +2288,28 @@ body, html {
   .pf-cost { flex: 1 1 100%; }
 }
 
+
+/* --- phone: four stacked rows of form pushed the numbers off screen --------
+   Ticker gets its own line so the full placeholder reads, shares and cost
+   share the next, and Add spans the width at button height. */
+@media (max-width: 560px) {
+  .pf-intro { padding: 12px 14px 13px; }
+  .pf-intro .mkt-card-head { margin-bottom: 8px; flex-wrap: nowrap; align-items: center; }
+  .pf-intro .mkt-sub, .pf-toolbar-label { display: none; }
+  .pf-intro .pf-cur-switch button { padding: 4px 7px; font-size: 10px; }
+  .pf-form {
+    display: grid; grid-template-columns: 0.85fr 1.5fr; gap: 7px; margin-bottom: 0;
+  }
+  .pf-form #pfSymbol { grid-column: 1 / -1; }
+  .pf-form .pf-cost { grid-column: 2; flex: none; }
+  .pf-form button[type="submit"] { grid-column: 1 / -1; width: 100%; }
+  .pf-form input { width: 100%; padding: 9px 10px; font-size: 13px; }
+  .pf-form .pf-cost input { padding-right: 62px; }
+  .pf-form .pf-cost-cur button { padding: 0 4px; font-size: 9.5px; }
+  .pf-form button { padding: 9px 14px; font-size: 13px; }
+  .pf-msg { margin: 6px 0 0; }
+}
+
 /* ============================================================
    FLOATING GLASS DOCK  (header · ticker · filters)
    The masthead is no longer a full-bleed black bar. It is a

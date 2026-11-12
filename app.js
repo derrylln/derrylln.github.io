@@ -125,7 +125,7 @@ const I18N = {
     cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', politics: 'Politics', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' },
     portfolio: {
       title: 'Portfolio Tracker', subtitle: 'Your positions, tracked in this browser',
-      symPh: 'Ticker (AAPL, BBCA.JK)', sharesPh: 'Shares', costPh: 'Avg cost / share', add: 'Add',
+      symPh: 'Ticker (AAPL, BBCA.JK)', sharesPh: 'Shares', costPh: 'Avg cost', add: 'Add',
       empty: 'No holdings yet. Add a ticker, your share count and the average cost to start tracking.',
       marketValue: 'Market Value', costBasis: 'Cost Basis', totalPl: 'Total P/L',
       colSym: 'Symbol', colShares: 'Shares', colCost: 'Avg Cost', colLast: 'Last', colValue: 'Value', colPl: 'P/L',
@@ -208,7 +208,7 @@ const I18N = {
     cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', politics: 'Politik', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' },
     portfolio: {
       title: 'Pelacak Portofolio', subtitle: 'Posisi Anda, tersimpan di peramban ini',
-      symPh: 'Ticker (AAPL, BBCA.JK)', sharesPh: 'Lembar', costPh: 'Harga rata-rata / lembar', add: 'Tambah',
+      symPh: 'Ticker (AAPL, BBCA.JK)', sharesPh: 'Lembar', costPh: 'Harga rata-rata', add: 'Tambah',
       empty: 'Belum ada posisi. Tambahkan ticker, jumlah lembar, dan harga rata-rata untuk mulai melacak.',
       marketValue: 'Nilai Pasar', costBasis: 'Modal', totalPl: 'Laba/Rugi',
       colSym: 'Simbol', colShares: 'Lembar', colCost: 'Harga Rata²', colLast: 'Terakhir', colValue: 'Nilai', colPl: 'L/R',
