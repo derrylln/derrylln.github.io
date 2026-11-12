@@ -111,7 +111,7 @@ const I18N = {
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
     regions: { all: 'All', id: 'Indonesia', global: 'Global & US' },
     regionFilter: 'Region', topicFilter: 'Topic', sourceFilter: 'Source', allSources: 'All sources',
-    navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
+    navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', mktTabHoldings: 'My holdings', mktTabExplore: 'Explore markets', searchPh: 'Search ticker…', searchBtn: 'Search',
     stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.',
     market: {
       gauges: 'Markets at a glance',
@@ -141,7 +141,7 @@ const I18N = {
       whyNoNews: 'No news about {sym} today. Check the company filings for the reason.',
       whyFailed: 'No analysis came back. Try again.',
       totalValue: 'Total value', invested: 'Invested capital', netPl: 'Net gain / loss',
-      perfTitle: 'Portfolio performance', perfSub: 'Portfolio and IHSG, indexed to 100 at the start of the period',
+      perfTitle: 'Portfolio performance', perfSub: 'Portfolio and benchmarks, indexed to 100 at the start of the period',
       portfolio: 'Portfolio', benchmark: 'IHSG',
       allocTitle: 'Allocation', allocSub: 'By asset class',
       classIdx: 'IDX equities', classUs: 'US equities', classEtf: 'ETFs', classCrypto: 'Crypto',
@@ -194,7 +194,7 @@ const I18N = {
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
     regions: { all: 'Semua', id: 'Indonesia', global: 'Global & AS' },
     regionFilter: 'Wilayah', topicFilter: 'Topik', sourceFilter: 'Sumber', allSources: 'Semua sumber',
-    navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
+    navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', mktTabHoldings: 'Portofolio saya', mktTabExplore: 'Jelajah pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
     stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.',
     market: {
       gauges: 'Pasar sekilas',
@@ -224,7 +224,7 @@ const I18N = {
       whyNoNews: 'Belum ada berita {sym} hari ini. Periksa laporan perusahaan untuk penyebabnya.',
       whyFailed: 'Analisis tidak tersedia. Coba lagi.',
       totalValue: 'Nilai total', invested: 'Modal', netPl: 'Laba / rugi bersih',
-      perfTitle: 'Kinerja portofolio', perfSub: 'Portofolio dan IHSG, diindeks ke 100 di awal periode',
+      perfTitle: 'Kinerja portofolio', perfSub: 'Portofolio dan pembanding, diindeks ke 100 di awal periode',
       portfolio: 'Portofolio', benchmark: 'IHSG',
       allocTitle: 'Alokasi', allocSub: 'Menurut kelas aset',
       classIdx: 'Saham IDX', classUs: 'Saham AS', classEtf: 'ETF', classCrypto: 'Kripto',
@@ -273,7 +273,7 @@ const I18N = {
 const SOURCE_BY_ID = {};
 SOURCES.forEach(function (source) { SOURCE_BY_ID[source.id] = source; });
 
-const state = { articles: [], ticker: [], filter: 'all', categoryFilter: 'all', region: 'all', unreadOnly: false, lang: 'en', read: new Set(), watch: [], lastTs: 0, lastKind: '', loading: false };
+const state = { articles: [], ticker: [], filter: 'all', categoryFilter: 'all', region: 'all', unreadOnly: false, marketView: 'holdings', lang: 'en', read: new Set(), watch: [], lastTs: 0, lastKind: '', loading: false };
 
 const $  = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.prototype.slice.call(root.querySelectorAll(sel));
@@ -786,6 +786,27 @@ function applyLang() {
 }
 
 /* MARKET DASHBOARD LOGIC */
+/* The markets page answers two different questions — what do I own, and what
+   is out there — so it holds two views instead of one long scroll. The
+   explore board only fetches once, when it is first opened. */
+function setMarketView(view) {
+  state.marketView = view === 'explore' ? 'explore' : 'holdings';
+  const hold = document.getElementById('holdingsView');
+  const explore = document.getElementById('exploreView');
+  if (hold) hold.hidden = state.marketView !== 'holdings';
+  if (explore) explore.hidden = state.marketView !== 'explore';
+  const tabs = document.querySelectorAll('#mktViewTabs [data-mkt-view]');
+  Array.prototype.forEach.call(tabs, function (btn) {
+    const on = btn.getAttribute('data-mkt-view') === state.marketView;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  if (state.marketView === 'explore') {
+    const dash = document.getElementById('stockDashboard');
+    if (dash && !dash.dataset.loaded) loadMarketDashboard();
+  }
+}
+
 function switchView(view) {
   if (view === 'news') {
     $('#newsView').style.display = 'block'; $('#stocksView').style.display = 'none'; $('#filters').style.display = 'block';
@@ -793,7 +814,7 @@ function switchView(view) {
   } else {
     $('#newsView').style.display = 'none'; $('#stocksView').style.display = 'block'; $('#filters').style.display = 'none';
     $('#navNews').classList.remove('active'); $('#navStocks').classList.add('active');
-    loadMarketDashboard();
+    setMarketView(state.marketView);
     refreshPortfolio();
   }
 }
@@ -1709,6 +1730,7 @@ document.addEventListener('click', function (e) {
 
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang]; const m = t.market;
+  dash.dataset.loaded = '1';
   destroyCharts();
 
   dash.innerHTML = `
@@ -2570,15 +2592,35 @@ function pfLastPct(series) {
   return pts[pts.length - 1].y - 100;
 }
 
+/* Benchmarks the portfolio can be measured against. Indices only, all quoted
+   in their own currency, all rebased to 100 at the start of the range so a
+   rupiah book and a dollar index share one axis. */
+const PF_BENCH = [
+  { id: 'ihsg', symbol: '^JKSE', label: 'IHSG', color: '#d10a11' },
+  { id: 'spx', symbol: '^GSPC', label: 'S&P 500', color: '#2563eb' },
+  { id: 'ixic', symbol: '^IXIC', label: 'Nasdaq', color: '#7c3aed' },
+  { id: 'n225', symbol: '^N225', label: 'Nikkei 225', color: '#0f766e' }
+];
+const PF_BENCH_KEY = 'finwire.portfolio.bench.v1';
+let pfBenchSel = loadJSON(PF_BENCH_KEY, null);
+if (!Array.isArray(pfBenchSel)) pfBenchSel = ['ihsg'];
+pfBenchSel = pfBenchSel.filter(function (id) {
+  return PF_BENCH.some(function (b) { return b.id === id; });
+});
+if (!pfBenchSel.length) pfBenchSel = ['ihsg'];
+
 async function pfLoadTrend(range, target) {
-  const key = [range, target, pfRate() || 0, portfolio.map(function (h) { return h.symbol + ':' + h.shares; }).join(',')].join('|');
+  const key = [range, target, pfRate() || 0, pfBenchSel.join('+'), portfolio.map(function (h) { return h.symbol + ':' + h.shares; }).join(',')].join('|');
   if (pfTrendState.key === key && pfTrendState.data) return pfTrendState.data;
   const holdings = portfolio.slice();
   if (!holdings.length) return null;
 
-  const bench = await fetchHistory('^JKSE', range);
+  const selected = PF_BENCH.filter(function (b) { return pfBenchSel.indexOf(b.id) !== -1; });
   const histories = await Promise.all(holdings.map(function (h) {
     return fetchHistory(h.symbol, range).catch(function () { return []; });
+  }));
+  const benchLists = await Promise.all(selected.map(function (b) {
+    return fetchHistory(b.symbol, range).catch(function () { return []; });
   }));
 
   const calendar = [];
@@ -2591,7 +2633,7 @@ async function pfLoadTrend(range, target) {
       seen[k] = 1; calendar.push({ k: k, x: p.x });
     });
   };
-  addCal(bench);
+  benchLists.forEach(addCal);
   histories.forEach(addCal);
   calendar.sort(function (a, b) { return a.x - b.x; });
   if (calendar.length < 2) return null;
@@ -2619,12 +2661,16 @@ async function pfLoadTrend(range, target) {
   if (!firstValue) return null;
   const portIdx = total.map(function (p) { return { x: p.x, y: p.y == null ? null : (p.y / firstValue.y) * 100 }; });
 
-  const benchFirst = (bench || []).filter(function (p) { return p && isFinite(p.y) && p.y > 0; })[0];
-  const benchIdx = benchFirst ? bench.map(function (p) {
-    return { x: p.x, y: (p && isFinite(p.y)) ? (p.y / benchFirst.y) * 100 : null };
-  }) : [];
+  const benches = selected.map(function (b, i) {
+    const list = benchLists[i] || [];
+    const first = list.filter(function (p) { return p && isFinite(p.y) && p.y > 0; })[0];
+    const idx = first ? list.map(function (p) {
+      return { x: p.x, y: (p && isFinite(p.y)) ? (p.y / first.y) * 100 : null };
+    }) : [];
+    return { id: b.id, label: b.label, color: b.color, idx: idx, pct: pfLastPct(idx) };
+  }).filter(function (b) { return b.idx.length > 1; });
 
-  const data = { portIdx: portIdx, benchIdx: benchIdx, portPct: pfLastPct(portIdx), benchPct: pfLastPct(benchIdx) };
+  const data = { portIdx: portIdx, portPct: pfLastPct(portIdx), benches: benches };
   pfTrendState.key = key;
   pfTrendState.data = data;
   return data;
@@ -2637,34 +2683,40 @@ function pfRenderTrend(target) {
   pfLoadTrend(pfTrendState.range, target).then(function (data) {
     const node = document.getElementById('pfTrendChart');
     if (!node) return;
-    const portLeg = document.getElementById('pfTrendPort');
-    const benchLeg = document.getElementById('pfTrendBench');
     const paint = function (el, value) {
       if (!el) return;
       if (value == null || !isFinite(value)) { el.textContent = '—'; el.className = ''; return; }
       el.textContent = (value > 0 ? '+' : '') + value.toFixed(2) + '%';
       el.className = value >= 0 ? 'up' : 'down';
     };
+    paint(document.getElementById('pfTrendPort'), data ? data.portPct : null);
+    PF_BENCH.forEach(function (b) {
+      const chip = document.querySelector('#pfTrendLegend [data-pf-bench="' + b.id + '"]');
+      if (!chip) return;
+      const hit = data && data.benches.filter(function (x) { return x.id === b.id; })[0];
+      paint(chip.querySelector('b'), hit ? hit.pct : null);
+    });
     if (!data) {
       node.innerHTML = `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
-      paint(portLeg, null); paint(benchLeg, null);
       return;
     }
-    paint(portLeg, data.portPct);
-    paint(benchLeg, data.benchPct);
     if (typeof ApexCharts === 'undefined') return;
     if (pfTrendChart) { try { pfTrendChart.destroy(); } catch (e) {} pfTrendChart = null; }
     node.innerHTML = '';
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    const series = [{ name: p.portfolio, data: data.portIdx }].concat(data.benches.map(function (b) {
+      return { name: b.label, data: b.idx };
+    }));
     pfTrendChart = new ApexCharts(node, {
-      series: [
-        { name: p.portfolio, data: data.portIdx },
-        { name: p.benchmark, data: data.benchIdx }
-      ],
+      series: series,
       chart: { type: 'line', height: 196, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
       theme: { mode: isDark ? 'dark' : 'light' },
-      colors: [isDark ? '#f8fafc' : '#111418', '#d10a11'],
-      stroke: { curve: 'smooth', width: [2.5, 1.5], dashArray: [0, 5] },
+      colors: [isDark ? '#f8fafc' : '#111418'].concat(data.benches.map(function (b) { return b.color; })),
+      stroke: {
+        curve: 'smooth',
+        width: [2.5].concat(data.benches.map(function () { return 1.4; })),
+        dashArray: [0].concat(data.benches.map(function () { return 4; }))
+      },
       dataLabels: { enabled: false },
       markers: { size: 0, hover: { size: 4 } },
       grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 },
@@ -2849,6 +2901,11 @@ function renderPortfolio() {
       </tr>${pfDetailRowHtml(h.symbol)}`;
   }).join('');
 
+  const benchChips = PF_BENCH.map(function (b) {
+    const on = pfBenchSel.indexOf(b.id) !== -1;
+    return `<button type="button" class="pf-bench${on ? ' active' : ''}" data-pf-bench="${b.id}" aria-pressed="${on ? 'true' : 'false'}"><i style="background:${b.color}"></i>${esc(b.label)} <b>—</b></button>`;
+  }).join('');
+
   const rangeChips = [['3mo', '3M'], ['6mo', '6M'], ['1y', '1Y']].map(function (pair) {
     const on = pfTrendState.range === pair[0];
     return `<button type="button" class="${on ? 'active' : ''}" data-pf-range="${pair[0]}" aria-pressed="${on ? 'true' : 'false'}">${pair[1]}</button>`;
@@ -2866,9 +2923,9 @@ function renderPortfolio() {
           <div class="mkt-seg" id="pfRangeSeg" role="group">${rangeChips}</div>
         </div>
         ${heroStats}
-        <div class="mkt-legend">
+        <div class="mkt-legend" id="pfTrendLegend">
           <span class="mkt-legend-item"><i class="mkt-dot pf"></i>${esc(p.portfolio)} <b id="pfTrendPort">—</b></span>
-          <span class="mkt-legend-item"><i class="mkt-dot ihsg"></i>${esc(p.benchmark)} <b id="pfTrendBench">—</b></span>
+          ${benchChips}
           <span class="pf-legend-note">${esc(p.perfSub)}</span>
         </div>
         <div id="pfTrendChart"><div class="pf-empty-sm">${esc(p.loadingTrend)}</div></div>
@@ -3186,6 +3243,12 @@ function bindUI() {
     } finally { stop(); }
   }
 
+  const viewTabs = $('#mktViewTabs');
+  if (viewTabs) viewTabs.addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-mkt-view]');
+    if (btn) setMarketView(btn.getAttribute('data-mkt-view'));
+  });
+
   const pfHost = $('#portfolioPanel');
   if (pfHost) {
     pfHost.addEventListener('submit', (e) => {
@@ -3203,6 +3266,16 @@ function bindUI() {
       if (inBtn) { setPfInputCurrency(inBtn.getAttribute('data-pf-in')); return; }
       const rangeBtn2 = e.target.closest('[data-pf-range]');
       if (rangeBtn2) { pfTrendState.range = rangeBtn2.getAttribute('data-pf-range'); renderPortfolio(); return; }
+      const benchBtn = e.target.closest('[data-pf-bench]');
+      if (benchBtn) {
+        const id = benchBtn.getAttribute('data-pf-bench');
+        const at = pfBenchSel.indexOf(id);
+        if (at === -1) pfBenchSel.push(id);
+        else if (pfBenchSel.length > 1) pfBenchSel.splice(at, 1);
+        saveJSON(PF_BENCH_KEY, pfBenchSel);
+        renderPortfolio();
+        return;
+      }
       const chipBtn = e.target.closest('[data-pf-filter]');
       if (chipBtn) { pfFilter = chipBtn.getAttribute('data-pf-filter'); renderPortfolio(); return; }
       const openBtn = e.target.closest('[data-pf-open]');
