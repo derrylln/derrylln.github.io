@@ -109,7 +109,8 @@ const I18N = {
     errorLabel: 'Could not load feeds.', updated: 'Updated', watch: 'Watch',
     footer: 'FINWIRE — client-side market news aggregator.', justNow: 'just now', minAgo: n => `${n}m ago`,
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
-    regions: { all: 'All regions', id: 'Indonesia', global: 'Global & US' },
+    regions: { all: 'All', id: 'Indonesia', global: 'Global & US' },
+    regionFilter: 'Region', topicFilter: 'Topic', sourceFilter: 'Source', allSources: 'All sources',
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
     stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.',
     cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', politics: 'Politics', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' },
@@ -152,7 +153,8 @@ const I18N = {
     errorLabel: 'Gagal memuat feed.', updated: 'Diperbarui', watch: 'Pantau',
     footer: 'FINWIRE — agregator berita pasar berbasis klien.', justNow: 'baru saja', minAgo: n => `${n}m lalu`,
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
-    regions: { all: 'Semua wilayah', id: 'Indonesia', global: 'Global & AS' },
+    regions: { all: 'Semua', id: 'Indonesia', global: 'Global & AS' },
+    regionFilter: 'Wilayah', topicFilter: 'Topik', sourceFilter: 'Sumber', allSources: 'Semua sumber',
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
     stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.',
     cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', politics: 'Politik', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' },
@@ -669,26 +671,26 @@ function updateStatusLabel(kind, ts) {
 }
 
 function renderFilters() {
-  const bar = $('#filters'); if (!bar) return; const t = I18N[state.lang];
-  const regionChips = ['all', 'id', 'global'].map(r => `<button type="button" class="chip region-chip${state.region === r ? ' active' : ''}" data-region="${r}">${esc(t.regions[r])}</button>`).join('');
+  const bar = $('#filters'); if (!bar) return;
+  const t = I18N[state.lang];
+  const regionButtons = ['all', 'id', 'global'].map(r =>
+    `<button type="button" class="seg-btn${state.region === r ? ' active' : ''}" data-region="${esc(r)}">${esc(t.regions[r])}</button>`).join('');
   const listedSources = SOURCES.filter(s => state.region === 'all' || s.region === state.region);
-  const sourceChips = listedSources.map(s => `<button type="button" class="chip${state.filter === s.id ? ' active' : ''}" data-filter="${esc(s.id)}">${esc(s.label)}</button>`).join('');
-  const catLabel = (c) => (t.cats && t.cats[c.id]) || c.label;
-  const catChips = CATEGORIES.map(c => `<button type="button" class="chip cat-chip${state.categoryFilter === c.id ? ' active' : ''}" data-cat-filter="${esc(c.id)}">${esc(catLabel(c))}</button>`).join('');
+  const topicOptions = CATEGORIES.map(c =>
+    `<option value="${esc(c.id)}"${state.categoryFilter === c.id ? ' selected' : ''}>${esc((t.cats && t.cats[c.id]) || c.label)}</option>`).join('');
+  const sourceOptions = listedSources.map(s =>
+    `<option value="${esc(s.id)}"${state.filter === s.id ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
 
   bar.innerHTML = `
-    <div class="filters-inner" style="border-bottom: none; padding-bottom: 0;">
-      ${regionChips}<span class="spacer"></span>
+    <div class="filter-row">
+      <div class="seg" role="group" aria-label="${esc(t.regionFilter)}">${regionButtons}</div>
+      <select id="topicSelect" class="filter-select" aria-label="${esc(t.topicFilter)}">${topicOptions}</select>
+      <select id="sourceSelect" class="filter-select" aria-label="${esc(t.sourceFilter)}">
+        <option value="all"${state.filter === 'all' ? ' selected' : ''}>${esc(t.allSources)}</option>
+        ${sourceOptions}
+      </select>
       <label class="switch"><input type="checkbox" id="unreadToggle"${state.unreadOnly ? ' checked' : ''}><span>${esc(t.unreadOnly)}</span></label>
-    </div>
-    <div class="filters-inner" style="border-bottom: none; padding-bottom: 0;">
-      <button type="button" class="chip${state.filter === 'all' ? ' active' : ''}" data-filter="all">${esc(t.all)}</button>
-      ${sourceChips}<span class="spacer"></span>
-    </div>
-    <div class="filters-inner" style="min-height: 40px; padding-top: 4px; padding-bottom: 8px;">
-      ${catChips}
-    </div>
-  `;
+    </div>`;
 }
 
 function renderWatchChips() {
@@ -2150,33 +2152,21 @@ function bindUI() {
   if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchStocks(searchInput.value.trim()); } });
 
   $('#filters').addEventListener('click', (e) => {
-    const regionChip = e.target.closest('.region-chip[data-region]');
-    if (regionChip) {
-      state.region = regionChip.getAttribute('data-region');
-      // A source chip from the other region would now filter to nothing.
-      const allowed = SOURCES.filter(s => state.region === 'all' || s.region === state.region).map(s => s.id);
-      if (state.filter !== 'all' && allowed.indexOf(state.filter) === -1) state.filter = 'all';
-      renderFilters(); render();
-      return;
-    }
-
-    const chip = e.target.closest('.chip[data-filter]'); 
-    if (chip) {
-      state.filter = chip.getAttribute('data-filter');
-      $$('#filters .chip[data-filter]').forEach(c => c.classList.toggle('active', c === chip)); 
-      render();
-      return;
-    }
-    
-    const catChip = e.target.closest('.cat-chip[data-cat-filter]');
-    if (catChip) {
-      state.categoryFilter = catChip.getAttribute('data-cat-filter');
-      $$('.cat-chip').forEach(c => c.classList.toggle('active', c === catChip)); 
-      render();
-    }
+    const regionBtn = e.target.closest('.seg-btn[data-region]');
+    if (!regionBtn) return;
+    state.region = regionBtn.getAttribute('data-region');
+    // A source from the other region would filter to nothing.
+    const allowed = SOURCES.filter(s => state.region === 'all' || s.region === state.region).map(s => s.id);
+    if (state.filter !== 'all' && allowed.indexOf(state.filter) === -1) state.filter = 'all';
+    renderFilters(); render();
   });
 
-  $('#filters').addEventListener('change', (e) => { if (e.target && e.target.id === 'unreadToggle') { state.unreadOnly = e.target.checked; render(); } });
+  $('#filters').addEventListener('change', (e) => {
+    if (!e.target) return;
+    if (e.target.id === 'unreadToggle') { state.unreadOnly = e.target.checked; render(); }
+    else if (e.target.id === 'topicSelect') { state.categoryFilter = e.target.value; render(); }
+    else if (e.target.id === 'sourceSelect') { state.filter = e.target.value; render(); }
+  });
 
   $$('.lang-toggle button').forEach(btn => {
     btn.addEventListener('click', () => {
