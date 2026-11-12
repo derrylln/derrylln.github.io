@@ -3051,7 +3051,7 @@ body, html {
 .pmm-val.down { color: var(--red); }
 
 /* activity */
-.pact-list { display: flex; flex-direction: column; max-height: 224px; overflow-y: auto; }
+.pact-list { display: flex; flex-direction: column; }
 .pact-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px;
   padding: 9px 0; border-bottom: 1px solid var(--rule-2); font-size: 12px;
@@ -3061,6 +3061,8 @@ body, html {
 .pact-main strong { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-right: 6px; }
 .pact-main strong.up { color: var(--green); }
 .pact-main strong.down { color: var(--red); }
+.pact-main strong.div { color: #2563eb; }
+[data-theme="dark"] .pact-main strong.div { color: #9db7ff; }
 .pact-main em { font-style: normal; color: var(--muted); margin-left: 6px; font-variant-numeric: tabular-nums; }
 
 .pf-cur-badge {

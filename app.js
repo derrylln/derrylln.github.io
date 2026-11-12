@@ -146,7 +146,7 @@ const I18N = {
       allocTitle: 'Allocation', allocSub: 'By asset class',
       classIdx: 'IDX equities', classUs: 'US equities', classEtf: 'ETFs', classCrypto: 'Crypto',
       moveTitle: 'Contributors', moveSub: 'Profit and loss by holding', gaining: 'Gaining', losing: 'Losing',
-      activityTitle: 'Recent activity', activitySub: 'What you added and removed',
+      activityTitle: 'Recent activity', activitySub: 'Adds, removals and dividends paid on your holdings', actDividend: 'Dividend',
       activityEmpty: 'Nothing logged yet. Adding or removing a holding is recorded here.',
       actAdd: 'Added', actRemove: 'Removed',
       holdingsTitle: 'Holdings', holdingsSub: 'Open a row for fundamentals and the AI read',
@@ -229,7 +229,7 @@ const I18N = {
       allocTitle: 'Alokasi', allocSub: 'Menurut kelas aset',
       classIdx: 'Saham IDX', classUs: 'Saham AS', classEtf: 'ETF', classCrypto: 'Kripto',
       moveTitle: 'Kontributor', moveSub: 'Laba dan rugi per posisi', gaining: 'Menguat', losing: 'Melemah',
-      activityTitle: 'Aktivitas terbaru', activitySub: 'Yang Anda tambah dan hapus',
+      activityTitle: 'Aktivitas terbaru', activitySub: 'Penambahan, penghapusan, dan dividen pada posisi Anda', actDividend: 'Dividen',
       activityEmpty: 'Belum ada catatan. Menambah atau menghapus posisi akan tercatat di sini.',
       actAdd: 'Ditambah', actRemove: 'Dihapus',
       holdingsTitle: 'Kepemilikan', holdingsSub: 'Buka baris untuk fundamental dan analisis AI',
@@ -1292,7 +1292,7 @@ const DIVIDEND_POOL = [
   ['PWON', 'Pakuwon Jati'], ['BSDE', 'Bumi Serpong Damai'], ['MIKA', 'Mitra Keluarga']
 ].map(function (pair) { return { symbol: pair[0] + '.JK', name: pair[1] }; });
 
-const DIV_CACHE_KEY = 'fw.dividends.v1';
+const DIV_CACHE_KEY = 'fw.dividends.v2';
 const DIV_CACHE_TTL = 12 * 60 * 60 * 1000;
 let divCache = loadJSON(DIV_CACHE_KEY, null);
 if (!divCache || typeof divCache !== 'object' || !divCache.rows) divCache = { ts: 0, rows: {} };
@@ -1320,6 +1320,10 @@ function dividendRowFromChart(symbol, data) {
     dps: dps,
     yieldPct: (dps / price) * 100,
     payouts: ttm.length,
+    /* Individual payments, so the portfolio can date a dividend to the day it
+       was paid rather than reporting a trailing twelve-month total. */
+    events: list.filter(function (d) { return d.ts >= Date.now() - 2 * 365 * 864e5; })
+      .map(function (d) { return { ts: d.ts, amount: d.amount }; }),
     lastDate: last ? last.ts : null,
     growth: prevDps > 0 ? (dps / prevDps - 1) * 100 : null
   };
@@ -2419,22 +2423,65 @@ function pfValueIn(view, target) {
   return pfConvert(view.value, view.target, target);
 }
 
-function pfActivityHtml() {
+let pfActTarget = 'USD';
+const pfDivTried = new Set();
+
+/* Dividends arrive without the reader doing anything, so they are the other
+   kind of event this card can honestly show. The dividend scan already pulls
+   each symbol's payment history for the leaders table, so the same call and
+   cache are reused here instead of a second source. */
+function pfHoldingDividends(months) {
+  const since = Date.now() - months * 30.5 * 864e5;
+  const out = [];
+  portfolio.forEach(function (h) {
+    const row = divCache.rows[h.symbol];
+    if (!row || !row.events) return;
+    row.events.forEach(function (ev) {
+      if (!ev.ts || ev.ts < since || !isFinite(ev.amount)) return;
+      out.push({ ts: ev.ts, symbol: h.symbol, perShare: ev.amount, shares: h.shares, currency: pfCurrency(h.symbol) });
+    });
+  });
+  return out;
+}
+
+function paintPfActivity() {
+  const slot = document.getElementById('pfActSlot');
+  if (slot) slot.innerHTML = pfActivityHtml(pfActTarget);
+}
+
+/* One fetch per holding, guarded so a symbol that pays nothing is not asked
+   for again on every repaint. */
+function pfEnsureHoldingDividends() {
+  portfolio.forEach(function (h) {
+    if (divCache.rows[h.symbol] || pfDivTried.has(h.symbol)) return;
+    pfDivTried.add(h.symbol);
+    fetchDividendInfo(h.symbol).then(paintPfActivity).catch(function () {});
+  });
+}
+
+function pfActivityHtml(target) {
   const p = (I18N[state.lang] || I18N.en).portfolio;
-  const list = pfActivityList().slice(0, 8);
-  if (!list.length) return `<div class="pf-empty-sm">${esc(p.activityEmpty)}</div>`;
   const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
-  const rows = list.map(function (e) {
-    const when = new Date(e.ts).toLocaleDateString(locale, { day: '2-digit', month: 'short' });
+  const when = function (ts) { return new Date(ts).toLocaleDateString(locale, { day: '2-digit', month: 'short' }); };
+  const divs = pfHoldingDividends(14).map(function (d) {
+    const money = pfConvert(d.perShare * d.shares, d.currency, target);
+    const shares = d.shares.toLocaleString('en-US', { maximumFractionDigits: 4 });
+    return { ts: d.ts, html: `<div class="pact-row">
+        <span class="pact-date">${esc(when(d.ts))}</span>
+        <span class="pact-main"><strong class="div">${esc(p.actDividend)}</strong> ${esc(d.symbol.replace('.JK', ''))}<em>${esc(shares)} × ${pfPrice(d.perShare, d.currency)} = ${money == null ? '—' : pfMoney(money, target)}</em></span>
+      </div>` };
+  });
+  const events = pfActivityList().map(function (e) {
     const price = (e.price != null && isFinite(e.price)) ? ' @ ' + pfMoney(e.price, e.currency || 'USD') : '';
     const qty = (e.shares != null && isFinite(e.shares)) ? e.shares.toLocaleString('en-US', { maximumFractionDigits: 4 }) : '';
     const isOut = e.action === 'remove';
-    return `<div class="pact-row">
-        <span class="pact-date">${esc(when)}</span>
+    return { ts: e.ts, html: `<div class="pact-row">
+        <span class="pact-date">${esc(when(e.ts))}</span>
         <span class="pact-main"><strong class="${isOut ? 'down' : 'up'}">${esc(isOut ? p.actRemove : p.actAdd)}</strong> ${esc(e.symbol || '')}<em>${esc(qty)}${esc(price)}</em></span>
-      </div>`;
-  }).join('');
-  return `<div class="pact-list">${rows}</div>`;
+      </div>` };
+  }).concat(divs).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 6);
+  if (!events.length) return `<div class="pf-empty-sm">${esc(p.activityEmpty)}</div>`;
+  return `<div class="pact-list">${events.map(function (x) { return x.html; }).join('')}</div>`;
 }
 
 /* Weight by class: one stacked bar plus a legend that also carries the money,
@@ -2857,7 +2904,7 @@ function renderPortfolio() {
             <p class="mkt-sub">${esc(p.activitySub)}</p>
           </div>
         </div>
-        ${pfActivityHtml()}
+        <div id="pfActSlot">${pfActivityHtml(primaryCur)}</div>
       </section>
     </div>
 
@@ -2881,6 +2928,8 @@ function renderPortfolio() {
       <p class="pf-note">${esc(p.note)}</p>
     </section>`;
 
+  pfActTarget = primaryCur;
+  pfEnsureHoldingDividends();
   pfOpen.forEach(pfLoadFund);
   pfRenderTrend(primaryCur);
   renderHoldingsNews();
