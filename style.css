@@ -3069,24 +3069,13 @@ body, html {
 }
 .mkt-col-label.up { color: var(--green); }
 .mkt-col-label.down { color: var(--red); }
-.mm-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--rule-2); }
+.mm-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 7px 0; border-bottom: 1px solid var(--rule-2); }
 .mm-main { display: flex; flex-direction: column; min-width: 0; }
 .mm-sym { font-size: 12px; font-weight: 800; color: var(--ink); }
 .mm-name { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mm-chg { font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .mm-chg.up { color: var(--green); }
 .mm-chg.down { color: var(--red); }
-.mm-ai {
-  width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid var(--rule); border-radius: 999px; background: transparent;
-  color: var(--muted); font-size: 10px; line-height: 1; cursor: pointer;
-  transition: color .15s, border-color .15s, background .15s;
-}
-.mm-ai:hover { color: #7c3aed; border-color: #ddd6fe; background: #f6f3ff; }
-.mm-answers { grid-column: 1 / -1; }
-.mm-answers:empty { display: none; }
-.mm-explain { margin: 2px 0 8px; font-size: 12px; line-height: 1.55; }
-
 /* --- compact quote lists --- */
 .mkt-list { display: flex; flex-direction: column; }
 .mkt-list-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--rule-2); }
@@ -3148,7 +3137,6 @@ body, html {
 [data-theme="dark"] .mkt-chip.down { background: rgba(239, 68, 68, .16); }
 [data-theme="dark"] .mkt-seg { background: rgba(255, 255, 255, .05); }
 [data-theme="dark"] .mkt-seg button.active { background: var(--ink); color: #0f172a; }
-[data-theme="dark"] .mm-ai:hover { background: rgba(124, 58, 237, .18); border-color: rgba(168, 85, 247, .4); }
 [data-theme="dark"] .pf-stat { background: rgba(255, 255, 255, .04); }
 
 /* ============================================================

@@ -121,7 +121,7 @@ const I18N = {
       mostActive: 'Most active', watch: 'Market watch', rates: 'Rates & volatility',
       coverage: 'Coverage', coverageSub: 'Open a card for its fundamentals and the AI read',
       bluechips: 'IDX bluechips', usTech: 'US tech', etfs: 'ETFs',
-      explain: 'Why it moved', staticLabel: 'Static'
+      staticLabel: 'Static'
     },
     cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', politics: 'Politics', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' },
     portfolio: {
@@ -210,7 +210,7 @@ const I18N = {
       mostActive: 'Teraktif', watch: 'Pantauan pasar', rates: 'Suku bunga & volatilitas',
       coverage: 'Liputan', coverageSub: 'Buka kartu untuk fundamental dan analisis AI',
       bluechips: 'Bluechip IDX', usTech: 'Teknologi AS', etfs: 'ETF',
-      explain: 'Kenapa berubah', staticLabel: 'Statis'
+      staticLabel: 'Statis'
     },
     cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', politics: 'Politik', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' },
     portfolio: {
@@ -922,24 +922,16 @@ function mktActiveRows(list) {
     </div>`).join('');
 }
 
-/* A mover carries its own AI button. The answer is printed under the row
-   itself, so a reader never loses the ticker they asked about — the older
-   tables put the same text in a hidden row of the table. */
+/* A mover is the ticker, its name and the move — nothing else competes with it. */
 function mktMoverRow(s) {
   const up = s.pct >= 0;
-  const label = I18N[state.lang].market.explain;
   return `<div class="mm-row">
       <a class="mm-main" href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank" rel="noopener noreferrer">
         <span class="mm-sym">${esc(s.symbol.replace('.JK', ''))}</span>
         <span class="mm-name">${esc(s.name)}</span>
       </a>
       <span class="mm-chg ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.pct.toFixed(2)}%</span>
-      <button type="button" class="mm-ai explain-btn" data-sym="${esc(s.symbol)}" data-pct="${s.pct.toFixed(2)}" data-up="${up}" data-name="${esc(s.name)}" aria-label="${esc(label)}" title="${esc(label)}">✨</button>
     </div>`;
-}
-
-function mktMoverAnswer(s) {
-  return `<div class="mm-explain ai-summary-box" id="explain-text-${esc(s.symbol)}" style="display:none"></div>`;
 }
 
 function mktMoverCols(gainers, losers) {
@@ -950,9 +942,7 @@ function mktMoverCols(gainers, losers) {
       <div class="mkt-col-label ${cls}">${esc(label)}</div>
       ${(list || []).slice(0, limit).map(mktMoverRow).join('')}
     </div>`;
-  // Answers span the full card: half a card is too narrow for a paragraph.
-  const answers = [...(gainers || []).slice(0, limit), ...(losers || []).slice(0, limit)].map(mktMoverAnswer).join('');
-  return col(m.gainers, gainers, 'up') + col(m.losers, losers, 'down') + `<div class="mm-answers">${answers}</div>`;
+  return col(m.gainers, gainers, 'up') + col(m.losers, losers, 'down');
 }
 
 /* Two markets on one axis only compare fairly when both start at zero, so
@@ -1879,7 +1869,7 @@ async function loadMarketDashboard() {
       <div class="progress-bar-track">
         <div class="progress-bar-fill" id="marketProgressFill"></div>
       </div>
-      <div class="progress-text" id="marketProgressText">0 / 0 loaded</div>
+      <div class="progress-text" id="marketProgressText">0%</div>
     </div>
   `;
 
@@ -1903,7 +1893,7 @@ async function loadMarketDashboard() {
 
     processedCount++;
     if (progressFill) progressFill.style.width = `${(processedCount / totalCount) * 100}%`;
-    if (progressText) progressText.textContent = `${processedCount} / ${totalCount} loaded`;
+    if (progressText) progressText.textContent = `${Math.round((processedCount / totalCount) * 100)}%`;
 
     await new Promise(r => setTimeout(r, 50));
   }
@@ -3770,108 +3760,6 @@ function bindUI() {
     const age = n.ts ? new Date(n.ts).toISOString().slice(0, 10) : '';
     return `- [${n.publisher}] ${n.title}${age ? ` (${age})` : ''}`;
   }
-
-  // AI EXPLAIN MOVE LOGIC
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.explain-btn');
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-
-    const sym = btn.getAttribute('data-sym');
-    const pct = btn.getAttribute('data-pct');
-    const isUp = btn.getAttribute('data-up') === 'true';
-    
-    const row = document.getElementById(`explain-row-${sym}`);
-    const textEl = document.getElementById(`explain-text-${sym}`);
-    if (!textEl) return;
-
-    // Movers used to answer inside a hidden table row; the board prints the
-    // answer under the whole card instead, so both shapes are handled here.
-    const open = row ? row.style.display === 'table-row' : textEl.style.display === 'block';
-    if (open) {
-      if (row) row.style.display = 'none'; else textEl.style.display = 'none';
-      return;
-    }
-
-    if (row) row.style.display = 'table-row';
-    textEl.innerHTML = '✨ Analyzing news for this move...';
-    textEl.style.display = 'block';
-
-    // Only articles that actually mention the ticker or the company. Feeding the
-    // model unrelated headlines is what made it answer with invented "macro"
-    // reasons instead of the real story.
-    const companyName = btn.getAttribute('data-name') || (btn.closest('tr') ? btn.closest('tr').querySelector('td:nth-child(2)').textContent : '');
-    const searchTerms = [sym.replace('.JK', '').toLowerCase(), companyName.toLowerCase()];
-    const relatedArticles = state.articles.filter(a => {
-      const text = (a.title + ' ' + a.summary).toLowerCase();
-      return searchTerms.some(term => term.length > 1 && text.includes(term));
-    }).slice(0, 5);
-    
-    const stopClock = startClock(textEl, '✨ Analyzing news...');
-    let sources = [];
-    try {
-      // News explains the move; fundamentals show what the company is actually
-      // worth, so both are fetched together and rendered in one box.
-      const [newsRes, fundRes] = await Promise.allSettled([fetchTickerNews(sym), fetchFundamentals(sym)]);
-      const tickerNews = newsRes.status === 'fulfilled' ? newsRes.value : [];
-      const fundHTML = fundRes.status === 'fulfilled'
-        ? fundamentalsHTML(fundRes.value, state.lang, sym) : '';
-
-      // Ticker-specific headlines first: they are what actually explain a single move.
-      const seen = new Set();
-      const lines = [];
-      tickerNews.forEach(n => {
-        const key = n.title.toLowerCase();
-        if (seen.has(key)) return;
-        seen.add(key); sources.push(n);
-        lines.push(headlineLine(n));
-      });
-      relatedArticles.forEach(a => {
-        const key = (a.title || '').toLowerCase();
-        if (seen.has(key)) return;
-        seen.add(key);
-        const label = a.sourceLabel || 'FINWIRE';
-        sources.push({ publisher: label, link: a.link || '' });
-        lines.push(`- [${label}] ${a.title}`);
-      });
-
-      if (lines.length === 0) {
-        textEl.innerHTML = `<strong>Why it moved:</strong> No news about ${esc(sym.replace('.JK', ''))} found today. Check the company's filings for the reason.${fundHTML}`;
-        return;
-      }
-
-      // Send the exchange-agnostic code so the answer never reads "TLKM.JK".
-      const data = await aiRequest('/ai-explain-move', {
-        symbol: sym.replace(/\.JK$/i, ''), pct, isUp, lang: state.lang,
-        newsText: lines.join('\n')
-      });
-      
-      if (data && data.summary) {
-        // The older worker prompt forced a "No specific news found, but likely due to…"
-        // prefix even when real company headlines were supplied. Drop it in that case
-        // so the reader is not told the opposite of what the answer is based on.
-        let summary = data.summary.trim();
-        if (sources.length) {
-          const stripped = summary.replace(/^no specific news found,?\s*(but\s+)?(likely\s+)?(due\s+)?to\s*/i, '');
-          if (stripped && stripped !== summary) {
-            summary = stripped.charAt(0).toUpperCase() + stripped.slice(1);
-          }
-        }
-        const links = sources.slice(0, 3).map(n => n.link
-          ? `<a href="${esc(n.link)}" target="_blank" rel="noopener noreferrer">${esc(n.publisher)}</a>`
-          : esc(n.publisher)).join(' · ');
-        const srcLine = links ? `<div class="explain-sources">Sources: ${links}</div>` : '';
-        textEl.innerHTML = `<strong>Why it moved:</strong> ${esc(summary)}${srcLine}${fundHTML}`;
-      } else {
-        textEl.innerHTML = `<em>Could not analyze the move.</em>`;
-      }
-    } catch (err) {
-      textEl.innerHTML = `<em>${esc(aiErrorText(err))}</em>`;
-    } finally {
-      stopClock();
-    }
-  });
 
   // Daily Briefing Logic
   const briefingBtn = $('#generateBriefingBtn');
