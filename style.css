@@ -2603,14 +2603,6 @@ body, html {
 
 /* ---- market pulse + dividend leaders ---- */
 .mkt-asof{ font-size:11px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; font-weight:700; margin:0 0 10px; }
-.pulse-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(165px,1fr)); gap:12px; margin-bottom:22px; }
-.pulse-tile{ background:var(--bg-soft); border:1px solid var(--rule); border-radius:16px; padding:13px 15px; display:flex; flex-direction:column; gap:3px; }
-.pulse-label{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:800; }
-.pulse-value{ font-size:22px; font-weight:800; letter-spacing:-.02em; line-height:1.15; }
-.pulse-sub{ font-size:11.5px; font-weight:700; }
-.pulse-sub.up{ color:var(--green); }
-.pulse-sub.down{ color:var(--red); }
-.pulse-sub.muted{ color:var(--muted); }
 .breadth-bar{ display:flex; height:6px; border-radius:999px; overflow:hidden; margin-top:7px; background:var(--rule-2); }
 .breadth-bar i{ display:block; height:100%; }
 .breadth-bar .b-up{ background:var(--green); }
@@ -2629,10 +2621,6 @@ body, html {
 .sc-range-bar i{ position:absolute; top:-2px; width:2px; height:8px; background:var(--ink); border-radius:2px; transform:translateX(-1px); }
 .sc-range-cap{ font-size:9.5px; color:var(--muted); letter-spacing:.04em; }
 
-@media (max-width: 560px){
-  .pulse-grid{ grid-template-columns:1fr 1fr; }
-  .pulse-tile:nth-child(5){ grid-column:1 / -1; }
-}
 
 .div-table th{ white-space:nowrap; }
 /* Phone widths: drop company, payout count and ex-date so the yield column
@@ -2682,3 +2670,135 @@ body, html {
 .heat-detail-head{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
 .heat-detail-table{ min-width:0; }
 .heat-detail-table th, .heat-detail-table td{ padding-left:6px; padding-right:6px; }
+
+/* ---- markets: instrument strip, snapshot, leaders ---- */
+.ms-strip{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(148px,1fr); gap:10px; overflow-x:auto; padding-bottom:4px; margin-bottom:18px; scrollbar-width:none; }
+.ms-strip::-webkit-scrollbar{ display:none; }
+.mi-card{ position:relative; border:1px solid var(--rule); border-radius:16px; padding:12px 13px 8px; min-width:0; background:#fff; }
+.t-idx{ background:linear-gradient(150deg,#fff 0%,#fdeeed 100%); }
+.t-tech{ background:linear-gradient(150deg,#fff 0%,#eaeffc 100%); }
+.t-usa{ background:linear-gradient(150deg,#fff 0%,#e9eff8 100%); }
+.t-fx{ background:linear-gradient(150deg,#fff 0%,#edf0f3 100%); }
+.t-gold{ background:linear-gradient(150deg,#fff 0%,#fbf0d9 100%); }
+.t-oil{ background:linear-gradient(150deg,#fff 0%,#e7f0f2 100%); }
+.t-rate{ background:linear-gradient(150deg,#fff 0%,#efeafb 100%); }
+.t-btc{ background:linear-gradient(150deg,#fff 0%,#fbe7d1 100%); }
+.mi-top{ display:flex; align-items:center; gap:7px; margin-bottom:10px; }
+.mi-tag{ display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:24px; padding:0 5px; border-radius:8px; background:rgba(255,255,255,.85); border:1px solid rgba(17,20,24,.07); font-size:9.5px; font-weight:800; color:var(--ink); }
+.mi-name{ font-size:9.5px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mi-val{ font-size:19px; font-weight:800; letter-spacing:-.02em; line-height:1.15; }
+.mi-chg{ font-size:11px; font-weight:800; margin-top:2px; }
+.mi-chg.up{ color:var(--green); }
+.mi-chg.down{ color:var(--red); }
+.mi-spark{ margin:4px -8px -6px; height:44px; }
+
+.ms-duo{ display:grid; grid-template-columns:1.3fr 1fr; gap:16px; margin-bottom:18px; }
+.ms-hero-val{ font-family:'Playfair Display',Georgia,serif; font-size:40px; font-weight:700; letter-spacing:-.02em; line-height:1.02; }
+.ms-hero-top{ display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-top:4px; }
+.ms-chip{ font-size:11px; font-weight:800; padding:3px 9px; border-radius:999px; }
+.ms-chip.up{ color:#15803d; background:rgba(34,197,94,.13); }
+.ms-chip.down{ color:#b91c1c; background:rgba(239,68,68,.13); }
+.ms-hero-lab{ font-size:10px; letter-spacing:.11em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-top:6px; }
+.ms-range{ margin:18px 0 4px; }
+.ms-range-bar{ position:relative; display:block; height:6px; border-radius:999px; background:var(--rule-2); overflow:visible; }
+.ms-range-bar b{ position:absolute; left:0; top:0; height:100%; border-radius:999px; background:linear-gradient(90deg,#fca5a5,#86efac); }
+.ms-range-bar i{ position:absolute; top:50%; width:11px; height:11px; border-radius:50%; background:var(--ink); border:2px solid var(--bg); transform:translate(-50%,-50%); box-shadow:0 1px 5px rgba(0,0,0,.25); }
+.ms-range-cap{ display:flex; justify-content:space-between; font-size:10px; font-weight:700; color:var(--muted); margin-top:8px; }
+.ms-stats{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:16px; padding-top:14px; border-top:1px solid var(--rule-2); }
+.ms-stat span{ display:block; font-size:9px; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); font-weight:800; margin-bottom:3px; }
+.ms-stat strong{ font-size:14px; font-weight:800; }
+
+.ms-breadth{ margin-bottom:14px; }
+.ms-b-head{ display:flex; justify-content:space-between; align-items:baseline; font-size:10px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:var(--muted); }
+.ms-b-head b{ font-size:14px; color:var(--ink); letter-spacing:-.01em; }
+.ms-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 11px; border-radius:10px; border:1px solid transparent; }
+.ms-row + .ms-row{ margin-top:6px; }
+.ms-row.is-up{ background:rgba(34,197,94,.07); border-color:rgba(34,197,94,.15); }
+.ms-row.is-down{ background:rgba(239,68,68,.07); border-color:rgba(239,68,68,.15); }
+.ms-row.is-yield{ background:rgba(17,20,24,.035); border-color:var(--rule); }
+.ms-row-l{ display:flex; flex-direction:column; gap:1px; min-width:0; }
+.ms-row-l strong{ font-size:13px; font-weight:800; }
+.ms-row-l em{ font-style:normal; font-size:9px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); font-weight:700; }
+.ms-row-v{ font-size:13px; font-weight:800; white-space:nowrap; }
+.ms-row-v.up{ color:var(--green); }
+.ms-row-v.down{ color:var(--red); }
+.ms-row-v.muted{ color:var(--muted); font-size:11px; font-weight:700; }
+
+.chart-controls{ display:inline-flex; gap:2px; background:var(--bg-soft); border:1px solid var(--rule); border-radius:999px; padding:3px; flex-wrap:nowrap; }
+.chart-btn{ border:0 !important; background:transparent; border-radius:999px !important; padding:4px 10px; font-size:10px; font-weight:800; color:var(--muted); }
+.chart-btn:hover{ color:var(--ink); }
+.chart-btn.active{ background:var(--ink) !important; color:var(--bg) !important; }
+
+[data-theme="dark"] .mi-card{ background:var(--bg-soft); background-image:none; }
+[data-theme="dark"] .mi-tag{ background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.14); }
+[data-theme="dark"] .ms-row.is-yield{ background:rgba(255,255,255,.04); }
+[data-theme="dark"] .chart-controls{ background:var(--bg-soft); }
+
+@media (max-width: 900px){
+  .ms-duo{ grid-template-columns:1fr; }
+}
+@media (max-width: 600px){
+  .ms-stats{ grid-template-columns:1fr 1fr; }
+  .ms-hero-val{ font-size:34px; }
+  .ms-strip{ grid-auto-columns:minmax(138px,1fr); }
+}
+
+.mi-val{ font-size:16.5px; white-space:nowrap; font-variant-numeric:tabular-nums; letter-spacing:-.03em; }
+.mi-spark .apexcharts-canvas, .mi-spark .apexcharts-svg{ background:transparent !important; }
+
+@media (max-width: 620px){
+  .modern-card:has(.chart-controls) .card-title{ flex-direction:column; align-items:flex-start; gap:8px; }
+  .chart-controls{ padding:3px; }
+  .chart-btn{ padding:5px 9px; }
+}
+
+/* Wide layouts: the strip never scrolls; the snapshot splits into quote + stats
+   so the card fills its column instead of leaving a dead band underneath. */
+@media (min-width: 1100px){
+  .ms-strip{ grid-auto-flow:row; grid-template-columns:repeat(8,minmax(0,1fr)); grid-auto-columns:auto; overflow:visible; }
+  .ms-hero{ display:grid; grid-template-columns:1.25fr .75fr; column-gap:28px; align-items:start; }
+  .ms-hero .card-title{ grid-column:1 / -1; }
+  .ms-hero-main{ grid-column:1; }
+  .ms-hero .ms-stats{ grid-column:2; grid-template-columns:1fr 1fr; margin-top:6px; padding-top:0; border-top:0; gap:16px 18px; }
+}
+@media (min-width: 720px) and (max-width: 1099px){
+  .ms-strip{ grid-auto-flow:row; grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-columns:auto; overflow:visible; }
+}
+/* Nine sectors never leave a lone tile on its own row. */
+@media (min-width: 1000px){ .heat-grid{ grid-template-columns:repeat(5,minmax(0,1fr)); } }
+@media (max-width: 999px){ .heat-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
+
+/* The snapshot card stretches to the leaders card's height; keep its title at the
+   top and let the quote block sit directly beneath instead of floating mid-card. */
+@media (min-width: 1100px){
+  .ms-hero{ grid-template-rows:auto 1fr; }
+  .ms-hero .ms-stats{ align-self:center; }
+}
+
+@media (min-width: 1100px){
+  /* Fill the tall snapshot card with the stats block instead of a dead band. */
+  .ms-hero .ms-stats{ align-self:stretch; align-content:space-between; }
+}
+
+/* Cards hug their content at every width; the old stretch left a dead band
+   inside the snapshot card once the leaders list grew taller. */
+.ms-duo{ align-items:start; }
+@media (min-width: 1100px){
+  .ms-hero .ms-stats{ align-self:auto; align-content:normal; }
+}
+
+/* One-month IHSG line inside the snapshot card, so the tall card carries data
+   instead of empty space. */
+.ms-hero-spark{ margin:10px -6px -10px; height:104px; }
+.ms-hero-spark .apexcharts-canvas, .ms-hero-spark .apexcharts-svg{ background:transparent !important; }
+.ms-duo{ align-items:stretch; }
+@media (min-width: 1100px){
+  .ms-hero .ms-stats{ align-self:center; align-content:normal; }
+}
+
+/* The rendered chart carries an intrinsic pixel width; without min-width:0 the
+   grid lets it steal space from the stats column on very wide screens. */
+.ms-hero-main{ min-width:0; }
+.ms-hero-spark{ min-width:0; overflow:hidden; }
+.ms-hero .ms-stats{ min-width:0; }
+.ms-hero-spark .apexcharts-canvas{ max-width:100%; }

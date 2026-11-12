@@ -156,7 +156,10 @@ const I18N = {
       divNote: 'Trailing 12-month dividends ÷ last price · Yahoo Finance · not investment advice',
       divFilter: 'Min yield', divAll: 'All', divNoMatch: 'No name clears that yield hurdle.',
       sectors: 'IDX Sector Pulse', sectorsSub: 'Average move · 30 tracked names',
-      sectorDrivers: 'What moved it', colChange: 'Change'
+      sectorDrivers: 'What moved it', colChange: 'Change',
+      snapshot: 'Jakarta snapshot', ihsgSub: 'IHSG · composite', today: 'today',
+      dayHigh: 'Day high', dayLow: 'Day low', prevClose: 'Prev close', volume: 'Volume', dayRange: 'Day range',
+      wkRange: '52-week range', leaders: 'Breadth & leaders', topLoser: 'Top IDX loser'
     }
   },
   id: {
@@ -213,7 +216,10 @@ const I18N = {
       divNote: 'Dividen 12 bulan terakhir ÷ harga terakhir · Yahoo Finance · bukan saran investasi',
       divFilter: 'Yield min', divAll: 'Semua', divNoMatch: 'Tidak ada emiten yang melewati batas yield itu.',
       sectors: 'Denyut Sektor IDX', sectorsSub: 'Rata-rata pergerakan · 30 emiten',
-      sectorDrivers: 'Yang menggerakkan', colChange: 'Perubahan'
+      sectorDrivers: 'Yang menggerakkan', colChange: 'Perubahan',
+      snapshot: 'Ringkasan Jakarta', ihsgSub: 'IHSG · gabungan', today: 'hari ini',
+      dayHigh: 'Tertinggi', dayLow: 'Terendah', prevClose: 'Penutupan lalu', volume: 'Volume', dayRange: 'Rentang hari',
+      wkRange: 'Rentang 52 minggu', leaders: 'Breadth & pemimpin', topLoser: 'Loser IDX teratas'
     }
   }
 };
@@ -1396,56 +1402,94 @@ function breadthBarHTML(counts) {
     '</span>';
 }
 
-function pulseHTML(allData, idxData, usData) {
+/* Market snapshot: the two cards that sit under the instrument strip. The
+   editorial look stays (paper, ink, serif numbers) but the shape follows a
+   modern finance dashboard: one big quote, its 52-week position, then a compact
+   leaders list instead of a wall of equal tiles. */
+function marketHeroHTML(allData, idxData, usData) {
   const t = I18N[state.lang].mkt;
   const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
-  const ihsg = allData['^JKSE'];
+  const fmt = function (v, digits) {
+    return isFinite(v) ? v.toLocaleString(locale, { maximumFractionDigits: digits, minimumFractionDigits: 0 }) : '—';
+  };
+  const ihsg = allData['^JKSE'] || {};
+  const up = (ihsg.pct || 0) >= 0;
+  const lo = ihsg.week52Low, hi = ihsg.week52High;
+  const hasRange = isFinite(lo) && isFinite(hi) && hi > lo && isFinite(ihsg.price);
+  const pos = hasRange ? Math.max(0, Math.min(100, ((ihsg.price - lo) / (hi - lo)) * 100)) : null;
+
   const idx = breadthCounts(idxData);
   const us = breadthCounts(usData);
   const best = idxData.slice().sort(function (a, b) { return b.pct - a.pct; })[0];
-  const tiles = [];
+  const worst = idxData.slice().sort(function (a, b) { return a.pct - b.pct; })[0];
 
-  tiles.push('<div class="pulse-tile">' +
-    '<span class="pulse-label">IHSG</span>' +
-    '<strong class="pulse-value">' + (ihsg ? ihsg.price.toLocaleString(locale, { maximumFractionDigits: 2 }) : '—') + '</strong>' +
-    '<span class="pulse-sub ' + (ihsg && ihsg.pct >= 0 ? 'up' : 'down') + '">' +
-    (ihsg ? (ihsg.pct >= 0 ? '▲ ' : '▼ ') + Math.abs(ihsg.pct).toFixed(2) + '%' : '—') + '</span></div>');
+  const leaderRow = function (label, symbol, pct) {
+    const good = pct >= 0;
+    return '<div class="ms-row ' + (good ? 'is-up' : 'is-down') + '">' +
+      '<span class="ms-row-l"><strong>' + esc(symbol) + '</strong><em>' + esc(label) + '</em></span>' +
+      '<span class="ms-row-v ' + (good ? 'up' : 'down') + '">' + (good ? '+' : '') + pct.toFixed(2) + '%</span>' +
+      '</div>';
+  };
 
-  tiles.push('<div class="pulse-tile">' +
-    '<span class="pulse-label">' + esc(t.breadth) + ' · IDX</span>' +
-    '<strong class="pulse-value">' + (idx.total ? idx.up + ' / ' + idx.down : '—') + '</strong>' +
-    '<span class="pulse-sub muted">' + esc(t.adv) + ' · ' + esc(t.dec) + '</span>' +
-    breadthBarHTML(idx) + '</div>');
+  const stat = function (label, value) {
+    return '<div class="ms-stat"><span>' + esc(label) + '</span><strong>' + value + '</strong></div>';
+  };
 
-  tiles.push('<div class="pulse-tile">' +
-    '<span class="pulse-label">' + esc(t.breadth) + ' · US</span>' +
-    '<strong class="pulse-value">' + (us.total ? us.up + ' / ' + us.down : '—') + '</strong>' +
-    '<span class="pulse-sub muted">' + esc(t.adv) + ' · ' + esc(t.dec) + '</span>' +
-    breadthBarHTML(us) + '</div>');
-
-  tiles.push('<div class="pulse-tile">' +
-    '<span class="pulse-label">' + esc(t.topGainer) + '</span>' +
-    '<strong class="pulse-value">' + (best ? esc(best.symbol.replace('.JK', '')) : '—') + '</strong>' +
-    '<span class="pulse-sub ' + (best && best.pct >= 0 ? 'up' : 'down') + '">' +
-    (best ? (best.pct >= 0 ? '+' : '') + best.pct.toFixed(2) + '%' : '—') + '</span></div>');
-
-  tiles.push('<div class="pulse-tile" id="pulseTopYield">' +
-    '<span class="pulse-label">' + esc(t.topYield) + '</span>' +
-    '<strong class="pulse-value">…</strong>' +
-    '<span class="pulse-sub muted">' + esc(t.divLoading) + '</span></div>');
-
-  return '<div class="pulse-grid">' + tiles.join('') + '</div>';
+  return '<div class="ms-duo">' +
+    '<section class="modern-card ms-hero">' +
+      '<div class="card-title"><span>' + esc(t.snapshot) + '</span>' +
+      '<span class="div-sub">' + esc(t.ihsgSub) + '</span></div>' +
+      '<div class="ms-hero-main">' +
+      '<div class="ms-hero-top">' +
+        '<div class="ms-hero-val">' + fmt(ihsg.price, 2) + '</div>' +
+        '<span class="ms-chip ' + (up ? 'up' : 'down') + '">' + (up ? '▲ ' : '▼ ') + Math.abs(ihsg.pct || 0).toFixed(2) + '%</span>' +
+      '</div>' +
+      '<div class="ms-hero-lab">IHSG · ' + esc(t.today) + '</div>' +
+      (pos === null ? '' :
+        '<div class="ms-range"><span class="ms-range-bar">' +
+        '<b style="width:' + pos.toFixed(1) + '%"></b>' +
+        '<i style="left:' + pos.toFixed(1) + '%"></i></span>' +
+        '<div class="ms-range-cap"><span>' + fmt(lo, 0) + '</span><span>' + esc(t.wkRange) + '</span><span>' + fmt(hi, 0) + '</span></div></div>') +
+      '<div id="heroSpark" class="ms-hero-spark"></div>' +
+      '</div>' +
+      '<div class="ms-stats">' +
+        stat(t.dayHigh, fmt(ihsg.dayHigh, 0)) +
+        stat(t.dayLow, fmt(ihsg.dayLow, 0)) +
+        stat(t.prevClose, fmt(ihsg.prevClose, 0)) +
+        (isFinite(ihsg.volume)
+          ? stat(t.volume, compactNum(ihsg.volume))
+          : stat(t.dayRange, (isFinite(ihsg.dayHigh) && isFinite(ihsg.dayLow)) ? fmt(ihsg.dayHigh - ihsg.dayLow, 0) + ' pts' : '—')) +
+      '</div>' +
+    '</section>' +
+    '<section class="modern-card ms-watch">' +
+      '<div class="card-title"><span>' + esc(t.leaders) + '</span>' +
+      '<span class="div-sub">' + esc(t.breadth) + '</span></div>' +
+      '<div class="ms-breadth">' +
+        '<div class="ms-b-head"><span>IDX</span><b>' + idx.up + ' / ' + idx.down + '</b></div>' +
+        breadthBarHTML(idx) +
+        '<div class="ms-b-head" style="margin-top:10px;"><span>US</span><b>' + us.up + ' / ' + us.down + '</b></div>' +
+        breadthBarHTML(us) +
+      '</div>' +
+      '<div class="ms-rows">' +
+        (best ? leaderRow(t.topGainer, best.symbol.replace('.JK', ''), best.pct) : '') +
+        (worst ? leaderRow(t.topLoser, worst.symbol.replace('.JK', ''), worst.pct) : '') +
+        '<div class="ms-row is-yield" id="msTopYield"><span class="ms-row-l"><strong>…</strong><em>' + esc(t.topYield) + '</em></span>' +
+        '<span class="ms-row-v muted">' + esc(t.divLoading) + '</span></div>' +
+      '</div>' +
+    '</section></div>';
 }
 
-function updatePulseTopYield(rows) {
-  const el = document.getElementById('pulseTopYield');
+/* Filled once the dividend scan finishes, so the leaders card stays useful
+   before the 37-name sweep completes. */
+function updateTopYield(rows) {
+  const el = document.getElementById('msTopYield');
   if (!el) return;
   const t = I18N[state.lang].mkt;
   const top = rows && rows[0];
-  el.innerHTML = '<span class="pulse-label">' + esc(t.topYield) + '</span>' +
-    '<strong class="pulse-value">' + (top ? esc(top.symbol.replace('.JK', '')) : '—') + '</strong>' +
-    '<span class="pulse-sub ' + (top ? 'up' : 'muted') + '">' +
-    (top ? top.yieldPct.toFixed(2) + '%' : esc(t.divEmpty)) + '</span>';
+  el.className = 'ms-row' + (top ? ' is-yield' : '');
+  el.innerHTML = '<span class="ms-row-l"><strong>' + (top ? esc(top.symbol.replace('.JK', '')) : '—') + '</strong>' +
+    '<em>' + esc(t.topYield) + '</em></span>' +
+    '<span class="ms-row-v ' + (top ? 'up' : 'muted') + '">' + (top ? top.yieldPct.toFixed(2) + '%' : '—') + '</span>';
 }
 
 const divView = { sort: 'yieldPct', dir: 'desc', minYield: 0 };
@@ -1635,19 +1679,27 @@ async function loadMarketDashboard() {
     return { ...x, data: allData[x.symbol], spark: hist };
   }));
 
+  // Money-market strip: one tinted card per instrument, sparkline included.
+  const INST_TONE = {
+    '^JKSE': ['t-idx', 'JK'], '^IXIC': ['t-tech', 'NQ'], '^DJI': ['t-usa', 'DJ'],
+    'IDR=X': ['t-fx', 'Rp'], 'GC=F': ['t-gold', 'Au'], 'CL=F': ['t-oil', 'CL'],
+    '^TNX': ['t-rate', '10Y'], 'BTC-USD': ['t-btc', '\u20bf']
+  };
   const sparkHtml = summaryData.map(d => {
     if (!d.data) return '';
     const isUp = d.data.pct >= 0;
-    return `
-      <div class="spark-card">
-        <div class="spark-header">
-          <span class="spark-name">${d.name}</span>
-          <span class="spark-chg ${isUp ? 'up' : 'down'}">${isUp ? '▲' : '▼'} ${Math.abs(d.data.pct).toFixed(2)}%</span>
-        </div>
-        <div class="spark-val">${d.data.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}</div>
-        <div id="spark-${d.symbol.replace('^', '').replace('=', '')}"></div>
-      </div>
-    `;
+    const tone = INST_TONE[d.symbol] || ['t-usa', d.name.slice(0, 2).toUpperCase()];
+    // ^TNX quotes a yield, so a bare "5" would read as a price.
+    const valText = d.symbol === '^TNX'
+      ? d.data.price.toFixed(2) + '%'
+      : d.data.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
+    return '<article class="mi-card ' + tone[0] + '">' +
+      '<div class="mi-top"><span class="mi-tag">' + esc(tone[1]) + '</span>' +
+      '<span class="mi-name">' + esc(d.name) + '</span></div>' +
+      '<div class="mi-val">' + valText + '</div>' +
+      '<div class="mi-chg ' + (isUp ? 'up' : 'down') + '">' + (isUp ? '▲ ' : '▼ ') + Math.abs(d.data.pct).toFixed(2) + '%</div>' +
+      '<div class="mi-spark" id="spark-' + d.symbol.replace('^', '').replace('=', '') + '"></div>' +
+      '</article>';
   }).join('');
 
   const mainChartData = await fetchHistory('^JKSE', '6mo');
@@ -1730,9 +1782,9 @@ async function loadMarketDashboard() {
 
   dash.innerHTML = `
     <div class="mkt-asof">${esc(mktT.asOf)} ${esc(asOf)} · ${esc(mktT.delayed)}</div>
-    ${pulseHTML(allData, idxData, usData)}
+    <div class="ms-strip">${sparkHtml}</div>
+    ${marketHeroHTML(allData, idxData, usData)}
     ${heatmapHTML(idxData)}
-    <div class="sparkline-grid">${sparkHtml}</div>
     
     <div class="dash-grid" style="align-items: start;">
       <div>
@@ -1799,7 +1851,7 @@ async function loadMarketDashboard() {
     esc(mktT.dividends) + '</div><div class="ef-empty">' + esc(mktT.divLoading) + '</div></div>';
   loadDividendLeaders().then(function (rows) {
     renderDividendPanel(rows);
-    updatePulseTopYield(rows);
+    updateTopYield(rows);
   }).catch(function () { renderDividendPanel([]); });
 
   if (typeof ApexCharts !== 'undefined') {
@@ -1809,7 +1861,7 @@ async function loadMarketDashboard() {
     summaryData.forEach(d => {
       if (!d.data) return;
       const sparkChart = new ApexCharts(document.querySelector(`#spark-${d.symbol.replace('^', '').replace('=', '')}`), {
-        series: [{ data: d.spark.map(p => p.y) }], chart: { type: 'area', height: 50, sparkline: { enabled: true } },
+        series: [{ data: d.spark.map(p => p.y) }], chart: { type: 'area', height: 44, background: 'transparent', sparkline: { enabled: true } },
         theme: chartTheme,
         stroke: { curve: 'smooth', width: 2 }, colors: [d.data.pct >= 0 ? '#22c55e' : '#ef4444'],
         fill: { type: 'gradient', gradient: { opacityFrom: 0.4, opacityTo: 0 } }, tooltip: { enabled: false }
@@ -1817,6 +1869,22 @@ async function loadMarketDashboard() {
       sparkChart.render();
       chartInstances.push(sparkChart);
     });
+
+    const ihsgHist = summaryData.filter(function (d) { return d.symbol === '^JKSE'; })[0];
+    const heroSparkEl = document.getElementById('heroSpark');
+    if (ihsgHist && heroSparkEl && ihsgHist.spark.length) {
+      const heroSparkChart = new ApexCharts(heroSparkEl, {
+        series: [{ name: 'IHSG', data: ihsgHist.spark }],
+        chart: { type: 'area', height: 104, background: 'transparent', sparkline: { enabled: true } },
+        theme: chartTheme,
+        stroke: { curve: 'smooth', width: 2 },
+        colors: [isDark ? '#f87171' : '#ef4444'],
+        fill: { type: 'gradient', gradient: { opacityFrom: 0.22, opacityTo: 0 } },
+        tooltip: { enabled: false }
+      });
+      heroSparkChart.render();
+      chartInstances.push(heroSparkChart);
+    }
 
     ihsgChart = new ApexCharts(document.querySelector("#mainChart"), {
       series: [{ name: 'IHSG', data: mainChartData }], chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'Inter' },
