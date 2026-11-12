@@ -2309,6 +2309,62 @@ body, html {
 .pf-table tbody tr[data-fin-open]:hover td { background: var(--glass-soft); }
 .pf-table th.num, .pf-table td.num { text-align: right; }
 
+/* On a phone the table's seven columns would need a sideways scroll that cuts
+   the P/L off, so each holding becomes a block: ticker, a 2x2 of figures, and
+   the row actions underneath. */
+@media (max-width: 860px) {
+  .pf-table-wrap { overflow-x: visible; }
+  .pf-table, .pf-table tbody { display: block; width: 100%; }
+  .pf-table thead { display: none; }
+  .pf-table tbody tr[data-fin-open] {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 14px;
+    max-width: 520px;
+    padding: 13px 14px;
+    margin-bottom: 6px;
+    border: 1px solid var(--rule-2);
+    border-radius: 12px;
+  }
+  .pf-table tbody tr[data-fin-open] td {
+    display: block;
+    padding: 0;
+    border: 0;
+    white-space: normal;
+    text-align: left;
+    font-size: 12.5px;
+  }
+  .pf-table tbody tr[data-fin-open] td:first-child { grid-column: 1 / -1; }
+  .pf-table tbody tr[data-fin-open] td.num::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .pf-table tbody tr[data-fin-open] td:last-child {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+  }
+  .pf-table tbody tr[data-fin-open]:hover td { background: transparent; }
+  .pf-table tbody tr[data-fin-open]:hover { border-color: var(--ink); }
+  .pf-table tbody tr.pf-detail { display: block; }
+  .pf-table tbody tr.pf-detail > td { display: block; padding: 0; border: 0; }
+  .pf-table tbody tr.pf-detail .pf-detail-inner {
+    max-width: 520px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    border: 1px solid var(--rule-2);
+    border-radius: 12px;
+    background: var(--glass-soft);
+  }
+  .pf-name { max-width: none; white-space: normal; }
+}
+
 .pf-sym { font-weight: 800; color: var(--ink); }
 .pf-name {
   font-size: 11px; font-weight: 500; color: var(--muted);

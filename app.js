@@ -3044,11 +3044,11 @@ function renderPortfolio() {
     return `
       <tr data-fin-open="${esc(h.symbol)}" data-fin-name="${esc((v.q && v.q.name) || h.symbol)}">
         <td><div class="pf-sym">${esc(h.symbol)}</div><div class="pf-name">${esc((v.q && v.q.name) || '')}</div></td>
-        <td class="num">${h.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
-        <td class="num">${avgText}</td>
-        <td class="num">${lastCell}</td>
-        <td class="num">${valueCell}</td>
-        <td class="num ${cls}">${plCell}</td>
+        <td class="num" data-label="${esc(p.colShares)}">${h.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
+        <td class="num" data-label="${esc(p.colCost)}">${avgText}</td>
+        <td class="num" data-label="${esc(p.colLast)}">${lastCell}</td>
+        <td class="num" data-label="${esc(p.colValue)}">${valueCell}</td>
+        <td class="num ${cls}" data-label="${esc(p.colPl)}">${plCell}</td>
         <td class="num"><div class="pf-row-actions">
           <button type="button" class="pf-open${pfOpen.has(h.symbol) ? ' open' : ''}" data-pf-open="${esc(h.symbol)}" aria-expanded="${pfOpen.has(h.symbol) ? 'true' : 'false'}" aria-label="${esc(p.details)}" title="${esc(p.details)}">⌄</button>
           <button type="button" class="pf-remove" data-pf-remove="${esc(h.symbol)}" aria-label="${esc(p.remove)}" title="${esc(p.remove)}">×</button>
