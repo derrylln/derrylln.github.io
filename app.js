@@ -151,7 +151,9 @@ const I18N = {
       actAdd: 'Added', actRemove: 'Removed',
       holdingsTitle: 'Holdings', holdingsSub: 'Open a row for fundamentals and the AI read',
       filterLabel: 'Filter holdings', filterAll: 'All',
-      trendEmpty: 'Add a holding to chart performance.', loadingTrend: 'Rebuilding your trend…'
+      trendEmpty: 'Add a holding to chart performance.', loadingTrend: 'Rebuilding your trend…',
+      chartNote: 'Rebuilt from your holdings as they stand today, at the current exchange rate — not a recorded portfolio history.',
+      chartNoteFx: 'Converted at 1 USD = {rate}.'
     },
     fund: {
       title: 'Fundamentals', mktCap: 'Market cap', pe: 'P/E', rev: 'Revenue', revGrowth: 'Revenue growth',
@@ -232,7 +234,9 @@ const I18N = {
       actAdd: 'Ditambah', actRemove: 'Dihapus',
       holdingsTitle: 'Kepemilikan', holdingsSub: 'Buka baris untuk fundamental dan analisis AI',
       filterLabel: 'Saring kepemilikan', filterAll: 'Semua',
-      trendEmpty: 'Tambahkan posisi untuk melihat grafik kinerja.', loadingTrend: 'Menyusun tren Anda…'
+      trendEmpty: 'Tambahkan posisi untuk melihat grafik kinerja.', loadingTrend: 'Menyusun tren Anda…',
+      chartNote: 'Disusun ulang dari posisi Anda hari ini, dengan kurs saat ini — bukan riwayat portofolio yang tercatat.',
+      chartNoteFx: 'Dikonversi pada 1 USD = {rate}.'
     },
     fund: {
       title: 'Fundamental', mktCap: 'Kap. pasar', pe: 'P/E', rev: 'Pendapatan', revGrowth: 'Pertumbuhan pendapatan',
@@ -2405,6 +2409,16 @@ function pfLogActivity(entry) {
   saveJSON(PF_ACT, list.slice(0, 60));
 }
 
+/* One book, one currency. A split or a chart that silently drops the IDX
+   positions because they quote in rupiah only tells half the story, so every
+   holding is converted at today's rate and the panel says which currency it
+   speaks. */
+function pfValueIn(view, target) {
+  if (view.value == null) return null;
+  if (view.target === target) return view.value;
+  return pfConvert(view.value, view.target, target);
+}
+
 function pfActivityHtml() {
   const p = (I18N[state.lang] || I18N.en).portfolio;
   const list = pfActivityList().slice(0, 8);
@@ -2425,11 +2439,14 @@ function pfActivityHtml() {
 
 /* Weight by class: one stacked bar plus a legend that also carries the money,
    so the bar answers "how much is in ETFs" without a second table. */
-function pfAllocationHtml(rows, cur) {
+function pfAllocationHtml(views, target) {
   const p = (I18N[state.lang] || I18N.en).portfolio;
+  const rows = views.map(function (r) {
+    return { symbol: r.h.symbol, value: pfValueIn(r.v, target) };
+  }).filter(function (r) { return r.value != null && r.value > 0; });
   const groups = PF_CLASSES.map(function (cls) {
-    const subset = rows.filter(function (r) { return pfClassOf(r.h.symbol) === cls && r.v.value != null; });
-    const value = subset.reduce(function (a, r) { return a + r.v.value; }, 0);
+    const subset = rows.filter(function (r) { return pfClassOf(r.symbol) === cls; });
+    const value = subset.reduce(function (a, r) { return a + r.value; }, 0);
     return { cls: cls, value: value, count: subset.length };
   }).filter(function (g) { return g.value > 0; });
   if (!groups.length) return `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
@@ -2441,28 +2458,31 @@ function pfAllocationHtml(rows, cur) {
     return `<div class="pa-row">
         <span class="pa-key"><i class="pa-dot pa-${g.cls}"></i>${esc(pfClassLabel(g.cls))}<em>${g.count}</em></span>
         <span class="pa-weight">${((g.value / total) * 100).toFixed(1)}%</span>
-        <span class="pa-val">${pfMoney(g.value, cur)}</span>
+        <span class="pa-val">${pfMoney(g.value, target)}</span>
       </div>`;
   }).join('');
   return `<div class="pa-bar">${bar}</div><div class="pa-legend">${legend}</div>`;
 }
 
 /* Which holdings are carrying the portfolio and which are dragging it. */
-function pfMoveHtml(rows, cur) {
+function pfMoveHtml(views, target) {
   const p = (I18N[state.lang] || I18N.en).portfolio;
-  const list = rows.filter(function (r) { return r.v.pl != null; });
+  const list = views.map(function (r) {
+    const pl = r.v.pl == null ? null : (r.v.target === target ? r.v.pl : pfConvert(r.v.pl, r.v.target, target));
+    return pl == null ? null : { h: r.h, pl: pl, plPct: r.v.plPct };
+  }).filter(Boolean);
   if (!list.length) return `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
-  const peak = list.reduce(function (a, r) { return Math.max(a, Math.abs(r.v.pl)); }, 0) || 1;
+  const peak = list.reduce(function (a, r) { return Math.max(a, Math.abs(r.pl)); }, 0) || 1;
   const rowHtml = function (r) {
-    const up = r.v.pl >= 0;
+    const up = r.pl >= 0;
     return `<div class="pmm-row">
         <span class="pmm-sym">${esc(r.h.symbol.replace('.JK', ''))}</span>
-        <span class="pmm-bar"><i class="${up ? 'up' : 'down'}" style="width:${Math.max(6, (Math.abs(r.v.pl) / peak) * 100).toFixed(0)}%"></i></span>
-        <span class="pmm-val ${up ? 'up' : 'down'}">${pfSignedMoney(r.v.pl, cur)}<em>${pfPctText(r.v.plPct)}</em></span>
+        <span class="pmm-bar"><i class="${up ? 'up' : 'down'}" style="width:${Math.max(6, (Math.abs(r.pl) / peak) * 100).toFixed(0)}%"></i></span>
+        <span class="pmm-val ${up ? 'up' : 'down'}">${pfSignedMoney(r.pl, target)}<em>${pfPctText(r.plPct)}</em></span>
       </div>`;
   };
-  const up = list.filter(function (r) { return r.v.pl > 0; }).sort(function (a, b) { return b.v.pl - a.v.pl; }).slice(0, 3);
-  const down = list.filter(function (r) { return r.v.pl < 0; }).sort(function (a, b) { return a.v.pl - b.v.pl; }).slice(0, 3);
+  const up = list.filter(function (r) { return r.pl > 0; }).sort(function (a, b) { return b.pl - a.pl; }).slice(0, 3);
+  const down = list.filter(function (r) { return r.pl < 0; }).sort(function (a, b) { return a.pl - b.pl; }).slice(0, 3);
   const col = function (label, arr, cls) {
     if (!arr.length) return '';
     return `<div class="pmm-col"><div class="mkt-col-label ${cls}">${esc(label)}</div>${arr.map(rowHtml).join('')}</div>`;
@@ -2478,6 +2498,7 @@ function pfMoveHtml(rows, cur) {
    the only way a rupiah portfolio and an index compare fairly. ---- */
 
 const pfTrendState = { range: '6mo', key: '', data: null };
+let pfFxPending = false;
 let pfTrendChart = null;
 
 function pfDayKey(x) { return new Date(x).toISOString().slice(0, 10); }
@@ -2489,7 +2510,7 @@ function pfLastPct(series) {
 }
 
 async function pfLoadTrend(range, target) {
-  const key = [range, target, portfolio.map(function (h) { return h.symbol + ':' + h.shares; }).join(',')].join('|');
+  const key = [range, target, pfRate() || 0, portfolio.map(function (h) { return h.symbol + ':' + h.shares; }).join(',')].join('|');
   if (pfTrendState.key === key && pfTrendState.data) return pfTrendState.data;
   const holdings = portfolio.slice();
   if (!holdings.length) return null;
@@ -2709,6 +2730,16 @@ function renderPortfolio() {
         return (b.rows.length - a.rows.length) || ((b.value || 0) - (a.value || 0));
       })[0] || sums[0]);
   const primaryCur = primary.cur;
+  /* Converting IDX positions needs a rate the quotes alone never asked for
+     (every holding is priced in its own currency), so ask now and re-render
+     once it lands rather than charting half the book. */
+  if (portfolio.some(function (h) { return pfCurrency(h.symbol) !== primaryCur; }) && !pfRate() && !pfFxPending) {
+    pfFxPending = true;
+    refreshFxRate(true).then(function () { pfFxPending = false; renderPortfolio(); })
+      .catch(function () { pfFxPending = false; });
+  }
+  const paneFx = pfRate() && portfolio.some(function (h) { return pfCurrency(h.symbol) !== primaryCur; });
+  const chartNote = esc(p.chartNote) + (paneFx ? ' ' + esc((p.chartNoteFx || '').replace('{rate}', pfMoney(pfRate(), 'IDR'))) : '');
 
   const present = PF_CLASSES.filter(function (cls) {
     return views.some(function (r) { return pfClassOf(r.h.symbol) === cls; });
@@ -2754,7 +2785,7 @@ function renderPortfolio() {
       <section class="mkt-card">
         <div class="mkt-card-head">
           <div>
-            <h2 class="mkt-title">${esc(p.perfTitle)}</h2>
+            <h2 class="mkt-title">${esc(p.perfTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
             <p class="mkt-sub">${esc(p.perfSub)}</p>
           </div>
           <div class="mkt-seg" id="pfRangeSeg" role="group">${rangeChips}</div>
@@ -2764,16 +2795,17 @@ function renderPortfolio() {
           <span class="mkt-legend-item"><i class="mkt-dot ihsg"></i>${esc(p.benchmark)} <b id="pfTrendBench">—</b></span>
         </div>
         <div id="pfTrendChart"><div class="pf-empty-sm">${esc(p.loadingTrend)}</div></div>
+        <p class="pf-chart-note">${chartNote}</p>
       </section>
 
       <section class="mkt-card">
         <div class="mkt-card-head">
           <div>
-            <h2 class="mkt-title">${esc(p.allocTitle)}</h2>
+            <h2 class="mkt-title">${esc(p.allocTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
             <p class="mkt-sub">${esc(p.allocSub)}</p>
           </div>
         </div>
-        ${pfAllocationHtml(primary.rows, primaryCur)}
+        ${pfAllocationHtml(views, primaryCur)}
       </section>
     </div>
 
@@ -2781,11 +2813,11 @@ function renderPortfolio() {
       <section class="mkt-card">
         <div class="mkt-card-head">
           <div>
-            <h2 class="mkt-title">${esc(p.moveTitle)}</h2>
+            <h2 class="mkt-title">${esc(p.moveTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
             <p class="mkt-sub">${esc(p.moveSub)}</p>
           </div>
         </div>
-        ${pfMoveHtml(primary.rows, primaryCur)}
+        ${pfMoveHtml(views, primaryCur)}
       </section>
 
       <section class="mkt-card">
