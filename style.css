@@ -1286,7 +1286,7 @@ button{ font-family:inherit; }
   cursor: pointer;
 }
 .sc-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 6px; }
-.ai-modal-close {
+.modal-x {
   border: none;
   background: transparent;
   color: var(--muted);
@@ -1304,8 +1304,8 @@ button{ font-family:inherit; }
   cursor: pointer;
   transition: color 0.15s, background 0.15s;
 }
-.ai-modal-close:hover { color: var(--ink); background: var(--glass-soft); }
-[data-theme="dark"] .ai-modal-close:hover { color: #e2e8f0; background: rgba(148, 163, 184, 0.16); }
+.modal-x:hover { color: var(--ink); background: var(--glass-soft); }
+[data-theme="dark"] .modal-x:hover { color: #e2e8f0; background: rgba(148, 163, 184, 0.16); }
 
 /* FINANCIAL REPORT MODAL — the statements behind a card */
 .fin-modal {

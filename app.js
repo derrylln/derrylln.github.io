@@ -1124,7 +1124,7 @@ function finModal() {
     '<button type="button" class="active" data-fin-kind="q">' + esc(t.quarterly) + '</button>' +
     '<button type="button" data-fin-kind="y">' + esc(t.annual) + '</button></div>' +
     '<button type="button" class="fin-ai" id="finAi" title="' + esc(I18N[state.lang].fundAi.title) + '">✨ ' + esc(t.aiRead) + '</button>' +
-    '<button type="button" class="ai-modal-close fin-close" aria-label="' + esc(t.close) + '">×</button></div></div>' +
+    '<button type="button" class="modal-x fin-close" aria-label="' + esc(t.close) + '">×</button></div></div>' +
     '<div class="fin-body" id="finBody"></div>' +
     '<div class="fin-note">' + esc(t.note) + '</div></div>';
   wrap.addEventListener('click', function (e) {
@@ -1533,7 +1533,6 @@ function renderCardFundamentals(node, fund) {
   const bits = [];
   if (fund.pe) bits.push(t.pe + ' ' + fund.pe.raw.toFixed(1));
   if (fund.mktCap) bits.push(compactNum(fund.mktCap.raw, fund.currency));
-  if (isFinite(fund.roe)) bits.push(t.roe + ' ' + fund.roe.toFixed(0) + '%');
   if (!bits.length) { node.innerHTML = ''; return; }
   node.innerHTML = bits.map(b => '<span>' + esc(b) + '</span>').join('');
 }
