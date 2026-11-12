@@ -164,7 +164,7 @@ const I18N = {
     },
     fin: {
       title: 'Financial report', kind: 'Period', quarterly: 'Quarterly', annual: 'Annual',
-      loading: 'Loading the report…', close: 'Close', chartRevenue: 'Revenue and net income',
+      loading: 'Loading the report…', close: 'Close', chartRevenue: 'Revenue and net income', aiRead: 'AI read',
       noData: 'No report available for this company.',
       note: 'Reported figures · Yahoo Finance · not investment advice'
     },
@@ -184,8 +184,6 @@ const I18N = {
       colDps: 'DPS 12m', colYield: 'Yield', colPays: 'Payouts', colEx: 'Last ex-date',
       divNote: 'Trailing 12-month dividends ÷ last price · Yahoo Finance · not investment advice',
       divFilter: 'Min yield', divAll: 'All', divNoMatch: 'No name clears that yield hurdle.',
-      sectors: 'IDX Sector Pulse', sectorsSub: 'Average move · 30 tracked names',
-      sectorDrivers: 'What moved it', colChange: 'Change',
       snapshot: 'Jakarta snapshot', ihsgSub: 'IHSG · composite', today: 'today',
       dayHigh: 'Day high', dayLow: 'Day low', prevClose: 'Prev close', volume: 'Volume', dayRange: 'Day range',
       wkRange: '52-week range', leaders: 'Breadth & leaders', topLoser: 'Top IDX loser'
@@ -253,7 +251,7 @@ const I18N = {
     },
     fin: {
       title: 'Laporan keuangan', kind: 'Periode', quarterly: 'Kuartal', annual: 'Tahunan',
-      loading: 'Memuat laporan…', close: 'Tutup', chartRevenue: 'Pendapatan dan laba bersih',
+      loading: 'Memuat laporan…', close: 'Tutup', chartRevenue: 'Pendapatan dan laba bersih', aiRead: 'Analisis AI',
       noData: 'Laporan tidak tersedia untuk emiten ini.',
       note: 'Angka laporan · Yahoo Finance · bukan saran investasi'
     },
@@ -273,8 +271,6 @@ const I18N = {
       colDps: 'DPS 12 bln', colYield: 'Yield', colPays: 'Bayar', colEx: 'Ex-date terakhir',
       divNote: 'Dividen 12 bulan terakhir ÷ harga terakhir · Yahoo Finance · bukan saran investasi',
       divFilter: 'Yield min', divAll: 'Semua', divNoMatch: 'Tidak ada emiten yang melewati batas yield itu.',
-      sectors: 'Denyut Sektor IDX', sectorsSub: 'Rata-rata pergerakan · 30 emiten',
-      sectorDrivers: 'Yang menggerakkan', colChange: 'Perubahan',
       snapshot: 'Ringkasan Jakarta', ihsgSub: 'IHSG · gabungan', today: 'hari ini',
       dayHigh: 'Tertinggi', dayLow: 'Terendah', prevClose: 'Penutupan lalu', volume: 'Volume', dayRange: 'Rentang hari',
       wkRange: 'Rentang 52 minggu', leaders: 'Breadth & pemimpin', topLoser: 'Loser IDX teratas'
@@ -1123,11 +1119,13 @@ function finModal() {
     '<div class="fin-head-side"><div class="fin-seg" id="finSeg" role="group" aria-label="' + esc(t.kind) + '">' +
     '<button type="button" class="active" data-fin-kind="q">' + esc(t.quarterly) + '</button>' +
     '<button type="button" data-fin-kind="y">' + esc(t.annual) + '</button></div>' +
+    '<button type="button" class="fin-ai" id="finAi" title="' + esc(I18N[state.lang].fundAi.title) + '">✨ ' + esc(t.aiRead) + '</button>' +
     '<button type="button" class="ai-modal-close fin-close" aria-label="' + esc(t.close) + '">×</button></div></div>' +
     '<div class="fin-body" id="finBody"></div>' +
     '<div class="fin-note">' + esc(t.note) + '</div></div>';
   wrap.addEventListener('click', function (e) {
     if (e.target === wrap || (e.target.closest && e.target.closest('.fin-close'))) { closeFinancials(); return; }
+    if (e.target.closest && e.target.closest('#finAi')) { openFundAi(finState.symbol, finState.name); return; }
     const btn = e.target.closest ? e.target.closest('[data-fin-kind]') : null;
     if (!btn) return;
     const kind = btn.getAttribute('data-fin-kind');
@@ -1143,6 +1141,15 @@ function finModal() {
   finModalEl = wrap;
   return wrap;
 }
+
+document.addEventListener('click', function (e) {
+  const target = e.target.closest ? e.target.closest('[data-fin-open]') : null;
+  if (!target) return;
+  /* The card body is itself a button; a real control inside the row is not. */
+  const inner = e.target.closest('button');
+  if (inner && inner !== target) return;
+  openFinancials(target.getAttribute('data-fin-open'), target.getAttribute('data-fin-name'));
+});
 
 function openFinancials(symbol, name) {
   const wrap = finModal();
@@ -1446,16 +1453,6 @@ async function openFundAi(symbol, name) {
   }
 }
 
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest ? e.target.closest('.sc-ai') : null;
-  if (!btn) return;
-  e.preventDefault();
-  e.stopPropagation();
-  const card = btn.closest('.stock-card');
-  const name = card ? ($('.sc-name', card) || {}).textContent : '';
-  openFundAi(btn.getAttribute('data-ai'), name);
-});
-
 // Switching period re-renders from the cached response — no second request.
 document.addEventListener('change', (e) => {
   const select = e.target && e.target.closest ? e.target.closest('.ef-period') : null;
@@ -1625,129 +1622,6 @@ function breadthCounts(list) {
   });
   return { up: up, down: down, flat: flat, total: up + down + flat };
 }
-
-/* IDX-IC sector buckets for the names the dashboard already quotes. Yahoo has
-   no usable IDX sector index series, so the heatmap is the average move of the
-   tracked constituents — honest about being a sample, and free of extra calls. */
-const SECTOR_MAP = {
-  BBCA: 'Financials', BBRI: 'Financials', BMRI: 'Financials', BBNI: 'Financials',
-  TLKM: 'Infrastructure', EXCL: 'Infrastructure', ISAT: 'Infrastructure', TOWR: 'Infrastructure',
-  AMRT: 'Consumer Non-Cyclicals', ICBP: 'Consumer Non-Cyclicals', INDF: 'Consumer Non-Cyclicals',
-  UNVR: 'Consumer Non-Cyclicals', CPIN: 'Consumer Non-Cyclicals', JPFA: 'Consumer Non-Cyclicals',
-  ADRO: 'Energy', PTBA: 'Energy', ITMG: 'Energy', PGAS: 'Energy',
-  BRPT: 'Basic Materials', ANTM: 'Basic Materials', MDKA: 'Basic Materials',
-  SMGR: 'Basic Materials', INTP: 'Basic Materials',
-  KLBF: 'Healthcare', MIKA: 'Healthcare',
-  CTRA: 'Properties', BSDE: 'Properties', PWON: 'Properties',
-  ASII: 'Consumer Cyclicals', GOTO: 'Technology'
-};
-
-let heatSelected = null;
-let lastHeatRows = [];
-
-function sectorRows(idxData) {
-  const groups = {};
-  idxData.forEach(function (s) {
-    if (!s || !isFinite(s.pct)) return;
-    const key = SECTOR_MAP[s.symbol.replace('.JK', '')];
-    if (!key) return;
-    const g = groups[key] || (groups[key] = { name: key, sum: 0, n: 0, up: 0, down: 0, members: [] });
-    g.sum += s.pct;
-    g.n++;
-    if (s.pct > 0.0001) g.up++; else if (s.pct < -0.0001) g.down++;
-    g.members.push({
-      symbol: s.symbol.replace('.JK', ''),
-      pct: s.pct,
-      price: s.price
-    });
-  });
-  return Object.keys(groups).map(function (key) {
-    const g = groups[key];
-    return {
-      name: g.name, avg: g.sum / g.n, n: g.n, up: g.up, down: g.down,
-      members: g.members.sort(function (a, b) { return b.pct - a.pct; })
-    };
-  }).sort(function (a, b) { return b.avg - a.avg; });
-}
-
-function heatmapHTML(idxData) {
-  const t = I18N[state.lang].mkt;
-  const rows = sectorRows(idxData);
-  lastHeatRows = rows;
-  if (!rows.length) return '';
-  const peak = Math.max.apply(null, rows.map(function (r) { return Math.abs(r.avg); })) || 1;
-  const tiles = rows.map(function (r) {
-    const up = r.avg >= 0;
-    const alpha = (0.07 + Math.min(1, Math.abs(r.avg) / peak) * 0.18).toFixed(2);
-    const flat = Math.abs(r.avg) < 0.005;
-    const selected = heatSelected === r.name;
-    return '<div class="heat-tile' + (selected ? ' selected' : '') + '" role="button" tabindex="0"' +
-      ' data-sector="' + esc(r.name) + '" aria-expanded="' + (selected ? 'true' : 'false') + '"' +
-      ' style="background:' + (up ? 'rgba(34,197,94,' : 'rgba(239,68,68,') + alpha + ')">' +
-      '<span class="heat-name">' + esc(r.name) + '</span>' +
-      '<strong class="heat-pct ' + (flat ? 'flat' : up ? 'up' : 'down') + '">' +
-      (flat ? '0.00%' : (up ? '+' : '') + r.avg.toFixed(2) + '%') + '</strong>' +
-      '<span class="heat-meta">' + r.n + (r.n === 1 ? ' name' : ' names') + ' · ' + r.up + '↑ ' + r.down + '↓</span>' +
-      '</div>';
-  }).join('');
-  return '<div class="modern-card heat-card">' +
-    '<div class="card-title"><span>' + esc(t.sectors) + '</span>' +
-    '<span class="div-sub">' + esc(t.sectorsSub) + '</span></div>' +
-    '<div class="heat-grid">' + tiles + '</div>' +
-    '<div class="heat-detail" id="heatDetail"></div></div>';
-}
-
-/* The drivers behind a sector's average: the same names, worst to best. */
-function heatDetailHTML(row) {
-  const t = I18N[state.lang].mkt;
-  const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
-  const body = row.members.map(function (m) {
-    const up = m.pct >= 0;
-    return '<tr>' +
-      '<td style="font-weight:800;">' + esc(m.symbol) + '</td>' +
-      '<td style="text-align:right;">' + (isFinite(m.price) ? m.price.toLocaleString(locale, { maximumFractionDigits: 0 }) : '—') + '</td>' +
-      '<td style="text-align:right; font-weight:800; color:' + (up ? 'var(--green)' : 'var(--red)') + ';">' +
-      (up ? '+' : '') + m.pct.toFixed(2) + '%</td>' +
-      '</tr>';
-  }).join('');
-  return '<div class="heat-detail-head"><strong>' + esc(row.name) + '</strong>' +
-    '<span class="div-sub">' + esc(t.sectorDrivers) + ' · ' + row.n + (row.n === 1 ? ' name' : ' names') + '</span></div>' +
-    '<table class="movers-table heat-detail-table">' +
-    '<thead><tr><th>' + esc(t.colSym) + '</th>' +
-    '<th style="text-align:right;">' + esc(t.colPrice) + '</th>' +
-    '<th style="text-align:right;">' + esc(t.colChange) + '</th></tr></thead>' +
-    '<tbody>' + body + '</tbody></table>';
-}
-
-function paintHeatDetail() {
-  const slot = document.getElementById('heatDetail');
-  if (!slot) return;
-  const row = heatSelected ? lastHeatRows.filter(function (r) { return r.name === heatSelected; })[0] : null;
-  slot.innerHTML = row ? heatDetailHTML(row) : '';
-  slot.classList.toggle('open', !!row);
-}
-
-document.addEventListener('click', function (e) {
-  if (!e.target || !e.target.closest) return;
-  const tile = e.target.closest('.heat-tile[data-sector]');
-  if (!tile) return;
-  const name = tile.getAttribute('data-sector');
-  heatSelected = heatSelected === name ? null : name;
-  document.querySelectorAll('.heat-tile[data-sector]').forEach(function (el) {
-    const on = el.getAttribute('data-sector') === heatSelected;
-    el.classList.toggle('selected', on);
-    el.setAttribute('aria-expanded', on ? 'true' : 'false');
-  });
-  paintHeatDetail();
-});
-
-document.addEventListener('keydown', function (e) {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
-  const tile = e.target && e.target.closest ? e.target.closest('.heat-tile[data-sector]') : null;
-  if (!tile) return;
-  e.preventDefault();
-  tile.click();
-});
 
 function breadthBarHTML(counts) {
   if (!counts.total) return '';
@@ -2037,37 +1911,7 @@ async function loadMarketDashboard() {
   const mainChartData = await fetchHistory('^JKSE', '6mo');
   const sp500ChartData = await fetchHistory('^GSPC', '6mo');
 
-  const buildCards = (list) => list.map(s => {
-    if (!s) return '';
-    const isUp = s.pct >= 0;
-    // Where the price sits inside its 52-week range — a cheap "is this high or low" cue.
-    const lo = s.week52Low, hi = s.week52High;
-    const inRange = isFinite(lo) && isFinite(hi) && hi > lo && isFinite(s.price);
-    const rangePos = inRange ? Math.max(0, Math.min(100, ((s.price - lo) / (hi - lo)) * 100)) : null;
-    const rangeHtml = rangePos === null ? '' :
-      '<div class="sc-range"><span class="sc-range-bar"><i style="left:' + rangePos.toFixed(1) + '%"></i></span>' +
-      '<span class="sc-range-cap">52W ' + lo.toLocaleString('en-US', { maximumFractionDigits: 0 }) + '–' +
-      hi.toLocaleString('en-US', { maximumFractionDigits: 0 }) + '</span></div>';
-    // The AI button is a sibling of the link, not inside it: a button nested in
-    // an anchor is invalid markup and swallows the link's own navigation.
-    return `<div class="stock-card">
-      <button type="button" class="sc-body" data-fin-open="${esc(s.symbol)}" data-fin-name="${esc(s.name)}">
-        <div class="sc-header">
-          <div>
-            <div class="sc-sym">${esc(s.symbol.replace('.JK', ''))}</div>
-            <div class="sc-name">${esc(s.name)}</div>
-          </div>
-          <div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div>
-        </div>
-        <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
-        ${rangeHtml}
-      </button>
-      <div class="sc-foot">
-        <div class="sc-fund" data-fund="${esc(s.symbol)}"></div>
-        <button type="button" class="sc-ai" data-ai="${esc(s.symbol)}" title="${esc(I18N[state.lang].fundAi.title)}">✨ ${esc(I18N[state.lang].fundAi.btn)}</button>
-      </div>
-    </div>`;
-  }).join('');
+  const buildCards = (list) => list.map(stockCardHtml).join('');
 
   /* The four numbers read first: home market, the US benchmark, the rupiah,
      gold. Everything else lives in the watch list beside them. */
@@ -2279,6 +2123,34 @@ async function loadMarketDashboard() {
 }
 
 
+/* A quoted stock reads the same wherever it appears: the explore board, a
+   search result. The card opens the report rather than leaving the site. */
+function stockCardHtml(s) {
+  if (!s) return '';
+  const isUp = s.pct >= 0;
+  const lo = s.week52Low, hi = s.week52High;
+  const inRange = isFinite(lo) && isFinite(hi) && hi > lo && isFinite(s.price);
+  const rangePos = inRange ? Math.max(0, Math.min(100, ((s.price - lo) / (hi - lo)) * 100)) : null;
+  const rangeHtml = rangePos === null ? '' :
+    '<div class="sc-range"><span class="sc-range-bar"><i style="left:' + rangePos.toFixed(1) + '%"></i></span>' +
+    '<span class="sc-range-cap">52W ' + lo.toLocaleString('en-US', { maximumFractionDigits: 0 }) + '–' +
+    hi.toLocaleString('en-US', { maximumFractionDigits: 0 }) + '</span></div>';
+  return `<div class="stock-card">
+    <button type="button" class="sc-body" data-fin-open="${esc(s.symbol)}" data-fin-name="${esc(s.name)}">
+      <div class="sc-header">
+        <div>
+          <div class="sc-sym">${esc(s.symbol.replace('.JK', ''))}</div>
+          <div class="sc-name">${esc(s.name)}</div>
+        </div>
+        <div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div>
+      </div>
+      <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
+      ${rangeHtml}
+    </button>
+    <div class="sc-foot"><div class="sc-fund" data-fund="${esc(s.symbol)}"></div></div>
+  </div>`;
+}
+
 async function searchStocks(query) {
   if (!query) { loadMarketDashboard(); return; }
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
@@ -2307,16 +2179,9 @@ async function searchStocks(query) {
 
     dash.innerHTML = `<div class="category-section">
       <h2 class="category-title">Search Results for "${esc(query)}"</h2>
-      <div class="stock-card-grid">
-        ${valid.map(s => {
-          const isUp = s.pct >= 0;
-          return `<a href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank" class="stock-card">
-            <div class="sc-header"><div><div class="sc-sym">${esc(s.symbol.replace('.JK', ''))}</div><div class="sc-name">${esc(s.name)}</div></div><div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div></div>
-            <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
-          </a>`;
-        }).join('')}
-      </div>
+      <div class="stock-card-grid">${valid.map(stockCardHtml).join('')}</div>
     </div>`;
+    hydrateCardFundamentals(dash);
   } catch (e) { 
     dash.innerHTML = `<div class="stock-loading">Search failed. Please check your connection and try a valid ticker.</div>`; 
   }
@@ -3156,7 +3021,7 @@ function renderPortfolio() {
     const valueCell = v.value != null ? pfMoney(v.value, cur) : (v.pending || !v.failed ? '…' : '—');
     const plCell = v.pl != null ? pfSignedMoney(v.pl, cur) + `<div class="pf-pct">${pfPctText(v.plPct)}</div>` : (v.pending || !v.failed ? '…' : '—');
     return `
-      <tr>
+      <tr data-fin-open="${esc(h.symbol)}" data-fin-name="${esc((v.q && v.q.name) || h.symbol)}">
         <td><div class="pf-sym">${esc(h.symbol)}</div><div class="pf-name">${esc((v.q && v.q.name) || '')}</div></td>
         <td class="num">${h.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
         <td class="num">${avgText}</td>
@@ -3511,11 +3376,6 @@ function bindUI() {
 
   const benchDash = $('#stockDashboard');
   if (benchDash) benchDash.addEventListener('click', function (e) {
-    const card = e.target.closest('[data-fin-open]');
-    if (card) {
-      openFinancials(card.getAttribute('data-fin-open'), card.getAttribute('data-fin-name'));
-      return;
-    }
     const btn = e.target.closest('[data-pf-bench]');
     if (!btn) return;
     pfToggleBench(btn.getAttribute('data-pf-bench'));

@@ -1286,23 +1286,6 @@ button{ font-family:inherit; }
   cursor: pointer;
 }
 .sc-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 8px; margin-top: 6px; }
-.sc-ai {
-  flex: none;
-  font: inherit;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: #fff;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  padding: 3px 8px;
-  cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
-}
-.sc-ai:hover { color: var(--ink); border-color: var(--ink); }
-
 .ai-modal {
   position: fixed;
   inset: 0;
@@ -1313,7 +1296,7 @@ button{ font-family:inherit; }
   background: rgba(15, 23, 42, 0.42);
   -webkit-backdrop-filter: blur(8px) saturate(1.2);
   backdrop-filter: blur(8px) saturate(1.2);
-  z-index: 200;
+  z-index: 230;
 }
 .ai-modal.open { display: flex; }
 .ai-modal-card {
@@ -1416,6 +1399,22 @@ button{ font-family:inherit; }
   transition: color 0.15s, background 0.15s;
 }
 .fin-seg button.active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14); }
+.fin-ai {
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  padding: 6px 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
+}
+.fin-ai:hover { color: var(--ink); border-color: var(--ink); }
 .fin-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
 .fin-kpi {
   display: flex;
@@ -1475,9 +1474,10 @@ button{ font-family:inherit; }
 [data-theme="dark"] .fin-chart h3,
 [data-theme="dark"] .fin-table td { color: #e2e8f0; }
 [data-theme="dark"] .fin-kpi { background: rgba(148, 163, 184, 0.06); }
+[data-theme="dark"] .fin-ai { color: #94a3b8; border-color: rgba(148, 163, 184, 0.35); }
+[data-theme="dark"] .fin-ai:hover { color: #e2e8f0; border-color: #e2e8f0; }
 [data-theme="dark"] .fin-table th { background: rgba(148, 163, 184, 0.08); }
 
-[data-theme="dark"] .sc-ai { background: transparent; color: #94a3b8; border-color: rgba(148, 163, 184, 0.35); }
 
 .sc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
 .sc-sym { font-size: 14px; font-weight: 800; color: var(--ink); }
@@ -2339,6 +2339,8 @@ body, html {
   border-bottom: 1px solid var(--rule-2); white-space: nowrap;
 }
 .pf-table tr:last-child td { border-bottom: none; }
+.pf-table tbody tr[data-fin-open] { cursor: pointer; }
+.pf-table tbody tr[data-fin-open]:hover td { background: var(--glass-soft); }
 .pf-table th.num, .pf-table td.num { text-align: right; }
 
 .pf-sym { font-weight: 800; color: var(--ink); }
@@ -2788,29 +2790,6 @@ body, html {
 .div-arrow{ font-size:9px; opacity:.9; }
 .div-arrow.ghost{ opacity:.2; }
 
-.heat-card{ margin-bottom:22px; }
-.heat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(106px,1fr)); gap:8px; }
-.heat-tile{ border-radius:12px; padding:10px 11px; display:flex; flex-direction:column; gap:2px; min-height:78px; justify-content:center; border:1px solid rgba(0,0,0,.05); }
-[data-theme="dark"] .heat-tile{ border-color:rgba(255,255,255,.07); }
-.heat-name{ font-size:9.5px; font-weight:800; letter-spacing:.03em; text-transform:uppercase; color:var(--ink); opacity:.85; line-height:1.25; }
-.heat-pct{ font-size:17px; font-weight:800; letter-spacing:-.01em; }
-.heat-pct.up{ color:#15803d; }
-.heat-pct.down{ color:#b91c1c; }
-.heat-pct.flat{ color:var(--muted); }
-[data-theme="dark"] .heat-pct.up{ color:#4ade80; }
-[data-theme="dark"] .heat-pct.down{ color:#f87171; }
-.heat-meta{ font-size:9.5px; color:var(--muted); font-weight:600; }
-
-.heat-tile{ cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
-.heat-tile:hover{ transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,.08); }
-.heat-tile.selected{ box-shadow:0 0 0 2px var(--ink) inset; }
-.heat-tile:focus-visible{ outline:2px solid var(--ink); outline-offset:2px; }
-.heat-detail{ display:none; margin-top:14px; border-top:1px solid var(--rule); padding-top:12px; }
-.heat-detail.open{ display:block; }
-.heat-detail-head{ display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
-.heat-detail-table{ min-width:0; }
-.heat-detail-table th, .heat-detail-table td{ padding-left:6px; padding-right:6px; }
-
 /* ---- markets: instrument strip, snapshot, leaders ---- */
 .ms-strip{ display:grid; grid-auto-flow:column; grid-auto-columns:minmax(148px,1fr); gap:10px; overflow-x:auto; padding-bottom:4px; margin-bottom:18px; scrollbar-width:none; }
 .ms-strip::-webkit-scrollbar{ display:none; }
@@ -2904,10 +2883,6 @@ body, html {
 @media (min-width: 720px) and (max-width: 1099px){
   .ms-strip{ grid-auto-flow:row; grid-template-columns:repeat(4,minmax(0,1fr)); grid-auto-columns:auto; overflow:visible; }
 }
-/* Nine sectors never leave a lone tile on its own row. */
-@media (min-width: 1000px){ .heat-grid{ grid-template-columns:repeat(5,minmax(0,1fr)); } }
-@media (max-width: 999px){ .heat-grid{ grid-template-columns:repeat(3,minmax(0,1fr)); } }
-
 /* The snapshot card stretches to the leaders card's height; keep its title at the
    top and let the quote block sit directly beneath instead of floating mid-card. */
 @media (min-width: 1100px){
@@ -3230,8 +3205,8 @@ body, html {
 
 
 /* --- markets: two views, one page --------------------------------------
-   The page used to stack the portfolio, the board, the heatmap and the
-   dividend table, so answering "what do I own" meant scrolling past
+   The page used to stack the portfolio, the board and the dividend table,
+   so answering "what do I own" meant scrolling past
    everything else. A tab per question keeps each screen to one job. */
 .mkt-view-head {
   display: flex; align-items: center; justify-content: space-between;
