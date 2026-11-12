@@ -113,6 +113,15 @@ const I18N = {
     regionFilter: 'Region', topicFilter: 'Topic', sourceFilter: 'Source', allSources: 'All sources',
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
     stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.',
+    market: {
+      gauges: 'Markets at a glance',
+      performance: 'Performance', performanceSub: 'IHSG and the S&P 500, indexed to the start of the period',
+      movers: 'Top movers', gainers: 'Gainers', losers: 'Losers',
+      mostActive: 'Most active', watch: 'Market watch', rates: 'Rates & volatility',
+      coverage: 'Coverage', coverageSub: 'Open a card for its fundamentals and the AI read',
+      bluechips: 'IDX bluechips', usTech: 'US tech', etfs: 'ETFs',
+      explain: 'Why it moved', staticLabel: 'Static'
+    },
     cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', politics: 'Politics', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' },
     portfolio: {
       title: 'Portfolio Tracker', subtitle: 'Your positions, tracked in this browser',
@@ -130,7 +139,19 @@ const I18N = {
       today: 'Today', details: 'Details', aiRead: 'AI fundamental read', whyMoved: 'Why it moved',
       loadingFund: 'Loading fundamentals…', newsTitle: 'News on your holdings',
       whyNoNews: 'No news about {sym} today. Check the company filings for the reason.',
-      whyFailed: 'No analysis came back. Try again.'
+      whyFailed: 'No analysis came back. Try again.',
+      totalValue: 'Total value', invested: 'Invested capital', netPl: 'Net gain / loss',
+      perfTitle: 'Portfolio performance', perfSub: 'Portfolio and IHSG, indexed to 100 at the start of the period',
+      portfolio: 'Portfolio', benchmark: 'IHSG',
+      allocTitle: 'Allocation', allocSub: 'By asset class',
+      classIdx: 'IDX equities', classUs: 'US equities', classEtf: 'ETFs', classCrypto: 'Crypto',
+      moveTitle: 'Contributors', moveSub: 'Profit and loss by holding', gaining: 'Gaining', losing: 'Losing',
+      activityTitle: 'Recent activity', activitySub: 'What you added and removed',
+      activityEmpty: 'Nothing logged yet. Adding or removing a holding is recorded here.',
+      actAdd: 'Added', actRemove: 'Removed',
+      holdingsTitle: 'Holdings', holdingsSub: 'Open a row for fundamentals and the AI read',
+      filterLabel: 'Filter holdings', filterAll: 'All',
+      trendEmpty: 'Add a holding to chart performance.', loadingTrend: 'Rebuilding your trend…'
     },
     fund: {
       title: 'Fundamentals', mktCap: 'Market cap', pe: 'P/E', rev: 'Revenue', revGrowth: 'Revenue growth',
@@ -173,6 +194,15 @@ const I18N = {
     regionFilter: 'Wilayah', topicFilter: 'Topik', sourceFilter: 'Sumber', allSources: 'Semua sumber',
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
     stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.',
+    market: {
+      gauges: 'Pasar sekilas',
+      performance: 'Kinerja', performanceSub: 'IHSG dan S&P 500, diindeks dari awal periode',
+      movers: 'Penggerak teratas', gainers: 'Naik', losers: 'Turun',
+      mostActive: 'Teraktif', watch: 'Pantauan pasar', rates: 'Suku bunga & volatilitas',
+      coverage: 'Liputan', coverageSub: 'Buka kartu untuk fundamental dan analisis AI',
+      bluechips: 'Bluechip IDX', usTech: 'Teknologi AS', etfs: 'ETF',
+      explain: 'Kenapa berubah', staticLabel: 'Statis'
+    },
     cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', politics: 'Politik', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' },
     portfolio: {
       title: 'Pelacak Portofolio', subtitle: 'Posisi Anda, tersimpan di peramban ini',
@@ -190,7 +220,19 @@ const I18N = {
       today: 'Hari ini', details: 'Rincian', aiRead: 'Analisis fundamental AI', whyMoved: 'Kenapa berubah',
       loadingFund: 'Memuat fundamental…', newsTitle: 'Berita emiten Anda',
       whyNoNews: 'Belum ada berita {sym} hari ini. Periksa laporan perusahaan untuk penyebabnya.',
-      whyFailed: 'Analisis tidak tersedia. Coba lagi.'
+      whyFailed: 'Analisis tidak tersedia. Coba lagi.',
+      totalValue: 'Nilai total', invested: 'Modal', netPl: 'Laba / rugi bersih',
+      perfTitle: 'Kinerja portofolio', perfSub: 'Portofolio dan IHSG, diindeks ke 100 di awal periode',
+      portfolio: 'Portofolio', benchmark: 'IHSG',
+      allocTitle: 'Alokasi', allocSub: 'Menurut kelas aset',
+      classIdx: 'Saham IDX', classUs: 'Saham AS', classEtf: 'ETF', classCrypto: 'Kripto',
+      moveTitle: 'Kontributor', moveSub: 'Laba dan rugi per posisi', gaining: 'Menguat', losing: 'Melemah',
+      activityTitle: 'Aktivitas terbaru', activitySub: 'Yang Anda tambah dan hapus',
+      activityEmpty: 'Belum ada catatan. Menambah atau menghapus posisi akan tercatat di sini.',
+      actAdd: 'Ditambah', actRemove: 'Dihapus',
+      holdingsTitle: 'Kepemilikan', holdingsSub: 'Buka baris untuk fundamental dan analisis AI',
+      filterLabel: 'Saring kepemilikan', filterAll: 'Semua',
+      trendEmpty: 'Tambahkan posisi untuk melihat grafik kinerja.', loadingTrend: 'Menyusun tren Anda…'
     },
     fund: {
       title: 'Fundamental', mktCap: 'Kap. pasar', pe: 'P/E', rev: 'Pendapatan', revGrowth: 'Pertumbuhan pendapatan',
@@ -797,43 +839,98 @@ async function fetchHistory(symbol, range = '6mo') {
   } catch (e) { return []; }
 }
 
-function generateMoversTable(title, stocks, headerClass) {
-  if (!stocks.length) return '';
-  const rows = stocks.map(s => `
-    <tr>
-      <td style="font-weight:800; color:var(--ink);">
-        ${esc(s.symbol.replace('.JK', ''))}
-        <button class="ai-btn explain-btn" data-sym="${esc(s.symbol)}" data-pct="${s.pct.toFixed(2)}" data-up="${s.pct >= 0}" style="padding: 2px 6px; font-size: 9px; margin-left: 4px; border-radius: 4px;">✨</button>
-      </td>
-      <td style="color:var(--muted); font-size:11px;">${esc(s.name)}</td>
-      <td style="text-align:right; font-weight:600;">${s.price.toLocaleString('en-US')}</td>
-      <td style="text-align:right; font-weight:700; color:${s.pct >= 0 ? 'var(--green)' : 'var(--red)'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</td>
-    </tr>
-    <tr id="explain-row-${esc(s.symbol)}" style="display:none;">
-      <td colspan="4" style="padding: 0; border-bottom: none;">
-         <div id="explain-text-${esc(s.symbol)}" class="ai-summary-box" style="margin: 8px 16px; border-left-color: var(--ink);"></div>
-      </td>
-    </tr>
-  `).join('');
-
-  return `
-    <div class="movers-panel" style="margin-bottom: 16px;">
-      <div class="movers-panel-header ${headerClass}">${title}</div>
-      <table class="movers-table">
-        <thead><tr><th>Symbol</th><th>Name</th><th style="text-align:right;">Price</th><th style="text-align:right;">Change</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>
-  `;
+function mktFmt(v, digits) {
+  return (v == null || !isFinite(v)) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: digits == null ? 2 : digits });
 }
 
-let ihsgChart, sp500Chart; 
+function mktQuoteRow(label, value, pct, meta) {
+  const pctHtml = (pct == null || !isFinite(pct)) ? ''
+    : `<span class="mkt-list-pct ${pct >= 0 ? 'up' : 'down'}">${pct > 0 ? '+' : ''}${pct.toFixed(2)}%</span>`;
+  return `<div class="mkt-list-row">
+      <div class="mkt-list-main"><span class="mkt-sym">${esc(label)}</span>${meta ? `<span class="mkt-list-name">${esc(meta)}</span>` : ''}</div>
+      <div class="mkt-list-right"><span class="mkt-list-val">${esc(value)}</span>${pctHtml}</div>
+    </div>`;
+}
+
+/* "Most active" is a volume ranking, so the figure that earns the row is the
+   traded volume rather than a price every other card already shows. */
+function mktVol(v) {
+  if (v == null || !isFinite(v) || v === 0) return '\u2014';
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + 'K';
+  return String(Math.round(v));
+}
+
+function mktActiveRows(list) {
+  return (list || []).map(s => `<div class="mkt-list-row">
+      <div class="mkt-list-main"><span class="mm-sym">${esc(s.symbol.replace('.JK', ''))}</span><span class="mkt-list-name">${esc(s.name)}</span></div>
+      <div class="mkt-list-right"><span class="mkt-list-val">${mktVol(s.volume)}</span><span class="mkt-list-pct ${s.pct >= 0 ? 'up' : 'down'}">${s.pct > 0 ? '+' : ''}${s.pct.toFixed(2)}%</span></div>
+    </div>`).join('');
+}
+
+/* A mover carries its own AI button. The answer is printed under the row
+   itself, so a reader never loses the ticker they asked about — the older
+   tables put the same text in a hidden row of the table. */
+function mktMoverRow(s) {
+  const up = s.pct >= 0;
+  const label = I18N[state.lang].market.explain;
+  return `<div class="mm-row">
+      <a class="mm-main" href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank" rel="noopener noreferrer">
+        <span class="mm-sym">${esc(s.symbol.replace('.JK', ''))}</span>
+        <span class="mm-name">${esc(s.name)}</span>
+      </a>
+      <span class="mm-chg ${up ? 'up' : 'down'}">${up ? '+' : ''}${s.pct.toFixed(2)}%</span>
+      <button type="button" class="mm-ai explain-btn" data-sym="${esc(s.symbol)}" data-pct="${s.pct.toFixed(2)}" data-up="${up}" data-name="${esc(s.name)}" aria-label="${esc(label)}" title="${esc(label)}">✨</button>
+    </div>`;
+}
+
+function mktMoverAnswer(s) {
+  return `<div class="mm-explain ai-summary-box" id="explain-text-${esc(s.symbol)}" style="display:none"></div>`;
+}
+
+function mktMoverCols(gainers, losers) {
+  const m = I18N[state.lang].market;
+  // Ten stacked rows is a scroll on a phone, so a narrow card shows the top four.
+  const limit = window.innerWidth <= 560 ? 4 : 5;
+  const col = (label, list, cls) => `<div class="mm-col">
+      <div class="mkt-col-label ${cls}">${esc(label)}</div>
+      ${(list || []).slice(0, limit).map(mktMoverRow).join('')}
+    </div>`;
+  // Answers span the full card: half a card is too narrow for a paragraph.
+  const answers = [...(gainers || []).slice(0, limit), ...(losers || []).slice(0, limit)].map(mktMoverAnswer).join('');
+  return col(m.gainers, gainers, 'up') + col(m.losers, losers, 'down') + `<div class="mm-answers">${answers}</div>`;
+}
+
+/* Two markets on one axis only compare fairly when both start at zero, so
+   history is rebased to percent change from the first close in the range. */
+function pctSeries(points) {
+  const clean = (points || []).filter(p => p && isFinite(p.y) && p.y !== 0);
+  if (clean.length < 2) return [];
+  const base = clean[0].y;
+  return clean.map(p => ({ x: p.x, y: ((p.y / base) - 1) * 100 }));
+}
+
+function setBenchLegend(ihsg, spx) {
+  const last = series => (series && series.length) ? series[series.length - 1].y : null;
+  const paint = (id, value) => {
+    const el = document.getElementById(id); if (!el) return;
+    if (value == null || !isFinite(value)) { el.textContent = '—'; el.className = ''; return; }
+    el.textContent = (value > 0 ? '+' : '') + value.toFixed(2) + '%';
+    el.className = value >= 0 ? 'up' : 'down';
+  };
+  paint('benchIhsgLeg', last(ihsg));
+  paint('benchSpxLeg', last(spx));
+}
+
+let benchChart = null;
+
 const chartInstances = [];
 
 function destroyCharts() {
   chartInstances.forEach(c => { try { c.destroy(); } catch (e) {} });
   chartInstances.length = 0;
-  ihsgChart = null; sp500Chart = null;
+  benchChart = null;
 }
 
 function applyChartTheme(theme) {
@@ -1603,13 +1700,12 @@ document.addEventListener('click', function (e) {
 });
 
 async function loadMarketDashboard() {
-  const dash = $('#stockDashboard'); const t = I18N[state.lang];
+  const dash = $('#stockDashboard'); const t = I18N[state.lang]; const m = t.market;
   destroyCharts();
-  
-  // Inject the loading bar UI
+
   dash.innerHTML = `
     <div class="loading-container">
-      <div class="loading-text">Fetching Market Data...</div>
+      <div class="loading-text">${esc(t.stockLoading)}</div>
       <div class="progress-bar-track">
         <div class="progress-bar-fill" id="marketProgressFill"></div>
       </div>
@@ -1620,8 +1716,7 @@ async function loadMarketDashboard() {
   const allSymbols = [...new Set([...INDICES.map(x=>x.symbol), '^GSPC', ...MACRO.map(x=>x.symbol), ...ECON_INDICATORS.map(x=>x.symbol), ...IDX_POOL.map(x=>x.symbol), ...US_POOL.map(x=>x.symbol), ...ETFS.map(x=>x.symbol)])];
   const allData = {};
   let failedCount = 0;
-  
-  // Progress tracking variables
+
   const totalCount = allSymbols.length;
   let processedCount = 0;
   const progressFill = document.getElementById('marketProgressFill');
@@ -1635,16 +1730,14 @@ async function loadMarketDashboard() {
     } else {
       failedCount++;
     }
-    
-    // Update progress bar
+
     processedCount++;
     if (progressFill) progressFill.style.width = `${(processedCount / totalCount) * 100}%`;
     if (progressText) progressText.textContent = `${processedCount} / ${totalCount} loaded`;
 
-    await new Promise(r => setTimeout(r, 50)); 
+    await new Promise(r => setTimeout(r, 50));
   }
 
-  // ... (rest of the caching and rendering logic remains the same) ...
   const cacheKey = 'fw.market_data_cache';
   if (failedCount > 10) {
     console.warn("Yahoo rate limit hit. Loading cached market data.");
@@ -1653,13 +1746,11 @@ async function loadMarketDashboard() {
   } else if (Object.keys(allData).length > 0) {
     saveJSON(cacheKey, allData);
   }
-  
+
   if (Object.keys(allData).length === 0) {
     dash.innerHTML = `<div class="stock-loading">Market data temporarily unavailable. Please try again in a few minutes.</div>`;
     return;
   }
-  
-  // ... (continue with idxData, usData, etc.)
 
   const idxData = IDX_POOL.map(s => allData[s.symbol]).filter(Boolean);
   const idxSortedByPct = [...idxData].sort((a, b) => b.pct - a.pct);
@@ -1673,34 +1764,13 @@ async function loadMarketDashboard() {
   const usLosers = usSortedByPct.slice(-5).reverse();
   const usMostActive = [...usData].sort((a, b) => (b.volume || 0) - (a.volume || 0)).slice(0, 5);
 
-  const sumSymbols = [...INDICES.map(x => ({...x, type: 'index'})), ...MACRO.map(x => ({...x, type: 'macro'}))];
+  const sumSymbols = [...INDICES.map(x => ({...x, type: 'index'})), { symbol: '^GSPC', name: 'S&P 500', type: 'index' }, ...MACRO.map(x => ({...x, type: 'macro'}))];
   const summaryData = await Promise.all(sumSymbols.map(async x => {
     const hist = await fetchHistory(x.symbol, '1mo');
     return { ...x, data: allData[x.symbol], spark: hist };
   }));
-
-  // Money-market strip: one tinted card per instrument, sparkline included.
-  const INST_TONE = {
-    '^JKSE': ['t-idx', 'JK'], '^IXIC': ['t-tech', 'NQ'], '^DJI': ['t-usa', 'DJ'],
-    'IDR=X': ['t-fx', 'Rp'], 'GC=F': ['t-gold', 'Au'], 'CL=F': ['t-oil', 'CL'],
-    '^TNX': ['t-rate', '10Y'], 'BTC-USD': ['t-btc', '\u20bf']
-  };
-  const sparkHtml = summaryData.map(d => {
-    if (!d.data) return '';
-    const isUp = d.data.pct >= 0;
-    const tone = INST_TONE[d.symbol] || ['t-usa', d.name.slice(0, 2).toUpperCase()];
-    // ^TNX quotes a yield, so a bare "5" would read as a price.
-    const valText = d.symbol === '^TNX'
-      ? d.data.price.toFixed(2) + '%'
-      : d.data.price.toLocaleString('en-US', { maximumFractionDigits: 2 });
-    return '<article class="mi-card ' + tone[0] + '">' +
-      '<div class="mi-top"><span class="mi-tag">' + esc(tone[1]) + '</span>' +
-      '<span class="mi-name">' + esc(d.name) + '</span></div>' +
-      '<div class="mi-val">' + valText + '</div>' +
-      '<div class="mi-chg ' + (isUp ? 'up' : 'down') + '">' + (isUp ? '▲ ' : '▼ ') + Math.abs(d.data.pct).toFixed(2) + '%</div>' +
-      '<div class="mi-spark" id="spark-' + d.symbol.replace('^', '').replace('=', '') + '"></div>' +
-      '</article>';
-  }).join('');
+  const bySymbol = {};
+  summaryData.forEach(d => { if (d.data) bySymbol[d.symbol] = d; });
 
   const mainChartData = await fetchHistory('^JKSE', '6mo');
   const sp500ChartData = await fetchHistory('^GSPC', '6mo');
@@ -1737,200 +1807,225 @@ async function loadMarketDashboard() {
     </div>`;
   }).join('');
 
-  const vixData = allData['^VIX'];
-  const tnxData = allData['^TNX'];
-  
-  const macroPanelHtml = `
-    <div class="modern-card" style="margin-top: 24px;">
-      <div class="card-title">Macro & Economic Indicators</div>
-      <div style="display: flex; flex-direction: column; gap: 16px;">
-        ${vixData ? `
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--rule-2); padding-bottom:12px;">
-          <div><div style="font-weight:700;">US VIX Volatility Index</div><div style="font-size:11px; color:var(--muted);">CBOE Volatility Index</div></div>
-          <div style="text-align:right;"><div style="font-weight:700;">${vixData.price.toLocaleString('en-US')}</div><div style="font-size:12px; font-weight:700; color:${vixData.pct >= 0 ? 'var(--green)' : 'var(--red)'}">${vixData.pct > 0 ? '+' : ''}${vixData.pct.toFixed(2)}%</div></div>
+  /* The four numbers read first: home market, the US benchmark, the rupiah,
+     gold. Everything else lives in the watch list beside them. */
+  const HERO_TILES = [
+    { symbol: '^JKSE', name: 'IHSG', spark: mainChartData },
+    { symbol: '^GSPC', name: 'S&P 500', spark: sp500ChartData },
+    { symbol: 'IDR=X', name: 'USD/IDR', spark: (bySymbol['IDR=X'] || {}).spark },
+    { symbol: 'GC=F', name: 'Gold', spark: (bySymbol['GC=F'] || {}).spark }
+  ];
+  const tileHtml = HERO_TILES.map(hero => {
+    const q = (bySymbol[hero.symbol] || {}).data;
+    if (!q) return '';
+    const up = q.pct >= 0;
+    const sparkId = 'sparkHero' + hero.symbol.replace(/[^A-Za-z0-9]/g, '');
+    return `<div class="mkt-tile">
+        <div class="mkt-tile-top">
+          <span class="mkt-tile-name">${esc(hero.name)}</span>
+          <span class="mkt-chip ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${Math.abs(q.pct).toFixed(2)}%</span>
         </div>
-        ` : ''}
-        ${tnxData ? `
-        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--rule-2); padding-bottom:12px;">
-          <div><div style="font-weight:700;">US 10Y Treasury Yield</div><div style="font-size:11px; color:var(--muted);">10-Year Bond Yield</div></div>
-          <div style="text-align:right;"><div style="font-weight:700;">${tnxData.price.toFixed(3)}%</div><div style="font-size:12px; font-weight:700; color:${tnxData.pct >= 0 ? 'var(--green)' : 'var(--red)'}">${tnxData.pct > 0 ? '+' : ''}${tnxData.pct.toFixed(2)}%</div></div>
-        </div>
-        ` : ''}
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div><div style="font-weight:700;">Bank Indonesia (BI) Rate</div><div style="font-size:11px; color:var(--muted);">7-Day Reverse Repo</div></div>
-          <div style="text-align:right;"><div style="font-weight:700;">6.25%</div><div style="font-size:12px; font-weight:700; color:var(--muted);">Static</div></div>
-        </div>
-      </div>
-    </div>
-  `;
+        <div class="mkt-tile-val">${mktFmt(q.price)}</div>
+        <div class="mkt-tile-spark" id="${sparkId}"></div>
+      </div>`;
+  }).join('');
 
-  const chartControlsHtml = (symbol, targetId) => `
-    <div class="chart-controls" data-symbol="${symbol}" data-target="${targetId}">
-      <button class="chart-btn" data-range="1d">1D</button>
-      <button class="chart-btn" data-range="5d">5D</button>
-      <button class="chart-btn" data-range="1mo">1M</button>
-      <button class="chart-btn" data-range="3mo">3M</button>
-      <button class="chart-btn active" data-range="6mo">6M</button>
-      <button class="chart-btn" data-range="1y">1Y</button>
-      <button class="chart-btn" data-range="5y">5Y</button>
-    </div>
-  `;
+  const watchHtml = ['^IXIC', '^DJI', 'IDR=X', 'GC=F', 'CL=F', 'BTC-USD'].map(symbol => {
+    const q = (bySymbol[symbol] || {}).data;
+    return q ? mktQuoteRow(q.name, mktFmt(q.price), q.pct) : '';
+  }).join('');
 
-  const mktT = t.mkt;
+  const vix = allData['^VIX']; const tnx = allData['^TNX'];
+  const ratesHtml = [
+    vix ? mktQuoteRow('VIX', mktFmt(vix.price), vix.pct) : '',
+    tnx ? mktQuoteRow('US 10Y', tnx.price.toFixed(3) + '%', tnx.pct) : '',
+    mktQuoteRow('BI rate', '6.25%', null, m.staticLabel)
+  ].join('');
+
+  const RANGE_LABELS = { '1mo': '1M', '3mo': '3M', '6mo': '6M', '1y': '1Y', '5y': '5Y' };
+  const rangeButtons = Object.keys(RANGE_LABELS).map(r =>
+    `<button type="button" class="chart-btn${r === '6mo' ? ' active' : ''}" data-range="${r}">${RANGE_LABELS[r]}</button>`
+  ).join('');
+
   const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
   const asOf = new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
 
   dash.innerHTML = `
-    <div class="mkt-asof">${esc(mktT.asOf)} ${esc(asOf)} · ${esc(mktT.delayed)}</div>
-    <div class="ms-strip">${sparkHtml}</div>
-    ${marketHeroHTML(allData, idxData, usData)}
-    ${heatmapHTML(idxData)}
-    
-    <div class="dash-grid" style="align-items: start;">
-      <div>
-        <div class="modern-card">
-          <div class="card-title">
-            <span>IHSG Market Performance</span>
-            ${chartControlsHtml('^JKSE', 'ihsgChart')}
+    <div class="mkt-board">
+      <p class="mkt-asof">${esc(t.mkt.asOf)} ${esc(asOf)} · ${esc(t.mkt.delayed)}</p>
+      <section class="mkt-tiles" aria-label="${esc(m.gauges)}">${tileHtml}</section>
+
+      <section class="mkt-grid">
+        <div class="mkt-card">
+          <div class="mkt-card-head">
+            <div>
+              <h2 class="mkt-title">${esc(m.performance)}</h2>
+              <p class="mkt-sub">${esc(m.performanceSub)}</p>
+            </div>
+            <div class="chart-controls" id="benchControls">${rangeButtons}</div>
           </div>
-          <div id="mainChart"></div>
-        </div>
-        
-        <div class="modern-card" style="margin-top: 24px;">
-          <div class="card-title">
-            <span>S&P 500 Market Performance</span>
-            ${chartControlsHtml('^GSPC', 'sp500Chart')}
+          <div class="mkt-legend">
+            <span class="mkt-legend-item"><i class="mkt-dot ihsg"></i>IHSG <b id="benchIhsgLeg">—</b></span>
+            <span class="mkt-legend-item"><i class="mkt-dot spx"></i>S&amp;P 500 <b id="benchSpxLeg">—</b></span>
           </div>
-          <div id="sp500Chart"></div>
+          <div id="benchChart"></div>
         </div>
-      </div>
 
-      <div class="modern-card">
-        <div class="card-title">Market Movers</div>
-        <div class="scrollable-movers">
-          ${generateMoversTable('Top IDX Gainers', idxGainers, 'gainers')}
-          ${generateMoversTable('Top IDX Losers', idxLosers, 'losers')}
-          ${generateMoversTable('Top US Gainers', usGainers, 'gainers')}
-          ${generateMoversTable('Top US Losers', usLosers, 'losers')}
+        <div class="mkt-card">
+          <div class="mkt-card-head">
+            <h2 class="mkt-title">${esc(m.movers)}</h2>
+            <div class="mkt-seg" id="moversSeg" role="group">
+              <button type="button" class="active" data-set="idx">IDX</button>
+              <button type="button" data-set="us">US</button>
+            </div>
+          </div>
+          <div class="mkt-mover-cols" id="moversBody">${mktMoverCols(idxGainers, idxLosers)}</div>
         </div>
-      </div>
-    </div>
+      </section>
 
-    <div style="margin-top: 32px;">
-      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">Most Active</h2>
-      <div class="movers-grid-4">
-        ${generateMoversTable('Most Active IDX', idxMostActive, 'active')}
-        ${generateMoversTable('Most Active US', usMostActive, 'active')}
-      </div>
-    </div>
+      ${heatmapHTML(idxData)}
 
-    <div style="margin-top: 32px;">
-      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">IDX Bluechips</h2>
-      <div class="stock-card-grid">${buildCards(idxData)}</div>
-    </div>
+      <section class="mkt-row3">
+        <div class="mkt-card">
+          <div class="mkt-card-head">
+            <h2 class="mkt-title">${esc(m.mostActive)}</h2>
+            <div class="mkt-seg" id="activeSeg" role="group">
+              <button type="button" class="active" data-set="idx">IDX</button>
+              <button type="button" data-set="us">US</button>
+            </div>
+          </div>
+          <div class="mkt-list" id="activeBody">${mktActiveRows(idxMostActive)}</div>
+        </div>
 
-    <div style="margin-top: 32px;">
-      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">US Tech Giants</h2>
-      <div class="stock-card-grid">${buildCards(usData)}</div>
-    </div>
+        <div class="mkt-card">
+          <div class="mkt-card-head"><h2 class="mkt-title">${esc(m.watch)}</h2></div>
+          <div class="mkt-list">${watchHtml}</div>
+        </div>
 
-    <div style="margin-top: 32px;">
-      <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">Popular ETFs</h2>
-      <div class="stock-card-grid">${buildCards(ETFS.map(e => allData[e.symbol]).filter(Boolean))}</div>
-    </div>
+        <div class="mkt-card">
+          <div class="mkt-card-head"><h2 class="mkt-title">${esc(m.rates)}</h2></div>
+          <div class="mkt-list">${ratesHtml}</div>
+        </div>
+      </section>
 
-    <div id="dividendPanel" style="margin-top: 32px;"></div>
+      <section class="mkt-card">
+        <div class="mkt-card-head">
+          <div>
+            <h2 class="mkt-title">${esc(m.coverage)}</h2>
+            <p class="mkt-sub">${esc(m.coverageSub)}</p>
+          </div>
+        </div>
+        <div class="mkt-tabs" id="coverageTabs" role="tablist">
+          <button type="button" class="mkt-tab active" data-tab="idx" role="tab" aria-selected="true">${esc(m.bluechips)}</button>
+          <button type="button" class="mkt-tab" data-tab="us" role="tab" aria-selected="false">${esc(m.usTech)}</button>
+          <button type="button" class="mkt-tab" data-tab="etfs" role="tab" aria-selected="false">${esc(m.etfs)}</button>
+        </div>
+        <div class="mkt-panel" data-panel="idx"><div class="stock-card-grid">${buildCards(idxData)}</div></div>
+        <div class="mkt-panel" data-panel="us" hidden><div class="stock-card-grid">${buildCards(usData)}</div></div>
+        <div class="mkt-panel" data-panel="etfs" hidden><div class="stock-card-grid">${buildCards(ETFS.map(e => allData[e.symbol]).filter(Boolean))}</div></div>
+      </section>
 
-    ${macroPanelHtml}
-  `;
+      <div id="dividendPanel"></div>
+    </div>`;
   hydrateCardFundamentals(dash);
   paintHeatDetail();
 
   const divSlot = document.getElementById('dividendPanel');
   if (divSlot) divSlot.innerHTML = '<div class="modern-card"><div class="card-title">' +
-    esc(mktT.dividends) + '</div><div class="ef-empty">' + esc(mktT.divLoading) + '</div></div>';
+    esc(t.mkt.dividends) + '</div><div class="ef-empty">' + esc(t.mkt.divLoading) + '</div></div>';
   loadDividendLeaders().then(function (rows) {
     renderDividendPanel(rows);
-    updateTopYield(rows);
   }).catch(function () { renderDividendPanel([]); });
+
+  /* Switches are wired per card so each one only rebuilds its own block. */
+  const bindSeg = function (id, onChange) {
+    const el = document.getElementById(id); if (!el) return;
+    el.addEventListener('click', function (e) {
+      const btn = e.target.closest('button');
+      if (!btn || btn.classList.contains('active')) return;
+      $$('button', el).forEach(b => b.classList.toggle('active', b === btn));
+      onChange(btn.getAttribute('data-set'));
+    });
+  };
+  bindSeg('moversSeg', function (set) {
+    const body = document.getElementById('moversBody'); if (!body) return;
+    body.innerHTML = set === 'us' ? mktMoverCols(usGainers, usLosers) : mktMoverCols(idxGainers, idxLosers);
+  });
+  bindSeg('activeSeg', function (set) {
+    const body = document.getElementById('activeBody'); if (!body) return;
+    body.innerHTML = mktActiveRows(set === 'us' ? usMostActive : idxMostActive);
+  });
+
+  const tabs = document.getElementById('coverageTabs');
+  if (tabs) tabs.addEventListener('click', function (e) {
+    const btn = e.target.closest('.mkt-tab'); if (!btn) return;
+    $$('.mkt-tab', tabs).forEach(b => {
+      const on = b === btn;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    $$('.mkt-panel', dash).forEach(p => { p.hidden = p.getAttribute('data-panel') !== btn.getAttribute('data-tab'); });
+  });
 
   if (typeof ApexCharts !== 'undefined') {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const chartTheme = { mode: isDark ? 'dark' : 'light' };
 
-    summaryData.forEach(d => {
-      if (!d.data) return;
-      const sparkChart = new ApexCharts(document.querySelector(`#spark-${d.symbol.replace('^', '').replace('=', '')}`), {
-        series: [{ data: d.spark.map(p => p.y) }], chart: { type: 'area', height: 44, background: 'transparent', sparkline: { enabled: true } },
-        theme: chartTheme,
-        stroke: { curve: 'smooth', width: 2 }, colors: [d.data.pct >= 0 ? '#22c55e' : '#ef4444'],
-        fill: { type: 'gradient', gradient: { opacityFrom: 0.4, opacityTo: 0 } }, tooltip: { enabled: false }
-      });
-      sparkChart.render();
-      chartInstances.push(sparkChart);
-    });
-
-    const ihsgHist = summaryData.filter(function (d) { return d.symbol === '^JKSE'; })[0];
-    const heroSparkEl = document.getElementById('heroSpark');
-    if (ihsgHist && heroSparkEl && ihsgHist.spark.length) {
-      const heroSparkChart = new ApexCharts(heroSparkEl, {
-        series: [{ name: 'IHSG', data: ihsgHist.spark }],
-        chart: { type: 'area', height: 104, background: 'transparent', sparkline: { enabled: true } },
+    HERO_TILES.forEach(hero => {
+      const q = (bySymbol[hero.symbol] || {}).data;
+      const node = document.getElementById('sparkHero' + hero.symbol.replace(/[^A-Za-z0-9]/g, ''));
+      const values = (hero.spark || []).map(p => (p && isFinite(p.y)) ? p.y : null).filter(v => v != null);
+      if (!q || !node || values.length < 2) return;
+      const chart = new ApexCharts(node, {
+        series: [{ data: values }],
+        chart: { type: 'area', height: 46, sparkline: { enabled: true }, background: 'transparent' },
         theme: chartTheme,
         stroke: { curve: 'smooth', width: 2 },
-        colors: [isDark ? '#f87171' : '#ef4444'],
+        colors: [q.pct >= 0 ? '#0a8f4a' : '#d10a11'],
         fill: { type: 'gradient', gradient: { opacityFrom: 0.22, opacityTo: 0 } },
         tooltip: { enabled: false }
       });
-      heroSparkChart.render();
-      chartInstances.push(heroSparkChart);
-    }
-
-    ihsgChart = new ApexCharts(document.querySelector("#mainChart"), {
-      series: [{ name: 'IHSG', data: mainChartData }], chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'Inter' },
-      theme: chartTheme,
-      colors: ['#ef4444'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0 } },
-      dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 3 },
-      xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 }
+      chart.render(); chartInstances.push(chart);
     });
-    ihsgChart.render();
-    chartInstances.push(ihsgChart);
 
-    sp500Chart = new ApexCharts(document.querySelector("#sp500Chart"), {
-      series: [{ name: 'S&P 500', data: sp500ChartData }], chart: { type: 'area', height: 320, toolbar: { show: false }, fontFamily: 'Inter' },
+    benchChart = new ApexCharts(document.getElementById('benchChart'), {
+      series: [
+        { name: 'IHSG', data: pctSeries(mainChartData) },
+        { name: 'S&P 500', data: pctSeries(sp500ChartData) }
+      ],
+      chart: { type: 'line', height: 300, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
       theme: chartTheme,
-      colors: ['#3b82f6'], fill: { type: 'gradient', gradient: { shadeIntensity: 1, opacityFrom: 0.3, opacityTo: 0 } },
-      dataLabels: { enabled: false }, stroke: { curve: 'smooth', width: 3 },
-      xaxis: { type: 'datetime' }, yaxis: { labels: { formatter: v => v.toFixed(0) } }, grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 }
+      colors: ['#d10a11', '#2563eb'],
+      stroke: { curve: 'smooth', width: 2.5 },
+      dataLabels: { enabled: false },
+      markers: { size: 0, hover: { size: 4 } },
+      grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 },
+      xaxis: { type: 'datetime', labels: { datetimeUTC: false } },
+      yaxis: { labels: { formatter: v => (v > 0 ? '+' : '') + v.toFixed(1) + '%' } },
+      tooltip: { y: { formatter: v => (v > 0 ? '+' : '') + v.toFixed(2) + '%' } },
+      legend: { show: false }
     });
-    sp500Chart.render();
-    chartInstances.push(sp500Chart);
+    benchChart.render();
+    chartInstances.push(benchChart);
+    setBenchLegend(pctSeries(mainChartData), pctSeries(sp500ChartData));
 
-    document.querySelectorAll('.chart-controls').forEach(control => {
-      control.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.chart-btn');
-        if (!btn) return;
-        
-        control.querySelectorAll('.chart-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        
-        const range = btn.getAttribute('data-range');
-        const symbol = control.getAttribute('data-symbol');
-        const target = control.getAttribute('data-target');
-        
-        const btnText = btn.textContent;
-        btn.textContent = '...';
-        
-        const newData = await fetchHistory(symbol, range);
-        
-        if (target === 'ihsgChart' && ihsgChart) ihsgChart.updateSeries([{ name: 'IHSG', data: newData }]);
-        if (target === 'sp500Chart' && sp500Chart) sp500Chart.updateSeries([{ name: 'S&P 500', data: newData }]);
-        
-        btn.textContent = btnText;
-      });
+    const controls = document.getElementById('benchControls');
+    if (controls) controls.addEventListener('click', async function (e) {
+      const btn = e.target.closest('.chart-btn');
+      if (!btn || btn.classList.contains('active')) return;
+      $$('.chart-btn', controls).forEach(b => b.classList.toggle('active', b === btn));
+      const range = btn.getAttribute('data-range');
+      const label = btn.textContent;
+      btn.textContent = '…';
+      const [ihsg, spx] = await Promise.all([fetchHistory('^JKSE', range), fetchHistory('^GSPC', range)]);
+      btn.textContent = label;
+      const ihsgSeries = pctSeries(ihsg), spxSeries = pctSeries(spx);
+      setBenchLegend(ihsgSeries, spxSeries);
+      if (benchChart) benchChart.updateSeries([{ name: 'IHSG', data: ihsgSeries }, { name: 'S&P 500', data: spxSeries }]);
     });
   }
 }
+
 
 async function searchStocks(query) {
   if (!query) { loadMarketDashboard(); return; }
@@ -2267,6 +2362,242 @@ function setPfCurrencyMode(mode) {
   if (pfCurMode !== 'auto' && !pfRate()) refreshFxRate().then(renderPortfolio);
 }
 
+/* ============================================================
+   PORTFOLIO DASHBOARD
+   A holding table answers "what do I own and what is it worth".
+   The questions an owner asks next — how is the whole thing
+   performing against the index, what is it made of, which names
+   are carrying it, and what did I actually do — belong on the
+   same card, above the table.
+   ============================================================ */
+
+const PF_ACT = 'finwire.portfolio.activity.v1';
+const PF_ETF_SET = new Set(ETFS.map(function (e) { return e.symbol; }));
+const PF_CLASSES = ['idx', 'us', 'etf', 'crypto'];
+let pfFilter = 'all';
+
+/* Holdings are read into broad classes from the ticker alone: the Jakarta
+   suffix is IDX, a known fund symbol is an ETF, -USD is crypto, the rest is
+   a US listing. Enough to answer "what am I actually exposed to". */
+function pfClassOf(symbol) {
+  const s = String(symbol || '').toUpperCase();
+  if (/-USD$/.test(s)) return 'crypto';
+  if (PF_ETF_SET.has(s)) return 'etf';
+  if (/\.JK$/.test(s)) return 'idx';
+  return 'us';
+}
+
+function pfClassLabel(cls) {
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  return { idx: p.classIdx, us: p.classUs, etf: p.classEtf, crypto: p.classCrypto }[cls] || cls;
+}
+
+function pfActivityList() {
+  const list = loadJSON(PF_ACT, []);
+  return Array.isArray(list) ? list : [];
+}
+
+/* Only holdings the reader typed are knowable here, so "activity" is the
+   log of what they added and removed, kept in this browser. */
+function pfLogActivity(entry) {
+  const list = pfActivityList();
+  list.unshift(Object.assign({ ts: Date.now() }, entry));
+  saveJSON(PF_ACT, list.slice(0, 60));
+}
+
+function pfActivityHtml() {
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const list = pfActivityList().slice(0, 8);
+  if (!list.length) return `<div class="pf-empty-sm">${esc(p.activityEmpty)}</div>`;
+  const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
+  const rows = list.map(function (e) {
+    const when = new Date(e.ts).toLocaleDateString(locale, { day: '2-digit', month: 'short' });
+    const price = (e.price != null && isFinite(e.price)) ? ' @ ' + pfMoney(e.price, e.currency || 'USD') : '';
+    const qty = (e.shares != null && isFinite(e.shares)) ? e.shares.toLocaleString('en-US', { maximumFractionDigits: 4 }) : '';
+    const isOut = e.action === 'remove';
+    return `<div class="pact-row">
+        <span class="pact-date">${esc(when)}</span>
+        <span class="pact-main"><strong class="${isOut ? 'down' : 'up'}">${esc(isOut ? p.actRemove : p.actAdd)}</strong> ${esc(e.symbol || '')}<em>${esc(qty)}${esc(price)}</em></span>
+      </div>`;
+  }).join('');
+  return `<div class="pact-list">${rows}</div>`;
+}
+
+/* Weight by class: one stacked bar plus a legend that also carries the money,
+   so the bar answers "how much is in ETFs" without a second table. */
+function pfAllocationHtml(rows, cur) {
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const groups = PF_CLASSES.map(function (cls) {
+    const subset = rows.filter(function (r) { return pfClassOf(r.h.symbol) === cls && r.v.value != null; });
+    const value = subset.reduce(function (a, r) { return a + r.v.value; }, 0);
+    return { cls: cls, value: value, count: subset.length };
+  }).filter(function (g) { return g.value > 0; });
+  if (!groups.length) return `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
+  const total = groups.reduce(function (a, g) { return a + g.value; }, 0);
+  const bar = groups.map(function (g) {
+    return `<i class="pa-seg pa-${g.cls}" style="width:${((g.value / total) * 100).toFixed(2)}%"></i>`;
+  }).join('');
+  const legend = groups.map(function (g) {
+    return `<div class="pa-row">
+        <span class="pa-key"><i class="pa-dot pa-${g.cls}"></i>${esc(pfClassLabel(g.cls))}<em>${g.count}</em></span>
+        <span class="pa-weight">${((g.value / total) * 100).toFixed(1)}%</span>
+        <span class="pa-val">${pfMoney(g.value, cur)}</span>
+      </div>`;
+  }).join('');
+  return `<div class="pa-bar">${bar}</div><div class="pa-legend">${legend}</div>`;
+}
+
+/* Which holdings are carrying the portfolio and which are dragging it. */
+function pfMoveHtml(rows, cur) {
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const list = rows.filter(function (r) { return r.v.pl != null; });
+  if (!list.length) return `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
+  const peak = list.reduce(function (a, r) { return Math.max(a, Math.abs(r.v.pl)); }, 0) || 1;
+  const rowHtml = function (r) {
+    const up = r.v.pl >= 0;
+    return `<div class="pmm-row">
+        <span class="pmm-sym">${esc(r.h.symbol.replace('.JK', ''))}</span>
+        <span class="pmm-bar"><i class="${up ? 'up' : 'down'}" style="width:${Math.max(6, (Math.abs(r.v.pl) / peak) * 100).toFixed(0)}%"></i></span>
+        <span class="pmm-val ${up ? 'up' : 'down'}">${pfSignedMoney(r.v.pl, cur)}<em>${pfPctText(r.v.plPct)}</em></span>
+      </div>`;
+  };
+  const up = list.filter(function (r) { return r.v.pl > 0; }).sort(function (a, b) { return b.v.pl - a.v.pl; }).slice(0, 3);
+  const down = list.filter(function (r) { return r.v.pl < 0; }).sort(function (a, b) { return a.v.pl - b.v.pl; }).slice(0, 3);
+  const col = function (label, arr, cls) {
+    if (!arr.length) return '';
+    return `<div class="pmm-col"><div class="mkt-col-label ${cls}">${esc(label)}</div>${arr.map(rowHtml).join('')}</div>`;
+  };
+  const cols = col(p.gaining, up, 'up') + col(p.losing, down, 'down');
+  return `<div class="pmm-cols">${cols || `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`}</div>`;
+}
+
+/* ---- performance trend -------------------------------------
+   The portfolio has no stored history, so the line is rebuilt from
+   each holding's own closes at today's share count (and today's FX).
+   Both lines are indexed to 100 at the start of the range, which is
+   the only way a rupiah portfolio and an index compare fairly. ---- */
+
+const pfTrendState = { range: '6mo', key: '', data: null };
+let pfTrendChart = null;
+
+function pfDayKey(x) { return new Date(x).toISOString().slice(0, 10); }
+
+function pfLastPct(series) {
+  const pts = (series || []).filter(function (p) { return p && isFinite(p.y); });
+  if (pts.length < 2) return null;
+  return pts[pts.length - 1].y - 100;
+}
+
+async function pfLoadTrend(range, target) {
+  const key = [range, target, portfolio.map(function (h) { return h.symbol + ':' + h.shares; }).join(',')].join('|');
+  if (pfTrendState.key === key && pfTrendState.data) return pfTrendState.data;
+  const holdings = portfolio.slice();
+  if (!holdings.length) return null;
+
+  const bench = await fetchHistory('^JKSE', range);
+  const histories = await Promise.all(holdings.map(function (h) {
+    return fetchHistory(h.symbol, range).catch(function () { return []; });
+  }));
+
+  const calendar = [];
+  const seen = Object.create(null);
+  const addCal = function (list) {
+    (list || []).forEach(function (p) {
+      if (!p || !isFinite(p.y)) return;
+      const k = pfDayKey(p.x);
+      if (seen[k]) return;
+      seen[k] = 1; calendar.push({ k: k, x: p.x });
+    });
+  };
+  addCal(bench);
+  histories.forEach(addCal);
+  calendar.sort(function (a, b) { return a.x - b.x; });
+  if (calendar.length < 2) return null;
+
+  const byDay = histories.map(function (list) {
+    const map = Object.create(null);
+    (list || []).forEach(function (p) { if (p && isFinite(p.y)) map[pfDayKey(p.x)] = p.y; });
+    return map;
+  });
+  const last = holdings.map(function () { return null; });
+
+  const total = calendar.map(function (day) {
+    let sum = 0, priced = 0;
+    holdings.forEach(function (h, i) {
+      const px = byDay[i][day.k];
+      if (px != null) last[i] = px;
+      if (last[i] == null) return;
+      const value = pfConvert(last[i] * h.shares, pfCurrency(h.symbol), target);
+      if (value != null) { sum += value; priced++; }
+    });
+    return { x: day.x, y: priced ? sum : null };
+  });
+
+  const firstValue = total.filter(function (p) { return p.y != null && p.y > 0; })[0];
+  if (!firstValue) return null;
+  const portIdx = total.map(function (p) { return { x: p.x, y: p.y == null ? null : (p.y / firstValue.y) * 100 }; });
+
+  const benchFirst = (bench || []).filter(function (p) { return p && isFinite(p.y) && p.y > 0; })[0];
+  const benchIdx = benchFirst ? bench.map(function (p) {
+    return { x: p.x, y: (p && isFinite(p.y)) ? (p.y / benchFirst.y) * 100 : null };
+  }) : [];
+
+  const data = { portIdx: portIdx, benchIdx: benchIdx, portPct: pfLastPct(portIdx), benchPct: pfLastPct(benchIdx) };
+  pfTrendState.key = key;
+  pfTrendState.data = data;
+  return data;
+}
+
+function pfRenderTrend(target) {
+  const host = document.getElementById('pfTrendChart');
+  if (!host) return;
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  pfLoadTrend(pfTrendState.range, target).then(function (data) {
+    const node = document.getElementById('pfTrendChart');
+    if (!node) return;
+    const portLeg = document.getElementById('pfTrendPort');
+    const benchLeg = document.getElementById('pfTrendBench');
+    const paint = function (el, value) {
+      if (!el) return;
+      if (value == null || !isFinite(value)) { el.textContent = '—'; el.className = ''; return; }
+      el.textContent = (value > 0 ? '+' : '') + value.toFixed(2) + '%';
+      el.className = value >= 0 ? 'up' : 'down';
+    };
+    if (!data) {
+      node.innerHTML = `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
+      paint(portLeg, null); paint(benchLeg, null);
+      return;
+    }
+    paint(portLeg, data.portPct);
+    paint(benchLeg, data.benchPct);
+    if (typeof ApexCharts === 'undefined') return;
+    if (pfTrendChart) { try { pfTrendChart.destroy(); } catch (e) {} pfTrendChart = null; }
+    node.innerHTML = '';
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    pfTrendChart = new ApexCharts(node, {
+      series: [
+        { name: p.portfolio, data: data.portIdx },
+        { name: p.benchmark, data: data.benchIdx }
+      ],
+      chart: { type: 'line', height: 240, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
+      theme: { mode: isDark ? 'dark' : 'light' },
+      colors: [isDark ? '#f8fafc' : '#111418', '#d10a11'],
+      stroke: { curve: 'smooth', width: [2.5, 1.5], dashArray: [0, 5] },
+      dataLabels: { enabled: false },
+      markers: { size: 0, hover: { size: 4 } },
+      grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 },
+      xaxis: { type: 'datetime', labels: { datetimeUTC: false } },
+      yaxis: { labels: { formatter: function (v) { return v.toFixed(0); } } },
+      tooltip: { y: { formatter: function (v) { return v == null ? '—' : v.toFixed(1); } } },
+      legend: { show: false }
+    });
+    pfTrendChart.render();
+  }).catch(function () {
+    const node = document.getElementById('pfTrendChart');
+    if (node) node.innerHTML = `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
+  });
+}
+
 function renderPortfolio() {
   const host = $('#portfolioPanel'); if (!host) return;
   const p = (I18N[state.lang] || I18N.en).portfolio;
@@ -2275,37 +2606,40 @@ function renderPortfolio() {
 
   if (host.dataset.ready !== '1') {
     host.innerHTML = `
-      <div class="modern-card portfolio-card">
-        <div class="card-title">
-          <span>${esc(p.title)}</span>
-          <span class="pf-subtitle">${esc(p.subtitle)}</span>
-        </div>
-        <div class="pf-toolbar">
-          <span class="pf-toolbar-label">${esc(p.curLabel)}</span>
-          <div class="pf-cur-switch" id="pfCurSwitch" role="group" aria-label="${esc(p.curLabel)}">
-            <button type="button" data-pf-cur="auto">${esc(p.curAuto)}</button>
-            <button type="button" data-pf-cur="USD">USD</button>
-            <button type="button" data-pf-cur="IDR">IDR</button>
-          </div>
-        </div>
-        <form class="pf-form" id="pfForm" autocomplete="off">
-          <input id="pfSymbol" type="text" spellcheck="false" placeholder="${esc(p.symPh)}" aria-label="${esc(p.symPh)}" />
-          <input id="pfShares" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.sharesPh)}" aria-label="${esc(p.sharesPh)}" />
-          <div class="pf-cost">
-            <input id="pfCost" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.costPh)}" aria-label="${esc(p.costPh)}" />
-            <div class="pf-cost-cur" id="pfCostCur" role="group" aria-label="${esc(p.costIn)}" title="${esc(p.costIn)}">
-              <button type="button" data-pf-in="auto">${esc(p.curAuto)}</button>
-              <button type="button" data-pf-in="USD">USD</button>
-              <button type="button" data-pf-in="IDR">IDR</button>
+      <div class="pf-board">
+        <section class="mkt-card pf-intro">
+          <div class="mkt-card-head">
+            <div>
+              <h2 class="mkt-title">${esc(p.title)}</h2>
+              <p class="mkt-sub">${esc(p.subtitle)}</p>
+            </div>
+            <div class="pf-toolbar">
+              <span class="pf-toolbar-label">${esc(p.curLabel)}</span>
+              <div class="pf-cur-switch" id="pfCurSwitch" role="group" aria-label="${esc(p.curLabel)}">
+                <button type="button" data-pf-cur="auto">${esc(p.curAuto)}</button>
+                <button type="button" data-pf-cur="USD">USD</button>
+                <button type="button" data-pf-cur="IDR">IDR</button>
+              </div>
             </div>
           </div>
-          <button type="submit">${esc(p.add)}</button>
-        </form>
-        <div id="pfMsg" class="pf-msg"></div>
+          <form class="pf-form" id="pfForm" autocomplete="off">
+            <input id="pfSymbol" type="text" spellcheck="false" placeholder="${esc(p.symPh)}" aria-label="${esc(p.symPh)}" />
+            <input id="pfShares" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.sharesPh)}" aria-label="${esc(p.sharesPh)}" />
+            <div class="pf-cost">
+              <input id="pfCost" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.costPh)}" aria-label="${esc(p.costPh)}" />
+              <div class="pf-cost-cur" id="pfCostCur" role="group" aria-label="${esc(p.costIn)}" title="${esc(p.costIn)}">
+                <button type="button" data-pf-in="auto">${esc(p.curAuto)}</button>
+                <button type="button" data-pf-in="USD">USD</button>
+                <button type="button" data-pf-in="IDR">IDR</button>
+              </div>
+            </div>
+            <button type="submit">${esc(p.add)}</button>
+          </form>
+          <div id="pfMsg" class="pf-msg"></div>
+        </section>
         <div id="portfolioBody"></div>
-        <p class="pf-note">${esc(p.note)}</p>
-      </div>
-      <div id="pfNewsPanel"></div>`;
+        <div id="pfNewsPanel"></div>
+      </div>`;
     host.dataset.ready = '1';
   }
 
@@ -2314,13 +2648,17 @@ function renderPortfolio() {
   const body = $('#portfolioBody'); if (!body) return;
 
   const sorted = portfolio.slice().sort(function (a, b) { return a.symbol.localeCompare(b.symbol); });
-  if (!sorted.length) { body.innerHTML = `<div class="pf-empty">${esc(p.empty)}</div>`; return; }
+  if (!sorted.length) {
+    body.innerHTML = `<div class="pf-empty">${esc(p.empty)}</div><p class="pf-note">${esc(p.note)}</p>`;
+    renderHoldingsNews();
+    return;
+  }
 
   const views = sorted.map(function (h) { return { h: h, v: pfHoldingView(h) }; });
   const groups = [];
   views.forEach(function (row) { if (groups.indexOf(row.v.target) === -1) groups.push(row.v.target); });
 
-  const summaryHtml = groups.map(function (cur) {
+  const sums = groups.map(function (cur) {
     const rows = views.filter(function (row) { return row.v.target === cur; });
     let value = 0, cost = 0, priced = 0, pending = false;
     let day = 0, dayBase = 0, dayCount = 0;
@@ -2336,26 +2674,53 @@ function renderPortfolio() {
       }
     });
     const pl = (priced && !pending) ? value - cost : null;
-    const plPct = (pl != null && cost > 0) ? (pl / cost) * 100 : null;
-    const plClass = pl == null ? '' : (pl >= 0 ? 'up' : 'down');
-    const dayPct = (dayCount && dayBase > 0) ? (day / dayBase) * 100 : null;
-    const dayClass = dayCount ? (day >= 0 ? 'up' : 'down') : '';
-    const dayText = dayCount ? pfSignedMoney(day, cur) + ' (' + pfPctText(dayPct) + ')' : (pending ? '…' : '—');
-    const valueText = pending ? '…' : (priced ? pfMoney(value, cur) : '—');
-    const tag = (groups.length > 1 || pfCurMode !== 'auto') ? `<div class="pf-cur-tag">${cur}</div>` : '';
-    return `
-      <div class="pf-group">
+    return {
+      cur: cur, rows: rows, pending: pending, value: priced ? value : null, cost: cost,
+      pl: pl, plPct: (pl != null && cost > 0) ? (pl / cost) * 100 : null,
+      day: dayCount ? day : null, dayPct: (dayCount && dayBase > 0) ? (day / dayBase) * 100 : null
+    };
+  });
+
+  const kpiHtml = sums.map(function (s) {
+    const plClass = s.pl == null ? '' : (s.pl >= 0 ? 'up' : 'down');
+    const dayClass = s.day == null ? '' : (s.day >= 0 ? 'up' : 'down');
+    const tag = (sums.length > 1 || pfCurMode !== 'auto') ? `<div class="pf-cur-tag">${esc(s.cur)}</div>` : '';
+    const valueText = s.pending ? '…' : (s.value != null ? pfMoney(s.value, s.cur) : '—');
+    return `<div class="pf-group">
         ${tag}
-        <div class="pf-summary">
-          <div class="pf-stat"><span>${esc(p.marketValue)}</span><strong>${valueText}</strong></div>
-          <div class="pf-stat"><span>${esc(p.costBasis)}</span><strong>${pending ? '…' : pfMoney(cost, cur)}</strong></div>
-          <div class="pf-stat"><span>${esc(p.totalPl)}</span><strong class="${plClass}">${pl == null ? (pending ? '…' : '—') : pfSignedMoney(pl, cur) + ' (' + pfPctText(plPct) + ')'}</strong></div>
-          <div class="pf-stat"><span>${esc(p.today)}</span><strong class="${dayClass}">${dayText}</strong></div>
+        <div class="pf-kpis">
+          <div class="pf-kpi"><span>${esc(p.totalValue)}</span><strong>${valueText}</strong></div>
+          <div class="pf-kpi"><span>${esc(p.invested)}</span><strong>${s.pending ? '…' : pfMoney(s.cost, s.cur)}</strong></div>
+          <div class="pf-kpi"><span>${esc(p.netPl)}</span><strong class="${plClass}">${s.pl == null ? (s.pending ? '…' : '—') : pfSignedMoney(s.pl, s.cur)}</strong><em class="${plClass}">${s.pl == null ? '' : pfPctText(s.plPct)}</em></div>
+          <div class="pf-kpi"><span>${esc(p.today)}</span><strong class="${dayClass}">${s.day == null ? '—' : pfSignedMoney(s.day, s.cur)}</strong><em class="${dayClass}">${s.day == null ? '' : pfPctText(s.dayPct)}</em></div>
         </div>
       </div>`;
-  }).join('') + (pfRate() && pfNeedsFx() ? `<p class="pf-fx">${esc((p.fxNote || '').replace('{rate}', pfMoney(pfRate(), 'IDR')))}</p>` : '');
+  }).join('');
 
-  const rowsHtml = views.map(function (row) {
+  const fxNote = (pfRate() && pfNeedsFx())
+    ? `<p class="pf-fx">${esc((p.fxNote || '').replace('{rate}', pfMoney(pfRate(), 'IDR')))}</p>` : '';
+
+  /* The trend and allocation panels need one currency. With a fixed display
+     currency that is obvious; on "Auto" the group holding most of the names
+     wins, since raw amounts in IDR and USD are not comparable. */
+  const primary = pfCurMode !== 'auto'
+    ? (sums.filter(function (s) { return s.cur === pfCurMode; })[0] || sums[0])
+    : (sums.slice().sort(function (a, b) {
+        return (b.rows.length - a.rows.length) || ((b.value || 0) - (a.value || 0));
+      })[0] || sums[0]);
+  const primaryCur = primary.cur;
+
+  const present = PF_CLASSES.filter(function (cls) {
+    return views.some(function (r) { return pfClassOf(r.h.symbol) === cls; });
+  });
+  const filterChips = ['all'].concat(present).map(function (cls) {
+    const label = cls === 'all' ? p.filterAll : pfClassLabel(cls);
+    return `<button type="button" class="pf-chip${pfFilter === cls ? ' active' : ''}" data-pf-filter="${cls}" aria-pressed="${pfFilter === cls ? 'true' : 'false'}">${esc(label)}</button>`;
+  }).join('');
+
+  const shownRows = views.filter(function (row) { return pfFilter === 'all' || pfClassOf(row.h.symbol) === pfFilter; });
+
+  const rowsHtml = shownRows.map(function (row) {
     const h = row.h, v = row.v, cur = v.target;
     const cls = v.pl == null ? '' : (v.pl >= 0 ? 'pf-up' : 'pf-down');
     const dayPct = (v.q && isFinite(v.q.pct)) ? `<div class="pf-day ${v.q.pct >= 0 ? 'pf-up' : 'pf-down'}">${pfPctText(v.q.pct)}</div>` : '';
@@ -2378,18 +2743,84 @@ function renderPortfolio() {
       </tr>${pfDetailRowHtml(h.symbol)}`;
   }).join('');
 
-  body.innerHTML = `${summaryHtml}
-    <div class="pf-table-wrap">
-      <table class="pf-table">
-        <thead><tr>
-          <th>${esc(p.colSym)}</th><th class="num">${esc(p.colShares)}</th><th class="num">${esc(p.colCost)}</th>
-          <th class="num">${esc(p.colLast)}</th><th class="num">${esc(p.colValue)}</th><th class="num">${esc(p.colPl)}</th><th></th>
-        </tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-    </div>`;
+  const rangeChips = [['3mo', '3M'], ['6mo', '6M'], ['1y', '1Y']].map(function (pair) {
+    const on = pfTrendState.range === pair[0];
+    return `<button type="button" class="${on ? 'active' : ''}" data-pf-range="${pair[0]}" aria-pressed="${on ? 'true' : 'false'}">${pair[1]}</button>`;
+  }).join('');
+
+  body.innerHTML = `${kpiHtml}
+    ${fxNote}
+    <div class="mkt-grid pf-dash-grid">
+      <section class="mkt-card">
+        <div class="mkt-card-head">
+          <div>
+            <h2 class="mkt-title">${esc(p.perfTitle)}</h2>
+            <p class="mkt-sub">${esc(p.perfSub)}</p>
+          </div>
+          <div class="mkt-seg" id="pfRangeSeg" role="group">${rangeChips}</div>
+        </div>
+        <div class="mkt-legend">
+          <span class="mkt-legend-item"><i class="mkt-dot pf"></i>${esc(p.portfolio)} <b id="pfTrendPort">—</b></span>
+          <span class="mkt-legend-item"><i class="mkt-dot ihsg"></i>${esc(p.benchmark)} <b id="pfTrendBench">—</b></span>
+        </div>
+        <div id="pfTrendChart"><div class="pf-empty-sm">${esc(p.loadingTrend)}</div></div>
+      </section>
+
+      <section class="mkt-card">
+        <div class="mkt-card-head">
+          <div>
+            <h2 class="mkt-title">${esc(p.allocTitle)}</h2>
+            <p class="mkt-sub">${esc(p.allocSub)}</p>
+          </div>
+        </div>
+        ${pfAllocationHtml(primary.rows, primaryCur)}
+      </section>
+    </div>
+
+    <div class="mkt-grid pf-dash-grid">
+      <section class="mkt-card">
+        <div class="mkt-card-head">
+          <div>
+            <h2 class="mkt-title">${esc(p.moveTitle)}</h2>
+            <p class="mkt-sub">${esc(p.moveSub)}</p>
+          </div>
+        </div>
+        ${pfMoveHtml(primary.rows, primaryCur)}
+      </section>
+
+      <section class="mkt-card">
+        <div class="mkt-card-head">
+          <div>
+            <h2 class="mkt-title">${esc(p.activityTitle)}</h2>
+            <p class="mkt-sub">${esc(p.activitySub)}</p>
+          </div>
+        </div>
+        ${pfActivityHtml()}
+      </section>
+    </div>
+
+    <section class="mkt-card">
+      <div class="mkt-card-head">
+        <div>
+          <h2 class="mkt-title">${esc(p.holdingsTitle)}</h2>
+          <p class="mkt-sub">${esc(p.holdingsSub)}</p>
+        </div>
+        <div class="pf-filters" role="group" aria-label="${esc(p.filterLabel)}">${filterChips}</div>
+      </div>
+      <div class="pf-table-wrap">
+        <table class="pf-table">
+          <thead><tr>
+            <th>${esc(p.colSym)}</th><th class="num">${esc(p.colShares)}</th><th class="num">${esc(p.colCost)}</th>
+            <th class="num">${esc(p.colLast)}</th><th class="num">${esc(p.colValue)}</th><th class="num">${esc(p.colPl)}</th><th></th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>
+      <p class="pf-note">${esc(p.note)}</p>
+    </section>`;
 
   pfOpen.forEach(pfLoadFund);
+  pfRenderTrend(primaryCur);
   renderHoldingsNews();
 }
 
@@ -2425,6 +2856,7 @@ function pfNeedsFx() {
 async function refreshPortfolio() {
   renderPortfolio();
   await Promise.all([refreshPortfolioQuotes(), pfNeedsFx() ? refreshFxRate() : Promise.resolve()]);
+  pfTrendState.key = '';
   renderPortfolio();
 }
 
@@ -2464,6 +2896,9 @@ async function addHolding(rawSymbol, rawShares, rawCost, rawCur) {
     portfolio.push({ symbol: resolved, shares: shares, avgCost: avgCost, avgCur: costCur });
   }
 
+  pfLogActivity({ action: 'add', symbol: resolved, shares: shares, price: avgCost, currency: costCur });
+  pfTrendState.key = '';
+
   savePortfolio();
   ['#pfSymbol', '#pfShares', '#pfCost'].forEach(function (sel) { const el = $(sel); if (el) el.value = ''; });
   renderPortfolio();
@@ -2479,7 +2914,10 @@ async function addHolding(rawSymbol, rawShares, rawCost, rawCur) {
 function removeHolding(symbol) {
   const idx = portfolio.findIndex(function (h) { return h.symbol === symbol; });
   if (idx === -1) return;
+  const held = portfolio[idx];
+  pfLogActivity({ action: 'remove', symbol: symbol, shares: held.shares, price: held.avgCost, currency: held.avgCur || pfCurrency(symbol) });
   portfolio.splice(idx, 1);
+  pfTrendState.key = '';
   savePortfolio();
   renderPortfolio();
 }
@@ -2582,6 +3020,9 @@ function bindUI() {
       // Re-theme existing charts if on Market page (do not refetch data)
       if ($('#stocksView').style.display !== 'none') {
         applyChartTheme(newTheme);
+        // The portfolio trend picks its series colours at build time, so it is
+        // rebuilt from cached data instead of being recoloured.
+        if (document.getElementById('pfTrendChart')) renderPortfolio();
       }
     });
   }
@@ -2649,6 +3090,10 @@ function bindUI() {
       if (curBtn) { setPfCurrencyMode(curBtn.getAttribute('data-pf-cur')); return; }
       const inBtn = e.target.closest('[data-pf-in]');
       if (inBtn) { setPfInputCurrency(inBtn.getAttribute('data-pf-in')); return; }
+      const rangeBtn2 = e.target.closest('[data-pf-range]');
+      if (rangeBtn2) { pfTrendState.range = rangeBtn2.getAttribute('data-pf-range'); renderPortfolio(); return; }
+      const chipBtn = e.target.closest('[data-pf-filter]');
+      if (chipBtn) { pfFilter = chipBtn.getAttribute('data-pf-filter'); renderPortfolio(); return; }
       const openBtn = e.target.closest('[data-pf-open]');
       if (openBtn) { pfToggleDetail(openBtn.getAttribute('data-pf-open')); return; }
       const readBtn = e.target.closest('[data-pf-read]');
@@ -2882,20 +3327,25 @@ function bindUI() {
     
     const row = document.getElementById(`explain-row-${sym}`);
     const textEl = document.getElementById(`explain-text-${sym}`);
-    
-    if (row.style.display === 'table-row') {
-      row.style.display = 'none';
+    if (!textEl) return;
+
+    // Movers used to answer inside a hidden table row; the board prints the
+    // answer under the whole card instead, so both shapes are handled here.
+    const open = row ? row.style.display === 'table-row' : textEl.style.display === 'block';
+    if (open) {
+      if (row) row.style.display = 'none'; else textEl.style.display = 'none';
       return;
     }
 
-    row.style.display = 'table-row';
+    if (row) row.style.display = 'table-row';
     textEl.innerHTML = '✨ Analyzing news for this move...';
     textEl.style.display = 'block';
 
     // Only articles that actually mention the ticker or the company. Feeding the
     // model unrelated headlines is what made it answer with invented "macro"
     // reasons instead of the real story.
-    const searchTerms = [sym.replace('.JK', '').toLowerCase(), btn.closest('tr').querySelector('td:nth-child(2)').textContent.toLowerCase()];
+    const companyName = btn.getAttribute('data-name') || (btn.closest('tr') ? btn.closest('tr').querySelector('td:nth-child(2)').textContent : '');
+    const searchTerms = [sym.replace('.JK', '').toLowerCase(), companyName.toLowerCase()];
     const relatedArticles = state.articles.filter(a => {
       const text = (a.title + ' ' + a.summary).toLowerCase();
       return searchTerms.some(term => term.length > 1 && text.includes(term));
