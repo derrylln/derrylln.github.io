@@ -25,6 +25,13 @@ const SOURCES = [
   { id: 'idn', label: 'IDN Financials', color: '#4c1d95', url: 'https://www.idnfinancials.com/feed' },
   { id: 'antara', label: 'Antara Ekonomi', color: '#b91c1c', url: 'https://www.antaranews.com/rss/ekonomi' },
   { id: 'cnn_id', label: 'CNN Ekonomi', color: '#dc2626', url: 'https://www.cnnindonesia.com/ekonomi/rss' },
+  // National and political desks. A resignation, a court ruling or an impeachment
+  // never reaches a business-only feed, which left the page blind to the biggest
+  // story of the day.
+  { id: 'cnn_nasional', label: 'CNN Nasional', color: '#b91c1c', url: 'https://www.cnnindonesia.com/nasional/rss' },
+  { id: 'cnbc_news', label: 'CNBC News', color: '#9f1239', url: 'https://www.cnbcindonesia.com/news/rss' },
+  { id: 'antara_terkini', label: 'Antara Terkini', color: '#7f1d1d', url: 'https://www.antaranews.com/rss/terkini' },
+  { id: 'tempo_nasional', label: 'Tempo Nasional', color: '#9a3412', url: 'https://rss.tempo.co/nasional', zone: '+07:00' },
   { id: 'tempo', label: 'Tempo Bisnis', color: '#ea580c', url: 'https://rss.tempo.co/bisnis', zone: '+07:00' }
 ];
 
@@ -81,6 +88,7 @@ const CATEGORIES = [
   { id: 'all', label: 'All Topics' },
   { id: 'markets', label: 'Markets', keywords: ['stock', 'market', 'ihsg', 'nasdaq', 's&p', 'saham', 'trading', 'equity', 'wall street'] },
   { id: 'macro', label: 'Macro', keywords: ['fed', 'inflation', 'interest rate', 'gdp', 'economy', 'central bank', 'bank indonesia', 'bi rate', 'ekonomi', 'inflasi', 'suku bunga', 'rupiah'] },
+  { id: 'politics', label: 'Politics', keywords: ['politik', 'presiden', 'wapres', 'wakil presiden', 'prabowo', 'gibran', 'dpr', 'mpr', 'menteri', 'pemerintah', 'pemilu', 'pemakzulan', 'impeachment', 'partai', 'kpk', 'mahkamah'] },
   { id: 'tech', label: 'Tech', keywords: ['technology', 'tech', 'apple', 'microsoft', 'google', 'ai', 'artificial intelligence', 'startup', 'teknologi', 'meta', 'nvidia'] },
   { id: 'crypto', label: 'Crypto', keywords: ['bitcoin', 'crypto', 'ethereum', 'blockchain', 'btc', 'eth', 'kripto'] },
   { id: 'commodities', label: 'Commodities', keywords: ['oil', 'crude', 'gold', 'coal', 'gas', 'commodity', 'emas', 'minyak', 'batu bara'] }
@@ -96,7 +104,7 @@ const I18N = {
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
     navNews: 'News', navMarkets: 'Markets', mktTitle: 'Market Data', searchPh: 'Search ticker…', searchBtn: 'Search',
     stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.',
-    cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' },
+    cats: { all: 'All Topics', markets: 'Markets', macro: 'Macro', politics: 'Politics', tech: 'Tech', crypto: 'Crypto', commodities: 'Commodities' },
     portfolio: {
       title: 'Portfolio Tracker', subtitle: 'Your positions, tracked in this browser',
       symPh: 'Ticker (AAPL, BBCA.JK)', sharesPh: 'Shares', costPh: 'Avg cost / share', add: 'Add',
@@ -138,7 +146,7 @@ const I18N = {
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
     navNews: 'Berita', navMarkets: 'Pasar', mktTitle: 'Data Pasar', searchPh: 'Cari ticker…', searchBtn: 'Cari',
     stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.',
-    cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' },
+    cats: { all: 'Semua Topik', markets: 'Pasar', macro: 'Makro', politics: 'Politik', tech: 'Teknologi', crypto: 'Kripto', commodities: 'Komoditas' },
     portfolio: {
       title: 'Pelacak Portofolio', subtitle: 'Posisi Anda, tersimpan di peramban ini',
       symPh: 'Ticker (AAPL, BBCA.JK)', sharesPh: 'Lembar', costPh: 'Harga rata-rata / lembar', add: 'Tambah',
