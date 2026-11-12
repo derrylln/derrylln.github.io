@@ -1982,7 +1982,7 @@ async function loadMarketDashboard() {
       if (!q || !node || values.length < 2) return;
       const chart = new ApexCharts(node, {
         series: [{ data: values }],
-        chart: { type: 'area', height: 46, sparkline: { enabled: true }, background: 'transparent' },
+        chart: { type: 'area', height: 40, sparkline: { enabled: true }, background: 'transparent' },
         theme: chartTheme,
         stroke: { curve: 'smooth', width: 2 },
         colors: [q.pct >= 0 ? '#0a8f4a' : '#d10a11'],
@@ -1997,7 +1997,7 @@ async function loadMarketDashboard() {
         { name: 'IHSG', data: pctSeries(mainChartData) },
         { name: 'S&P 500', data: pctSeries(sp500ChartData) }
       ],
-      chart: { type: 'line', height: 300, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
+      chart: { type: 'line', height: 236, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
       theme: chartTheme,
       colors: ['#d10a11', '#2563eb'],
       stroke: { curve: 'smooth', width: 2.5 },
@@ -2451,9 +2451,16 @@ function pfAllocationHtml(views, target) {
   }).filter(function (g) { return g.value > 0; });
   if (!groups.length) return `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
   const total = groups.reduce(function (a, g) { return a + g.value; }, 0);
-  const bar = groups.map(function (g) {
-    return `<i class="pa-seg pa-${g.cls}" style="width:${((g.value / total) * 100).toFixed(2)}%"></i>`;
-  }).join('');
+  /* A ring rather than a bar: it fills the column beside the chart the way the
+     reference does, and the slices are the same four classes as the legend. */
+  const ringColors = { idx: '#111418', us: '#2563eb', etf: '#7c3aed', crypto: '#d97706' };
+  if (document.documentElement.getAttribute('data-theme') === 'dark') ringColors.idx = '#f8fafc';
+  let acc = 0;
+  const ring = groups.map(function (g) {
+    const from = acc, to = acc + (g.value / total) * 100;
+    acc = to;
+    return `${ringColors[g.cls]} ${from.toFixed(2)}% ${to.toFixed(2)}%`;
+  }).join(', ');
   const legend = groups.map(function (g) {
     return `<div class="pa-row">
         <span class="pa-key"><i class="pa-dot pa-${g.cls}"></i>${esc(pfClassLabel(g.cls))}<em>${g.count}</em></span>
@@ -2461,7 +2468,14 @@ function pfAllocationHtml(views, target) {
         <span class="pa-val">${pfMoney(g.value, target)}</span>
       </div>`;
   }).join('');
-  return `<div class="pa-bar">${bar}</div><div class="pa-legend">${legend}</div>`;
+  const count = rows.length;
+  return `<div class="pa-body">
+      <div class="pa-ring-wrap" style="--ring: conic-gradient(${ring})">
+        <span class="pa-ring"></span>
+        <span class="pa-ring-hole"><b>${count}</b><em>${esc(p.holdingsTitle)}</em></span>
+      </div>
+      <div class="pa-legend">${legend}</div>
+    </div>`;
 }
 
 /* Which holdings are carrying the portfolio and which are dragging it. */
@@ -2600,7 +2614,7 @@ function pfRenderTrend(target) {
         { name: p.portfolio, data: data.portIdx },
         { name: p.benchmark, data: data.benchIdx }
       ],
-      chart: { type: 'line', height: 240, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
+      chart: { type: 'line', height: 196, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
       theme: { mode: isDark ? 'dark' : 'light' },
       colors: [isDark ? '#f8fafc' : '#111418', '#d10a11'],
       stroke: { curve: 'smooth', width: [2.5, 1.5], dashArray: [0, 5] },
@@ -2702,25 +2716,6 @@ function renderPortfolio() {
     };
   });
 
-  const kpiHtml = sums.map(function (s) {
-    const plClass = s.pl == null ? '' : (s.pl >= 0 ? 'up' : 'down');
-    const dayClass = s.day == null ? '' : (s.day >= 0 ? 'up' : 'down');
-    const tag = (sums.length > 1 || pfCurMode !== 'auto') ? `<div class="pf-cur-tag">${esc(s.cur)}</div>` : '';
-    const valueText = s.pending ? '…' : (s.value != null ? pfMoney(s.value, s.cur) : '—');
-    return `<div class="pf-group">
-        ${tag}
-        <div class="pf-kpis">
-          <div class="pf-kpi"><span>${esc(p.totalValue)}</span><strong>${valueText}</strong></div>
-          <div class="pf-kpi"><span>${esc(p.invested)}</span><strong>${s.pending ? '…' : pfMoney(s.cost, s.cur)}</strong></div>
-          <div class="pf-kpi"><span>${esc(p.netPl)}</span><strong class="${plClass}">${s.pl == null ? (s.pending ? '…' : '—') : pfSignedMoney(s.pl, s.cur)}</strong><em class="${plClass}">${s.pl == null ? '' : pfPctText(s.plPct)}</em></div>
-          <div class="pf-kpi"><span>${esc(p.today)}</span><strong class="${dayClass}">${s.day == null ? '—' : pfSignedMoney(s.day, s.cur)}</strong><em class="${dayClass}">${s.day == null ? '' : pfPctText(s.dayPct)}</em></div>
-        </div>
-      </div>`;
-  }).join('');
-
-  const fxNote = (pfRate() && pfNeedsFx())
-    ? `<p class="pf-fx">${esc((p.fxNote || '').replace('{rate}', pfMoney(pfRate(), 'IDR')))}</p>` : '';
-
   /* The trend and allocation panels need one currency. With a fixed display
      currency that is obvious; on "Auto" the group holding most of the names
      wins, since raw amounts in IDR and USD are not comparable. */
@@ -2739,6 +2734,38 @@ function renderPortfolio() {
       .catch(function () { pfFxPending = false; });
   }
   const paneFx = pfRate() && portfolio.some(function (h) { return pfCurrency(h.symbol) !== primaryCur; });
+  /* One book, one number: everything converted into the display currency so
+     the headline figure matches the chart and the split. */
+  const toDash = function (value, from) {
+    if (value == null) return null;
+    return from === primaryCur ? value : pfConvert(value, from, primaryCur);
+  };
+  const book = { value: 0, cost: 0, day: 0, dayBase: 0, priced: false, costed: false, dayed: false };
+  views.forEach(function (row) {
+    const v = row.v;
+    const value = toDash(v.value, v.target);
+    if (value != null) { book.value += value; book.priced = true; }
+    const cost = toDash(v.cost, v.target);
+    if (cost != null) { book.cost += cost; book.costed = true; }
+    const pct = (v.q && isFinite(v.q.pct)) ? v.q.pct : null;
+    if (value != null && pct != null && (1 + pct / 100) > 0) {
+      const prev = value / (1 + pct / 100);
+      book.day += value - prev; book.dayBase += prev; book.dayed = true;
+    }
+  });
+  const bookPl = (book.priced && book.costed) ? book.value - book.cost : null;
+  const bookPlPct = (bookPl != null && book.cost > 0) ? (bookPl / book.cost) * 100 : null;
+  const bookDayPct = (book.dayed && book.dayBase > 0) ? (book.day / book.dayBase) * 100 : null;
+  const plClass = bookPl == null ? '' : (bookPl >= 0 ? 'up' : 'down');
+  const dayClass = book.dayed ? (book.day >= 0 ? 'up' : 'down') : '';
+
+  const heroDelta = `<div class="pf-hero-delta ${plClass}">${bookPl == null ? '—' : pfSignedMoney(bookPl, primaryCur) + ' (' + pfPctText(bookPlPct) + ')'}<span>${esc(p.netPl)}</span></div>`;
+  const heroStats = `<div class="pf-hero-stats">
+      <span><em>${esc(p.invested)}</em><strong>${book.costed ? pfMoney(book.cost, primaryCur) : '—'}</strong></span>
+      <span><em>${esc(p.netPl)}</em><strong class="${plClass}">${bookPl == null ? '—' : pfSignedMoney(bookPl, primaryCur)}</strong></span>
+      <span><em>${esc(p.today)}</em><strong class="${dayClass}">${book.dayed ? pfSignedMoney(book.day, primaryCur) + '<i>' + pfPctText(bookDayPct) + '</i>' : '—'}</strong></span>
+    </div>`;
+
   const chartNote = esc(p.chartNote) + (paneFx ? ' ' + esc((p.chartNoteFx || '').replace('{rate}', pfMoney(pfRate(), 'IDR'))) : '');
 
   const present = PF_CLASSES.filter(function (cls) {
@@ -2779,20 +2806,22 @@ function renderPortfolio() {
     return `<button type="button" class="${on ? 'active' : ''}" data-pf-range="${pair[0]}" aria-pressed="${on ? 'true' : 'false'}">${pair[1]}</button>`;
   }).join('');
 
-  body.innerHTML = `${kpiHtml}
-    ${fxNote}
-    <div class="mkt-grid pf-dash-grid">
+  body.innerHTML = `
+    <div class="pf-dash-row pf-row-a">
       <section class="mkt-card">
         <div class="mkt-card-head">
           <div>
             <h2 class="mkt-title">${esc(p.perfTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
-            <p class="mkt-sub">${esc(p.perfSub)}</p>
+            <div class="pf-hero-value">${book.priced ? pfMoney(book.value, primaryCur) : '—'}</div>
+            ${heroDelta}
           </div>
           <div class="mkt-seg" id="pfRangeSeg" role="group">${rangeChips}</div>
         </div>
+        ${heroStats}
         <div class="mkt-legend">
           <span class="mkt-legend-item"><i class="mkt-dot pf"></i>${esc(p.portfolio)} <b id="pfTrendPort">—</b></span>
           <span class="mkt-legend-item"><i class="mkt-dot ihsg"></i>${esc(p.benchmark)} <b id="pfTrendBench">—</b></span>
+          <span class="pf-legend-note">${esc(p.perfSub)}</span>
         </div>
         <div id="pfTrendChart"><div class="pf-empty-sm">${esc(p.loadingTrend)}</div></div>
         <p class="pf-chart-note">${chartNote}</p>
@@ -2809,7 +2838,7 @@ function renderPortfolio() {
       </section>
     </div>
 
-    <div class="mkt-grid pf-dash-grid">
+    <div class="pf-dash-row pf-row-b">
       <section class="mkt-card">
         <div class="mkt-card-head">
           <div>
