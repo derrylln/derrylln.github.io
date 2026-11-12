@@ -162,6 +162,12 @@ const I18N = {
       converted: r => `Statement in USD, converted at Rp ${r}/USD`, reportedIn: c => `Statement reported in ${c}`,
       noData: 'No figures reported for this period.'
     },
+    fin: {
+      title: 'Financial report', kind: 'Period', quarterly: 'Quarterly', annual: 'Annual',
+      loading: 'Loading the report…', close: 'Close', chartRevenue: 'Revenue and net income',
+      noData: 'No report available for this company.',
+      note: 'Reported figures · Yahoo Finance · not investment advice'
+    },
     fundAi: {
       btn: 'AI', title: 'AI fundamental read', loading: 'Reading the numbers…',
       failed: 'No analysis came back. Try again.',
@@ -244,6 +250,12 @@ const I18N = {
       fcf: 'Arus kas bebas', fy: 'TA', period: 'Periode laporan', note: 'Yahoo Finance',
       converted: r => `Laporan dalam USD, dikonversi Rp ${r}/USD`, reportedIn: c => `Laporan dalam ${c}`,
       noData: 'Tidak ada angka untuk periode ini.'
+    },
+    fin: {
+      title: 'Laporan keuangan', kind: 'Periode', quarterly: 'Kuartal', annual: 'Tahunan',
+      loading: 'Memuat laporan…', close: 'Tutup', chartRevenue: 'Pendapatan dan laba bersih',
+      noData: 'Laporan tidak tersedia untuk emiten ini.',
+      note: 'Angka laporan · Yahoo Finance · bukan saran investasi'
     },
     fundAi: {
       btn: 'AI', title: 'Analisis fundamental AI', loading: 'Membaca angka…',
@@ -1090,6 +1102,170 @@ async function fetchFundamentals(symbol) {
   return fund;
 }
 
+/* FINANCIAL REPORT ---------------------------------------------------------
+   A card is a price; the report behind it is a different question, so opening
+   one shows the statements the fundamentals feed already carries — annual or
+   quarterly, charted across the periods it has. */
+let finModalEl = null;
+let finCharts = [];
+let finState = { symbol: null, name: '', kind: 'q' };
+
+function finT() { return I18N[state.lang].fin; }
+
+function finModal() {
+  if (finModalEl) return finModalEl;
+  const t = finT();
+  const wrap = document.createElement('div');
+  wrap.className = 'fin-modal';
+  wrap.innerHTML = '<div class="fin-card" role="dialog" aria-modal="true" aria-labelledby="finTitle">' +
+    '<div class="fin-head"><div class="fin-head-main">' +
+    '<div class="fin-kicker" id="finKicker"></div><h2 class="fin-title" id="finTitle"></h2></div>' +
+    '<div class="fin-head-side"><div class="fin-seg" id="finSeg" role="group" aria-label="' + esc(t.kind) + '">' +
+    '<button type="button" class="active" data-fin-kind="q">' + esc(t.quarterly) + '</button>' +
+    '<button type="button" data-fin-kind="y">' + esc(t.annual) + '</button></div>' +
+    '<button type="button" class="ai-modal-close fin-close" aria-label="' + esc(t.close) + '">×</button></div></div>' +
+    '<div class="fin-body" id="finBody"></div>' +
+    '<div class="fin-note">' + esc(t.note) + '</div></div>';
+  wrap.addEventListener('click', function (e) {
+    if (e.target === wrap || (e.target.closest && e.target.closest('.fin-close'))) { closeFinancials(); return; }
+    const btn = e.target.closest ? e.target.closest('[data-fin-kind]') : null;
+    if (!btn) return;
+    const kind = btn.getAttribute('data-fin-kind');
+    if (kind === finState.kind) return;
+    finState.kind = kind;
+    $$('#finSeg button', wrap).forEach(b => b.classList.toggle('active', b === btn));
+    paintFinBody();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && finModalEl && finModalEl.classList.contains('open')) closeFinancials();
+  });
+  document.body.appendChild(wrap);
+  finModalEl = wrap;
+  return wrap;
+}
+
+function openFinancials(symbol, name) {
+  const wrap = finModal();
+  finState.symbol = symbol;
+  finState.name = name || symbol;
+  wrap.classList.add('open');
+  document.getElementById('finKicker').textContent = symbol.replace('.JK', '');
+  document.getElementById('finTitle').textContent = name || symbol;
+  $$('#finSeg button', wrap).forEach(function (b) {
+    b.classList.toggle('active', b.getAttribute('data-fin-kind') === finState.kind);
+  });
+  paintFinBody();
+}
+
+function closeFinancials() {
+  if (!finModalEl) return;
+  finModalEl.classList.remove('open');
+  destroyFinCharts();
+}
+
+function destroyFinCharts() {
+  finCharts.forEach(function (c) { try { c.destroy(); } catch (e) {} });
+  finCharts = [];
+}
+
+async function paintFinBody() {
+  const body = document.getElementById('finBody');
+  if (!body) return;
+  const t = finT(), f = I18N[state.lang].fund;
+  const symbol = finState.symbol;
+  destroyFinCharts();
+  body.innerHTML = '<div class="fin-loading">' + esc(t.loading) + '</div>';
+  let fund = null;
+  try { fund = await fetchFundamentals(symbol); } catch (e) { fund = null; }
+  if (finState.symbol !== symbol) return;
+  const list = fund ? (finState.kind === 'q'
+    ? fund.periods.filter(p => p.kind === 'Q')
+    : fund.annual.slice()).slice(0, 8) : [];
+  if (!list.length) { body.innerHTML = '<div class="fin-empty">' + esc(t.noData) + '</div>'; return; }
+
+  const val = p => (p && isFinite(p.raw)) ? compactNum(p.raw, p.currency) : '—';
+  const newest = list[0];
+  const per = periodLabel(newest, f);
+  const tile = function (label, value, sub, growth) {
+    return '<div class="fin-kpi"><span class="fin-kpi-label">' + esc(label) + '</span>' +
+      '<strong class="fin-kpi-value">' + esc(value) + '</strong>' +
+      '<span class="fin-kpi-sub">' + esc(sub) + '</span>' +
+      (growth == null ? '' : '<span class="fin-kpi-badge ' + (growth >= 0 ? 'up' : 'down') + '">' +
+        (growth >= 0 ? '+' : '') + growth.toFixed(1) + '% ' + esc(f.yoy) + '</span>') +
+      '</div>';
+  };
+  body.innerHTML =
+    '<div class="fin-kpis">' +
+      tile(f.rev, val(newest.revenue), per, newest.growth) +
+      tile(f.netIncome, val(newest.netIncome), newest.margin == null ? per : per + ' · ' + newest.margin.toFixed(1) + '% ' + f.netMargin, null) +
+      tile(f.eps, val(newest.eps), per, null) +
+      tile(f.fcf, val(newest.fcf), per, null) +
+    '</div>' +
+    '<div class="fin-charts">' +
+      '<div class="fin-chart"><h3>' + esc(t.chartRevenue) + '</h3><div class="fin-chart-meta">' +
+        esc((newest.revenue && newest.revenue.currency) || fund.currency || '') + '</div><div id="finBar"></div></div>' +
+      '<div class="fin-chart"><h3>' + esc(f.netMargin) + '</h3><div class="fin-chart-meta">%</div>' +
+        '<div id="finLine"></div></div>' +
+    '</div>' +
+    '<div class="fin-table-wrap"><table class="fin-table"><thead><tr>' +
+      '<th>' + esc(f.period) + '</th><th>' + esc(f.rev) + '</th><th>' + esc(f.revGrowth) + '</th>' +
+      '<th>' + esc(f.netIncome) + '</th><th>' + esc(f.netMargin) + '</th><th>' + esc(f.eps) + '</th>' +
+      '<th>' + esc(f.fcf) + '</th></tr></thead><tbody>' +
+      list.map(function (p) {
+        const g = p.growth;
+        return '<tr><td>' + esc(periodLabel(p, f)) + '</td>' +
+          '<td>' + esc(val(p.revenue)) + '</td>' +
+          '<td class="' + (g == null ? '' : g >= 0 ? 'up' : 'down') + '">' +
+            (g == null ? '—' : (g >= 0 ? '+' : '') + g.toFixed(1) + '%') + '</td>' +
+          '<td>' + esc(val(p.netIncome)) + '</td>' +
+          '<td>' + (p.margin == null ? '—' : p.margin.toFixed(1) + '%') + '</td>' +
+          '<td>' + esc(val(p.eps)) + '</td>' +
+          '<td>' + esc(val(p.fcf)) + '</td></tr>';
+      }).join('') +
+    '</tbody></table></div>';
+  paintFinCharts(list.slice().reverse(), f);
+}
+
+function paintFinCharts(periods, f) {
+  if (typeof ApexCharts === 'undefined' || !periods.length) return;
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const theme = { mode: isDark ? 'dark' : 'light' };
+  const grid = { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4 };
+  const labels = periods.map(p => periodLabel(p, f));
+  const cur = (periods[0].revenue && periods[0].revenue.currency) || '';
+  const barNode = document.getElementById('finBar');
+  if (barNode) {
+    const bar = new ApexCharts(barNode, {
+      series: [{ name: f.rev, data: periods.map(p => (p.revenue ? p.revenue.raw : null)) },
+               { name: f.netIncome, data: periods.map(p => (p.netIncome ? p.netIncome.raw : null)) }],
+      chart: { type: 'bar', height: 216, toolbar: { show: false }, fontFamily: 'Inter', background: 'transparent' },
+      theme: theme, colors: ['#2563eb', '#0f9d58'],
+      plotOptions: { bar: { columnWidth: '46%', borderRadius: 2 } },
+      dataLabels: { enabled: false }, grid: grid,
+      xaxis: { categories: labels, labels: { style: { fontSize: '10px' } } },
+      yaxis: { labels: { formatter: v => compactNum(v, '') } },
+      legend: { show: true, position: 'top', horizontalAlign: 'left', fontSize: '10.5px', markers: { size: 4 } },
+      tooltip: { y: { formatter: v => compactNum(v, cur) } }
+    });
+    bar.render(); finCharts.push(bar);
+  }
+  const lineNode = document.getElementById('finLine');
+  if (lineNode) {
+    const line = new ApexCharts(lineNode, {
+      series: [{ name: f.netMargin, data: periods.map(p => (p.margin == null ? null : Number(p.margin.toFixed(2)))) }],
+      chart: { type: 'area', height: 216, toolbar: { show: false }, fontFamily: 'Inter', background: 'transparent' },
+      theme: theme, colors: ['#d10a11'],
+      stroke: { curve: 'smooth', width: 2.5 },
+      fill: { type: 'gradient', gradient: { opacityFrom: 0.24, opacityTo: 0.02 } },
+      dataLabels: { enabled: false }, markers: { size: 3 }, grid: grid,
+      xaxis: { categories: labels, labels: { style: { fontSize: '10px' } } },
+      yaxis: { labels: { formatter: v => (v == null ? '' : v.toFixed(0) + '%') } },
+      tooltip: { y: { formatter: v => (v == null ? '—' : v.toFixed(1) + '%') } }
+    });
+    line.render(); finCharts.push(line);
+  }
+}
+
 /* One entry per reported period, newest first. Growth compares with the same
    period a year earlier, so a quarter is never measured against the previous
    quarter's seasonality. */
@@ -1875,7 +2051,7 @@ async function loadMarketDashboard() {
     // The AI button is a sibling of the link, not inside it: a button nested in
     // an anchor is invalid markup and swallows the link's own navigation.
     return `<div class="stock-card">
-      <a class="sc-body" href="https://finance.yahoo.com/quote/${esc(s.symbol)}" target="_blank">
+      <button type="button" class="sc-body" data-fin-open="${esc(s.symbol)}" data-fin-name="${esc(s.name)}">
         <div class="sc-header">
           <div>
             <div class="sc-sym">${esc(s.symbol.replace('.JK', ''))}</div>
@@ -1885,7 +2061,7 @@ async function loadMarketDashboard() {
         </div>
         <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
         ${rangeHtml}
-      </a>
+      </button>
       <div class="sc-foot">
         <div class="sc-fund" data-fund="${esc(s.symbol)}"></div>
         <button type="button" class="sc-ai" data-ai="${esc(s.symbol)}" title="${esc(I18N[state.lang].fundAi.title)}">✨ ${esc(I18N[state.lang].fundAi.btn)}</button>
@@ -1966,8 +2142,6 @@ async function loadMarketDashboard() {
         </div>
       </section>
 
-      ${heatmapHTML(idxData)}
-
       <section class="mkt-row3">
         <div class="mkt-card">
           <div class="mkt-card-head">
@@ -2011,7 +2185,6 @@ async function loadMarketDashboard() {
       <div id="dividendPanel"></div>
     </div>`;
   hydrateCardFundamentals(dash);
-  paintHeatDetail();
 
   const divSlot = document.getElementById('dividendPanel');
   if (divSlot) divSlot.innerHTML = '<div class="modern-card"><div class="card-title">' +
@@ -3338,6 +3511,11 @@ function bindUI() {
 
   const benchDash = $('#stockDashboard');
   if (benchDash) benchDash.addEventListener('click', function (e) {
+    const card = e.target.closest('[data-fin-open]');
+    if (card) {
+      openFinancials(card.getAttribute('data-fin-open'), card.getAttribute('data-fin-name'));
+      return;
+    }
     const btn = e.target.closest('[data-pf-bench]');
     if (!btn) return;
     pfToggleBench(btn.getAttribute('data-pf-bench'));
