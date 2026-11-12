@@ -154,7 +154,9 @@ const I18N = {
       colRank: '#', colSym: 'Symbol', colName: 'Company', colPrice: 'Price',
       colDps: 'DPS 12m', colYield: 'Yield', colPays: 'Payouts', colEx: 'Last ex-date',
       divNote: 'Trailing 12-month dividends ÷ last price · Yahoo Finance · not investment advice',
-      divFilter: 'Min yield', divAll: 'All', divNoMatch: 'No name clears that yield hurdle.'
+      divFilter: 'Min yield', divAll: 'All', divNoMatch: 'No name clears that yield hurdle.',
+      sectors: 'IDX Sector Pulse', sectorsSub: 'Average move · 30 tracked names',
+      sectorDrivers: 'What moved it', colChange: 'Change'
     }
   },
   id: {
@@ -209,7 +211,9 @@ const I18N = {
       colRank: '#', colSym: 'Simbol', colName: 'Emiten', colPrice: 'Harga',
       colDps: 'DPS 12 bln', colYield: 'Yield', colPays: 'Bayar', colEx: 'Ex-date terakhir',
       divNote: 'Dividen 12 bulan terakhir ÷ harga terakhir · Yahoo Finance · bukan saran investasi',
-      divFilter: 'Yield min', divAll: 'Semua', divNoMatch: 'Tidak ada emiten yang melewati batas yield itu.'
+      divFilter: 'Yield min', divAll: 'Semua', divNoMatch: 'Tidak ada emiten yang melewati batas yield itu.',
+      sectors: 'Denyut Sektor IDX', sectorsSub: 'Rata-rata pergerakan · 30 emiten',
+      sectorDrivers: 'Yang menggerakkan', colChange: 'Perubahan'
     }
   }
 };
@@ -1258,6 +1262,129 @@ function breadthCounts(list) {
   return { up: up, down: down, flat: flat, total: up + down + flat };
 }
 
+/* IDX-IC sector buckets for the names the dashboard already quotes. Yahoo has
+   no usable IDX sector index series, so the heatmap is the average move of the
+   tracked constituents — honest about being a sample, and free of extra calls. */
+const SECTOR_MAP = {
+  BBCA: 'Financials', BBRI: 'Financials', BMRI: 'Financials', BBNI: 'Financials',
+  TLKM: 'Infrastructure', EXCL: 'Infrastructure', ISAT: 'Infrastructure', TOWR: 'Infrastructure',
+  AMRT: 'Consumer Non-Cyclicals', ICBP: 'Consumer Non-Cyclicals', INDF: 'Consumer Non-Cyclicals',
+  UNVR: 'Consumer Non-Cyclicals', CPIN: 'Consumer Non-Cyclicals', JPFA: 'Consumer Non-Cyclicals',
+  ADRO: 'Energy', PTBA: 'Energy', ITMG: 'Energy', PGAS: 'Energy',
+  BRPT: 'Basic Materials', ANTM: 'Basic Materials', MDKA: 'Basic Materials',
+  SMGR: 'Basic Materials', INTP: 'Basic Materials',
+  KLBF: 'Healthcare', MIKA: 'Healthcare',
+  CTRA: 'Properties', BSDE: 'Properties', PWON: 'Properties',
+  ASII: 'Consumer Cyclicals', GOTO: 'Technology'
+};
+
+let heatSelected = null;
+let lastHeatRows = [];
+
+function sectorRows(idxData) {
+  const groups = {};
+  idxData.forEach(function (s) {
+    if (!s || !isFinite(s.pct)) return;
+    const key = SECTOR_MAP[s.symbol.replace('.JK', '')];
+    if (!key) return;
+    const g = groups[key] || (groups[key] = { name: key, sum: 0, n: 0, up: 0, down: 0, members: [] });
+    g.sum += s.pct;
+    g.n++;
+    if (s.pct > 0.0001) g.up++; else if (s.pct < -0.0001) g.down++;
+    g.members.push({
+      symbol: s.symbol.replace('.JK', ''),
+      pct: s.pct,
+      price: s.price
+    });
+  });
+  return Object.keys(groups).map(function (key) {
+    const g = groups[key];
+    return {
+      name: g.name, avg: g.sum / g.n, n: g.n, up: g.up, down: g.down,
+      members: g.members.sort(function (a, b) { return b.pct - a.pct; })
+    };
+  }).sort(function (a, b) { return b.avg - a.avg; });
+}
+
+function heatmapHTML(idxData) {
+  const t = I18N[state.lang].mkt;
+  const rows = sectorRows(idxData);
+  lastHeatRows = rows;
+  if (!rows.length) return '';
+  const peak = Math.max.apply(null, rows.map(function (r) { return Math.abs(r.avg); })) || 1;
+  const tiles = rows.map(function (r) {
+    const up = r.avg >= 0;
+    const alpha = (0.07 + Math.min(1, Math.abs(r.avg) / peak) * 0.18).toFixed(2);
+    const flat = Math.abs(r.avg) < 0.005;
+    const selected = heatSelected === r.name;
+    return '<div class="heat-tile' + (selected ? ' selected' : '') + '" role="button" tabindex="0"' +
+      ' data-sector="' + esc(r.name) + '" aria-expanded="' + (selected ? 'true' : 'false') + '"' +
+      ' style="background:' + (up ? 'rgba(34,197,94,' : 'rgba(239,68,68,') + alpha + ')">' +
+      '<span class="heat-name">' + esc(r.name) + '</span>' +
+      '<strong class="heat-pct ' + (flat ? 'flat' : up ? 'up' : 'down') + '">' +
+      (flat ? '0.00%' : (up ? '+' : '') + r.avg.toFixed(2) + '%') + '</strong>' +
+      '<span class="heat-meta">' + r.n + (r.n === 1 ? ' name' : ' names') + ' · ' + r.up + '↑ ' + r.down + '↓</span>' +
+      '</div>';
+  }).join('');
+  return '<div class="modern-card heat-card">' +
+    '<div class="card-title"><span>' + esc(t.sectors) + '</span>' +
+    '<span class="div-sub">' + esc(t.sectorsSub) + '</span></div>' +
+    '<div class="heat-grid">' + tiles + '</div>' +
+    '<div class="heat-detail" id="heatDetail"></div></div>';
+}
+
+/* The drivers behind a sector's average: the same names, worst to best. */
+function heatDetailHTML(row) {
+  const t = I18N[state.lang].mkt;
+  const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
+  const body = row.members.map(function (m) {
+    const up = m.pct >= 0;
+    return '<tr>' +
+      '<td style="font-weight:800;">' + esc(m.symbol) + '</td>' +
+      '<td style="text-align:right;">' + (isFinite(m.price) ? m.price.toLocaleString(locale, { maximumFractionDigits: 0 }) : '—') + '</td>' +
+      '<td style="text-align:right; font-weight:800; color:' + (up ? 'var(--green)' : 'var(--red)') + ';">' +
+      (up ? '+' : '') + m.pct.toFixed(2) + '%</td>' +
+      '</tr>';
+  }).join('');
+  return '<div class="heat-detail-head"><strong>' + esc(row.name) + '</strong>' +
+    '<span class="div-sub">' + esc(t.sectorDrivers) + ' · ' + row.n + (row.n === 1 ? ' name' : ' names') + '</span></div>' +
+    '<table class="movers-table heat-detail-table">' +
+    '<thead><tr><th>' + esc(t.colSym) + '</th>' +
+    '<th style="text-align:right;">' + esc(t.colPrice) + '</th>' +
+    '<th style="text-align:right;">' + esc(t.colChange) + '</th></tr></thead>' +
+    '<tbody>' + body + '</tbody></table>';
+}
+
+function paintHeatDetail() {
+  const slot = document.getElementById('heatDetail');
+  if (!slot) return;
+  const row = heatSelected ? lastHeatRows.filter(function (r) { return r.name === heatSelected; })[0] : null;
+  slot.innerHTML = row ? heatDetailHTML(row) : '';
+  slot.classList.toggle('open', !!row);
+}
+
+document.addEventListener('click', function (e) {
+  if (!e.target || !e.target.closest) return;
+  const tile = e.target.closest('.heat-tile[data-sector]');
+  if (!tile) return;
+  const name = tile.getAttribute('data-sector');
+  heatSelected = heatSelected === name ? null : name;
+  document.querySelectorAll('.heat-tile[data-sector]').forEach(function (el) {
+    const on = el.getAttribute('data-sector') === heatSelected;
+    el.classList.toggle('selected', on);
+    el.setAttribute('aria-expanded', on ? 'true' : 'false');
+  });
+  paintHeatDetail();
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const tile = e.target && e.target.closest ? e.target.closest('.heat-tile[data-sector]') : null;
+  if (!tile) return;
+  e.preventDefault();
+  tile.click();
+});
+
 function breadthBarHTML(counts) {
   if (!counts.total) return '';
   const up = (counts.up / counts.total) * 100;
@@ -1604,6 +1731,7 @@ async function loadMarketDashboard() {
   dash.innerHTML = `
     <div class="mkt-asof">${esc(mktT.asOf)} ${esc(asOf)} · ${esc(mktT.delayed)}</div>
     ${pulseHTML(allData, idxData, usData)}
+    ${heatmapHTML(idxData)}
     <div class="sparkline-grid">${sparkHtml}</div>
     
     <div class="dash-grid" style="align-items: start;">
@@ -1664,6 +1792,7 @@ async function loadMarketDashboard() {
     ${macroPanelHtml}
   `;
   hydrateCardFundamentals(dash);
+  paintHeatDetail();
 
   const divSlot = document.getElementById('dividendPanel');
   if (divSlot) divSlot.innerHTML = '<div class="modern-card"><div class="card-title">' +
