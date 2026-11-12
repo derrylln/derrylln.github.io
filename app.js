@@ -1222,13 +1222,7 @@ async function runFinAi() {
 function paintFinAiOut() {
   const slot = document.getElementById('finAiSlot');
   if (!slot) return;
-  if (!finState.ai) { slot.innerHTML = ''; return; }
-  const t = I18N[state.lang].fundAi;
-  slot.innerHTML = '<div class="fin-ai-panel' + (finState.ai.err ? ' err' : '') + '">' +
-    '<div class="fin-ai-head">✨ ' + esc(t.title) + '</div>' +
-    '<div class="fin-ai-text">' + esc(finState.ai.text) + '</div>' +
-    (finState.ai.err ? '' : '<div class="fin-ai-note">' + esc(t.note) + '</div>') +
-    '</div>';
+  slot.innerHTML = finState.ai ? fundAiHtml(finState.ai.text, finState.ai.err) : '';
 }
 
 function destroyFinCharts() {
@@ -1469,69 +1463,15 @@ function fundFigureLines(fund, lang) {
   return lines;
 }
 
-let fundAiModal = null;
-
-function ensureFundAiModal() {
-  if (fundAiModal) return fundAiModal;
-  const wrap = document.createElement('div');
-  wrap.className = 'ai-modal';
-  wrap.innerHTML = `<div class="ai-modal-card" role="dialog" aria-modal="true" aria-labelledby="aiModalTitle">
-    <div class="ai-modal-head">
-      <span id="aiModalTitle"></span>
-      <button type="button" class="ai-modal-close" aria-label="Close">×</button>
-    </div>
-    <div class="ai-modal-body"></div>
-    <div class="ai-modal-note"></div>
-  </div>`;
-  wrap.addEventListener('click', (e) => {
-    if (e.target === wrap || (e.target.closest && e.target.closest('.ai-modal-close'))) closeFundAi();
-  });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFundAi(); });
-  document.body.appendChild(wrap);
-  fundAiModal = wrap;
-  return wrap;
-}
-
-function closeFundAi() {
-  if (!fundAiModal) return;
-  fundAiModal.classList.remove('open');
-  const stop = fundAiModal.__stopClock;
-  if (stop) { stop(); fundAiModal.__stopClock = null; }
-}
-
-async function openFundAi(symbol, name) {
-  const modal = ensureFundAiModal();
+/* One look for an AI answer, wherever it is rendered: inside the financial
+   report, or under an expanded holding. */
+function fundAiHtml(text, err, head) {
   const t = I18N[state.lang].fundAi;
-  const title = $('#aiModalTitle', modal);
-  const body = $('.ai-modal-body', modal);
-  const note = $('.ai-modal-note', modal);
-
-  if (modal.__stopClock) { modal.__stopClock(); modal.__stopClock = null; }
-  title.textContent = `${t.title} · ${name || symbol.replace(/\.JK$/i, '')}`;
-  note.textContent = '';
-  body.textContent = '';
-  modal.classList.add('open');
-  modal.__stopClock = startClock(body, t.loading);
-
-  try {
-    const fund = await fetchFundamentals(symbol);
-    const lines = fundFigureLines(fund, state.lang);
-    if (!lines.length) throw new Error(I18N[state.lang].fund.noData);
-    const data = await aiRequest('/ai-fundamentals', {
-      symbol: symbol.replace(/\.JK$/i, ''),
-      name: name || '',
-      lang: state.lang,
-      figures: lines.join('\n')
-    });
-    if (modal.__stopClock) { modal.__stopClock(); modal.__stopClock = null; }
-    body.textContent = (data && data.summary) ? data.summary.trim() : t.failed;
-    note.textContent = t.note;
-  } catch (err) {
-    if (modal.__stopClock) { modal.__stopClock(); modal.__stopClock = null; }
-    const message = aiErrorText(err);
-    // A worker that predates this route answers 404/405 instead of an analysis.
-    body.textContent = /\b(404|405)\b/.test(message) ? t.unavailable : message;
-  }
+  return '<div class="fin-ai-panel' + (err ? ' err' : '') + '">' +
+    (head === false ? '' : '<div class="fin-ai-head">✨ ' + esc(t.title) + '</div>') +
+    '<div class="fin-ai-text">' + esc(text) + '</div>' +
+    (err ? '' : '<div class="fin-ai-note">' + esc(t.note) + '</div>') +
+    '</div>';
 }
 
 // Switching period re-renders from the cached response — no second request.
@@ -2317,7 +2257,7 @@ function pfPctText(value) { return (value == null || !isFinite(value)) ? '' : (v
 const pfOpen = new Set();
 const pfDetail = {};
 function pfDetailOf(symbol) {
-  if (!pfDetail[symbol]) pfDetail[symbol] = { fund: '', why: '' };
+  if (!pfDetail[symbol]) pfDetail[symbol] = { fund: '', why: '', ai: '' };
   return pfDetail[symbol];
 }
 
@@ -2333,6 +2273,7 @@ function pfDetailRowHtml(symbol) {
             <button type="button" class="pf-act" data-pf-read="${esc(symbol)}">✨ ${esc(p.aiRead)}</button>
             <button type="button" class="pf-act" data-pf-why="${esc(symbol)}">✨ ${esc(p.whyMoved)}</button>
           </div>
+          <div class="pf-why-out" data-pf-ai-out="${esc(symbol)}"${d.ai ? '' : ' hidden'}>${d.ai}</div>
           <div class="pf-why-out" data-pf-why-out="${esc(symbol)}"${d.why ? '' : ' hidden'}>${d.why}</div>
           <div class="pf-fund-out" data-pf-fund-out="${esc(symbol)}">${d.fund}</div>
         </div>
@@ -3455,6 +3396,42 @@ function bindUI() {
     } finally { stop(); }
   }
 
+  /* The fundamental read for a holding renders where the figures already are,
+     instead of covering them with a panel of its own. */
+  async function pfAiRead(symbol, btn) {
+    const out = document.querySelector('[data-pf-ai-out="' + symbol + '"]');
+    if (!out || out.dataset.busy === '1') return;
+    const t = I18N[state.lang].fundAi;
+    out.hidden = false;
+    out.dataset.busy = '1';
+    if (btn) btn.disabled = true;
+    const textId = 'pfAiText' + symbol.replace(/[^A-Za-z0-9]/g, '');
+    out.innerHTML = '<div class="fin-ai-panel"><div class="fin-ai-text" id="' + textId + '"></div></div>';
+    const textNode = document.getElementById(textId);
+    const stop = textNode ? startClock(textNode, t.loading) : function () {};
+    try {
+      const fund = await fetchFundamentals(symbol);
+      const lines = fundFigureLines(fund, state.lang);
+      if (!lines.length) throw new Error(I18N[state.lang].fund.noData);
+      const q = pfQuotes[symbol] || {};
+      const data = await aiRequest('/ai-fundamentals', {
+        symbol: symbol.replace(/\.JK$/i, ''),
+        name: q.name || '',
+        lang: state.lang,
+        figures: lines.join('\n')
+      });
+      out.innerHTML = fundAiHtml((data && data.summary) ? data.summary.trim() : t.failed, false, false);
+    } catch (err) {
+      const message = aiErrorText(err);
+      out.innerHTML = fundAiHtml(/\b(404|405)\b/.test(message) ? t.unavailable : message, true, false);
+    } finally {
+      stop();
+      out.dataset.busy = '';
+      if (btn) btn.disabled = false;
+      pfDetailOf(symbol).ai = out.innerHTML;
+    }
+  }
+
   const benchDash = $('#stockDashboard');
   if (benchDash) benchDash.addEventListener('click', function (e) {
     const btn = e.target.closest('[data-pf-bench]');
@@ -3499,12 +3476,7 @@ function bindUI() {
       const openBtn = e.target.closest('[data-pf-open]');
       if (openBtn) { pfToggleDetail(openBtn.getAttribute('data-pf-open')); return; }
       const readBtn = e.target.closest('[data-pf-read]');
-      if (readBtn) {
-        const sym = readBtn.getAttribute('data-pf-read');
-        const q = pfQuotes[sym] || {};
-        openFundAi(sym, q.name || sym.replace(/\.JK$/i, ''));
-        return;
-      }
+      if (readBtn) { pfAiRead(readBtn.getAttribute('data-pf-read'), readBtn); return; }
       const whyBtn = e.target.closest('[data-pf-why]');
       if (whyBtn) { pfWhyMoved(whyBtn.getAttribute('data-pf-why')); return; }
       const removeBtn = e.target.closest('[data-pf-remove]');
