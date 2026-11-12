@@ -115,6 +115,7 @@ const I18N = {
     stockLoading: 'Fetching market data…', stockSearch: 'Searching…', stockNoRes: 'No results found.', stockErr: 'Search failed.',
     market: {
       gauges: 'Markets at a glance',
+      addTicker: 'Add ticker', addTickerPh: 'Ticker, e.g. BBCA.JK', notFound: 'No quote found', removeTicker: 'Remove ticker',
       performance: 'Performance', performanceSub: 'Selected indexes in their own currency, indexed to the start of the period',
       movers: 'Top movers', gainers: 'Gainers', losers: 'Losers',
       mostActive: 'Most active', watch: 'Market watch', rates: 'Rates & volatility',
@@ -203,6 +204,7 @@ const I18N = {
     stockLoading: 'Memuat data pasar…', stockSearch: 'Mencari…', stockNoRes: 'Tidak ada hasil.', stockErr: 'Pencarian gagal.',
     market: {
       gauges: 'Pasar sekilas',
+      addTicker: 'Tambah ticker', addTickerPh: 'Ticker, mis. BBCA.JK', notFound: 'Harga tidak ditemukan', removeTicker: 'Hapus ticker',
       performance: 'Kinerja', performanceSub: 'Indeks terpilih dalam mata uangnya sendiri, diindeks dari awal periode',
       movers: 'Penggerak teratas', gainers: 'Naik', losers: 'Turun',
       mostActive: 'Teraktif', watch: 'Pantauan pasar', rates: 'Suku bunga & volatilitas',
@@ -279,6 +281,18 @@ const I18N = {
     }
   }
 };
+
+/* Tickers the reader pinned to the top strip. Only symbols are stored; the
+   quote and the sparkline are fetched fresh with the rest of the board. */
+const MKT_HERO_KEY = 'finwire.market.heroes.v1';
+function mktHeroSymbols() {
+  const saved = loadJSON(MKT_HERO_KEY, []);
+  if (!Array.isArray(saved)) return [];
+  return saved.filter(function (sym, i) {
+    return typeof sym === 'string' && sym && saved.indexOf(sym) === i;
+  }).slice(0, 6);
+}
+function saveMktHeroes(list) { saveJSON(MKT_HERO_KEY, list.slice(0, 6)); }
 
 const SOURCE_BY_ID = {};
 SOURCES.forEach(function (source) { SOURCE_BY_ID[source.id] = source; });
@@ -1933,6 +1947,15 @@ async function loadMarketDashboard() {
 
   const buildCards = (list) => list.map(stockCardHtml).join('');
 
+  /* Pinned tickers are not in any pool, so their quote and sparkline are
+     fetched here and hung on the same map the strip already reads. */
+  await Promise.all(mktHeroSymbols().map(async function (symbol) {
+    if (bySymbol[symbol]) return;
+    const [q, hist] = await Promise.all([fetchStockDetails(symbol), fetchHistory(symbol, '1mo')]);
+    if (!q || !isFinite(q.price)) return;
+    bySymbol[symbol] = { symbol: symbol, name: q.name || symbol, type: 'custom', data: q, spark: hist };
+  }));
+
   /* The four numbers read first: home market, the US benchmark, the rupiah,
      gold. Everything else lives in the watch list beside them. */
   const HERO_TILES = [
@@ -1940,21 +1963,27 @@ async function loadMarketDashboard() {
     { symbol: '^GSPC', name: 'S&P 500', spark: sp500ChartData },
     { symbol: 'IDR=X', name: 'USD/IDR', spark: (bySymbol['IDR=X'] || {}).spark },
     { symbol: 'GC=F', name: 'Gold', spark: (bySymbol['GC=F'] || {}).spark }
-  ];
-  const tileHtml = HERO_TILES.map(hero => {
+  ].concat(mktHeroSymbols().map(function (symbol) {
+    const row = bySymbol[symbol];
+    return { symbol: symbol, name: (row && row.name) || symbol, label: symbol.replace(/\.JK$/i, ''), spark: (row || {}).spark, custom: true };
+  })).filter(function (hero) { return !!(bySymbol[hero.symbol] || {}).data; });
+
+  const heroTile = function (hero) {
     const q = (bySymbol[hero.symbol] || {}).data;
     if (!q) return '';
     const up = q.pct >= 0;
     const sparkId = 'sparkHero' + hero.symbol.replace(/[^A-Za-z0-9]/g, '');
-    return `<div class="mkt-tile">
+    return `<div class="mkt-tile${hero.custom ? ' mkt-tile-custom' : ''}" data-hero="${esc(hero.symbol)}"${hero.custom ? ` title="${esc(hero.name)}"` : ''}>
         <div class="mkt-tile-top">
-          <span class="mkt-tile-name">${esc(hero.name)}</span>
+          <span class="mkt-tile-name">${esc(hero.custom ? hero.label : hero.name)}</span>
           <span class="mkt-chip ${up ? 'up' : 'down'}">${up ? '▲' : '▼'} ${Math.abs(q.pct).toFixed(2)}%</span>
         </div>
         <div class="mkt-tile-val">${mktFmt(q.price)}</div>
         <div class="mkt-tile-spark" id="${sparkId}"></div>
+        ${hero.custom ? `<button type="button" class="mkt-tile-x" data-hero-remove="${esc(hero.symbol)}" aria-label="${esc(m.removeTicker)}" title="${esc(m.removeTicker)}">×</button>` : ''}
       </div>`;
-  }).join('');
+  };
+  const tileHtml = HERO_TILES.map(heroTile).join('');
 
   const watchHtml = ['^IXIC', '^DJI', 'IDR=X', 'GC=F', 'CL=F', 'BTC-USD'].map(symbol => {
     const q = (bySymbol[symbol] || {}).data;
@@ -1979,7 +2008,7 @@ async function loadMarketDashboard() {
   dash.innerHTML = `
     <div class="mkt-board">
       <p class="mkt-asof">${esc(t.mkt.asOf)} ${esc(asOf)} · ${esc(t.mkt.delayed)}</p>
-      <section class="mkt-tiles" aria-label="${esc(m.gauges)}">${tileHtml}</section>
+      <section class="mkt-tiles" aria-label="${esc(m.gauges)}">${tileHtml}<button type="button" class="mkt-tile mkt-tile-add" id="mktTileAdd"><span class="mkt-tile-add-plus">+</span><span>${esc(m.addTicker)}</span></button></section>
 
       <section class="mkt-grid">
         <div class="mkt-card">
@@ -2091,7 +2120,7 @@ async function loadMarketDashboard() {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
     const chartTheme = { mode: isDark ? 'dark' : 'light' };
 
-    HERO_TILES.forEach(hero => {
+    const paintHeroSpark = function (hero) {
       const q = (bySymbol[hero.symbol] || {}).data;
       const node = document.getElementById('sparkHero' + hero.symbol.replace(/[^A-Za-z0-9]/g, ''));
       const values = (hero.spark || []).map(p => (p && isFinite(p.y)) ? p.y : null).filter(v => v != null);
@@ -2106,6 +2135,61 @@ async function loadMarketDashboard() {
         tooltip: { enabled: false }
       });
       chart.render(); chartInstances.push(chart);
+    };
+    HERO_TILES.forEach(paintHeroSpark);
+
+    /* One more ticker in the strip, without reloading the whole board: the
+       quote and the sparkline are the only things it needs. */
+    const tilesSec = dash.querySelector('.mkt-tiles');
+    const addTile = document.getElementById('mktTileAdd');
+    const addHeroTile = async function (symbol) {
+      if (mktHeroSymbols().indexOf(symbol) !== -1) return true;
+      const [q, hist] = await Promise.all([fetchStockDetails(symbol), fetchHistory(symbol, '1mo')]);
+      if (!q || !isFinite(q.price)) return false;
+      bySymbol[symbol] = { symbol: symbol, name: q.name || symbol, type: 'custom', data: q, spark: hist };
+      const list = mktHeroSymbols(); list.push(symbol); saveMktHeroes(list);
+      const hero = { symbol: symbol, name: q.name || symbol, label: symbol.replace(/\.JK$/i, ''), spark: hist, custom: true };
+      const holder = document.createElement('div');
+      holder.innerHTML = heroTile(hero);
+      const node = holder.firstElementChild;
+      if (!node || !addTile) return false;
+      addTile.insertAdjacentElement('beforebegin', node);
+      paintHeroSpark(hero);
+      return true;
+    };
+    const openHeroInput = function () {
+      if (!addTile || addTile.querySelector('input')) return;
+      const resting = addTile.innerHTML;
+      const restore = function () { addTile.classList.remove('editing'); addTile.innerHTML = resting; };
+      addTile.classList.add('editing');
+      addTile.innerHTML = '<input class="mkt-tile-input" type="text" autocomplete="off" spellcheck="false" placeholder="' + esc(m.addTickerPh) + '">';
+      const input = addTile.querySelector('input');
+      input.focus();
+      input.addEventListener('keydown', async function (ev) {
+        if (ev.key === 'Escape') { restore(); return; }
+        if (ev.key !== 'Enter') return;
+        ev.preventDefault();
+        const symbol = input.value.trim().toUpperCase();
+        if (!symbol) { restore(); return; }
+        input.disabled = true;
+        const ok = await addHeroTile(symbol);
+        if (ok) { restore(); return; }
+        input.disabled = false;
+        input.value = '';
+        input.placeholder = m.notFound;
+        input.focus();
+      });
+    };
+    if (tilesSec) tilesSec.addEventListener('click', function (e) {
+      const rm = e.target.closest('[data-hero-remove]');
+      if (rm) {
+        const symbol = rm.getAttribute('data-hero-remove');
+        saveMktHeroes(mktHeroSymbols().filter(function (x) { return x !== symbol; }));
+        const tile = rm.closest('.mkt-tile');
+        if (tile) tile.remove();
+        return;
+      }
+      if (e.target.closest('#mktTileAdd')) openHeroInput();
     });
 
     mktBenchCache['^JKSE|6mo'] = mainChartData;
