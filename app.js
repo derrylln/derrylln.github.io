@@ -1106,7 +1106,9 @@ async function fetchFundamentals(symbol) {
    quarterly, charted across the periods it has. */
 let finModalEl = null;
 let finCharts = [];
-let finState = { symbol: null, name: '', kind: 'q' };
+let finState = { symbol: null, name: '', kind: 'q', ai: null };
+let finAiClock = null;
+let finAiBusy = false;
 
 function finT() { return I18N[state.lang].fin; }
 
@@ -1127,7 +1129,7 @@ function finModal() {
     '<div class="fin-note">' + esc(t.note) + '</div></div>';
   wrap.addEventListener('click', function (e) {
     if (e.target === wrap || (e.target.closest && e.target.closest('.fin-close'))) { closeFinancials(); return; }
-    if (e.target.closest && e.target.closest('#finAi')) { openFundAi(finState.symbol, finState.name); return; }
+    if (e.target.closest && e.target.closest('#finAi')) { runFinAi(); return; }
     const btn = e.target.closest ? e.target.closest('[data-fin-kind]') : null;
     if (!btn) return;
     const kind = btn.getAttribute('data-fin-kind');
@@ -1155,6 +1157,7 @@ document.addEventListener('click', function (e) {
 
 function openFinancials(symbol, name) {
   const wrap = finModal();
+  if (finState.symbol !== symbol) { finState.ai = null; finAiStop(); }
   finState.symbol = symbol;
   finState.name = name || symbol;
   wrap.classList.add('open');
@@ -1169,7 +1172,63 @@ function openFinancials(symbol, name) {
 function closeFinancials() {
   if (!finModalEl) return;
   finModalEl.classList.remove('open');
+  finAiStop();
   destroyFinCharts();
+}
+
+function finAiStop() {
+  if (finAiClock) { finAiClock(); finAiClock = null; }
+}
+
+/* The read follows the figures it is reading, so it renders in the report
+   instead of floating over it in a second panel. */
+async function runFinAi() {
+  const slot = document.getElementById('finAiSlot');
+  if (!slot || finAiBusy) return;
+  const t = I18N[state.lang].fundAi;
+  const symbol = finState.symbol, name = finState.name;
+  const btn = document.getElementById('finAi');
+  finAiBusy = true;
+  if (btn) btn.disabled = true;
+  slot.innerHTML = '<div class="fin-ai-panel"><div class="fin-ai-head">✨ ' + esc(t.title) +
+    '</div><div class="fin-ai-text" id="finAiText"></div></div>';
+  const text = document.getElementById('finAiText');
+  finAiStop();
+  if (text) finAiClock = startClock(text, t.loading);
+  try {
+    const fund = await fetchFundamentals(symbol);
+    const lines = fundFigureLines(fund, state.lang);
+    if (!lines.length) throw new Error(I18N[state.lang].fund.noData);
+    const data = await aiRequest('/ai-fundamentals', {
+      symbol: symbol.replace(/\.JK$/i, ''),
+      name: name || '',
+      lang: state.lang,
+      figures: lines.join('\n')
+    });
+    if (symbol !== finState.symbol) return;
+    finState.ai = { text: (data && data.summary) ? data.summary.trim() : t.failed, err: false };
+  } catch (err) {
+    if (symbol !== finState.symbol) return;
+    const message = aiErrorText(err);
+    finState.ai = { text: /\b(404|405)\b/.test(message) ? t.unavailable : message, err: true };
+  } finally {
+    finAiStop();
+    finAiBusy = false;
+    if (btn) btn.disabled = false;
+  }
+  paintFinAiOut();
+}
+
+function paintFinAiOut() {
+  const slot = document.getElementById('finAiSlot');
+  if (!slot) return;
+  if (!finState.ai) { slot.innerHTML = ''; return; }
+  const t = I18N[state.lang].fundAi;
+  slot.innerHTML = '<div class="fin-ai-panel' + (finState.ai.err ? ' err' : '') + '">' +
+    '<div class="fin-ai-head">✨ ' + esc(t.title) + '</div>' +
+    '<div class="fin-ai-text">' + esc(finState.ai.text) + '</div>' +
+    (finState.ai.err ? '' : '<div class="fin-ai-note">' + esc(t.note) + '</div>') +
+    '</div>';
 }
 
 function destroyFinCharts() {
@@ -1193,14 +1252,8 @@ async function paintFinBody() {
   if (!list.length) { body.innerHTML = '<div class="fin-empty">' + esc(t.noData) + '</div>'; return; }
 
   const val = p => (p && isFinite(p.raw)) ? compactNum(p.raw, p.currency) : '—';
-  /* Equity is reported every period; return on it is only meaningful once a
-     quarter is put on a yearly footing, so a quarter is annualised and said so. */
-  const roeOf = function (p) {
-    if (!p || !p.netIncome || !p.equity || !isFinite(p.netIncome.raw) || !isFinite(p.equity.raw) || !p.equity.raw) return null;
-    return (p.netIncome.raw / p.equity.raw) * (p.kind === 'Q' ? 4 : 1) * 100;
-  };
   const roeText = function (p) {
-    const roe = roeOf(p);
+    const roe = fundRoe(p);
     return roe == null ? '—' : roe.toFixed(1) + '%';
   };
   const newest = list[0];
@@ -1222,6 +1275,7 @@ async function paintFinBody() {
       tile(f.equity, val(newest.equity), per, null) +
       tile(f.roe, roeText(newest), newest.kind === 'Q' ? per + ' · ' + f.annualised : per, null) +
     '</div>' +
+    '<div id="finAiSlot"></div>' +
     '<div class="fin-charts">' +
       '<div class="fin-chart"><h3>' + esc(t.chartRevenue) + '</h3><div class="fin-chart-meta">' +
         esc((newest.revenue && newest.revenue.currency) || fund.currency || '') + '</div><div id="finBar"></div></div>' +
@@ -1247,6 +1301,7 @@ async function paintFinBody() {
       }).join('') +
     '</tbody></table></div>';
   paintFinCharts(list.slice().reverse(), f);
+  paintFinAiOut();
 }
 
 function paintFinCharts(periods, f) {
@@ -1383,6 +1438,14 @@ function fundamentalsHTML(fund, lang, symbol) {
 /* AI READ OF THE FIGURES
    The model gets exactly the lines the panel can show — recent quarters plus
    the last two fiscal years — so its verdict can only rest on reported numbers. */
+/* Return on equity as the panel and the AI both read it: annual figures as
+   reported, a quarter put on a yearly footing so the two are comparable. */
+function fundRoe(period) {
+  if (!period || !period.netIncome || !period.equity) return null;
+  if (!isFinite(period.netIncome.raw) || !isFinite(period.equity.raw) || !period.equity.raw) return null;
+  return (period.netIncome.raw / period.equity.raw) * (period.kind === 'Q' ? 4 : 1) * 100;
+}
+
 function fundFigureLines(fund, lang) {
   const t = I18N[lang].fund;
   const lines = [];
@@ -1397,8 +1460,10 @@ function fundFigureLines(fund, lang) {
     if (period.netIncome) lines.push(tag + t.netIncome + ': ' + compactNum(period.netIncome.raw, period.netIncome.currency));
     if (period.margin !== null) lines.push(tag + t.netMargin + ': ' + period.margin.toFixed(1) + '%');
     if (period.eps) lines.push(tag + t.eps + ': ' + compactNum(period.eps.raw, period.eps.currency));
-    if (period.roe !== null) lines.push(tag + t.roe + ': ' + period.roe.toFixed(1) + '%');
     if (period.fcf) lines.push(tag + t.fcf + ': ' + compactNum(period.fcf.raw, period.fcf.currency));
+    if (period.equity) lines.push(tag + t.equity + ': ' + compactNum(period.equity.raw, period.equity.currency));
+    const roe = fundRoe(period);
+    if (roe !== null) lines.push(tag + t.roe + ': ' + roe.toFixed(1) + '%' + (period.kind === 'Q' ? ' (' + t.annualised + ')' : ''));
   });
   if (fund.converted) lines.push(t.converted(Math.round(fund.converted.rate).toLocaleString('en-US')));
   return lines;
