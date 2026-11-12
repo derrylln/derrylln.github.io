@@ -144,6 +144,17 @@ const I18N = {
       failed: 'No analysis came back. Try again.',
       unavailable: 'The AI analysis endpoint is not deployed on the worker yet.',
       note: 'Based only on the figures above · Yahoo Finance · not investment advice'
+    },
+    mkt: {
+      asOf: 'Prices as of', delayed: 'Yahoo Finance · delayed', pulse: 'Market pulse',
+      breadth: 'Breadth', adv: 'advancers', dec: 'decliners', topGainer: 'Top IDX gainer',
+      topYield: 'Top dividend yield', dividends: 'Dividend Leaders · IDX',
+      divSub: 'Ranked by trailing 12-month yield', divLoading: 'Ranking IDX dividends…',
+      divEmpty: 'No dividend data for the tracked IDX names.',
+      colRank: '#', colSym: 'Symbol', colName: 'Company', colPrice: 'Price',
+      colDps: 'DPS 12m', colYield: 'Yield', colPays: 'Payouts', colEx: 'Last ex-date',
+      divNote: 'Trailing 12-month dividends ÷ last price · Yahoo Finance · not investment advice',
+      divFilter: 'Min yield', divAll: 'All', divNoMatch: 'No name clears that yield hurdle.'
     }
   },
   id: {
@@ -188,6 +199,17 @@ const I18N = {
       failed: 'Analisis tidak tersedia. Coba lagi.',
       unavailable: 'Endpoint analisis AI belum di-deploy di worker.',
       note: 'Hanya berdasarkan angka di atas · Yahoo Finance · bukan saran investasi'
+    },
+    mkt: {
+      asOf: 'Harga per', delayed: 'Yahoo Finance · tertunda', pulse: 'Denyut pasar',
+      breadth: 'Breadth', adv: 'naik', dec: 'turun', topGainer: 'Gainer IDX teratas',
+      topYield: 'Yield tertinggi', dividends: 'Pemimpin Dividen · IDX',
+      divSub: 'Diurutkan dari yield 12 bulan terakhir', divLoading: 'Menghitung dividen IDX…',
+      divEmpty: 'Belum ada data dividen untuk emiten IDX yang dipantau.',
+      colRank: '#', colSym: 'Simbol', colName: 'Emiten', colPrice: 'Harga',
+      colDps: 'DPS 12 bln', colYield: 'Yield', colPays: 'Bayar', colEx: 'Ex-date terakhir',
+      divNote: 'Dividen 12 bulan terakhir ÷ harga terakhir · Yahoo Finance · bukan saran investasi',
+      divFilter: 'Yield min', divAll: 'Semua', divNoMatch: 'Tidak ada emiten yang melewati batas yield itu.'
     }
   }
 };
@@ -1134,6 +1156,281 @@ function renderCardFundamentals(node, fund) {
   node.innerHTML = bits.map(b => '<span>' + esc(b) + '</span>').join('');
 }
 
+/* MARKET PULSE + DIVIDEND LEADERS
+   The dashboard used to open with charts and a wall of cards, which read as a
+   static report. These two pieces make it answer "what is happening right now?"
+   before the reader scrolls: a pulse strip (index level, breadth, best mover,
+   best yield) and an IDX dividend table ranked by trailing 12-month yield.
+
+   Yahoo's quote endpoints need a crumb, but the chart endpoint exposes dividend
+   events, so the yield is computed from the same public API the rest of the page
+   already uses: sum of the last 12 months of dividends divided by the last price.
+   Dividend history changes rarely, so rows are cached for half a day. */
+const DIVIDEND_POOL = [
+  ['BBCA', 'Bank Central Asia'], ['BBRI', 'Bank Rakyat Indonesia'], ['BMRI', 'Bank Mandiri'],
+  ['BBNI', 'Bank Negara Indonesia'], ['BBTN', 'Bank Tabungan Negara'], ['BJTM', 'Bank Jatim'],
+  ['TLKM', 'Telkom Indonesia'], ['ISAT', 'Indosat'], ['EXCL', 'XL Axiata'], ['TOWR', 'Sarana Menara'],
+  ['INDF', 'Indofood Sukses'], ['ICBP', 'Indofood CBP'], ['UNVR', 'Unilever Indonesia'],
+  ['KLBF', 'Kalbe Farma'], ['AMRT', 'Sumber Alfaria'], ['HMSP', 'HM Sampoerna'],
+  ['GGRM', 'Gudang Garam'], ['SIDO', 'Sido Muncul'], ['ACES', 'Ace Hardware'],
+  ['ADRO', 'Alamtri Resources'], ['PTBA', 'Bukit Asam'], ['ITMG', 'Indo Tambangraya'],
+  ['UNTR', 'United Tractors'], ['ANTM', 'Aneka Tambang'], ['MDKA', 'Merdeka Copper'],
+  ['INCO', 'Vale Indonesia'], ['TINS', 'Timah'], ['PGAS', 'Perusahaan Gas Negara'],
+  ['ASII', 'Astra International'], ['SMGR', 'Semen Indonesia'], ['INTP', 'Indocement'],
+  ['JPFA', 'Japfa Comfeed'], ['CPIN', 'Charoen Pokphand'], ['CTRA', 'Ciputra Development'],
+  ['PWON', 'Pakuwon Jati'], ['BSDE', 'Bumi Serpong Damai'], ['MIKA', 'Mitra Keluarga']
+].map(function (pair) { return { symbol: pair[0] + '.JK', name: pair[1] }; });
+
+const DIV_CACHE_KEY = 'fw.dividends.v1';
+const DIV_CACHE_TTL = 12 * 60 * 60 * 1000;
+let divCache = loadJSON(DIV_CACHE_KEY, null);
+if (!divCache || typeof divCache !== 'object' || !divCache.rows) divCache = { ts: 0, rows: {} };
+
+function dividendRowFromChart(symbol, data) {
+  const result = data && data.chart && data.chart.result && data.chart.result[0];
+  if (!result || !result.meta) return null;
+  const price = result.meta.regularMarketPrice;
+  const events = (result.events && result.events.dividends) || {};
+  const list = Object.keys(events).map(function (key) {
+    return { ts: events[key].date * 1000, amount: events[key].amount };
+  }).filter(function (d) { return isFinite(d.amount) && d.amount > 0; }).sort(function (a, b) { return a.ts - b.ts; });
+  if (!price || !list.length) return null;
+
+  const yearAgo = Date.now() - 365 * 864e5;
+  const ttm = list.filter(function (d) { return d.ts >= yearAgo; });
+  const previous = list.filter(function (d) { return d.ts < yearAgo && d.ts >= Date.now() - 2 * 365 * 864e5; });
+  const dps = ttm.reduce(function (sum, d) { return sum + d.amount; }, 0);
+  const prevDps = previous.reduce(function (sum, d) { return sum + d.amount; }, 0);
+  if (!dps) return null;
+  const last = ttm.length ? ttm[ttm.length - 1] : list[list.length - 1];
+  return {
+    symbol: symbol,
+    price: price,
+    dps: dps,
+    yieldPct: (dps / price) * 100,
+    payouts: ttm.length,
+    lastDate: last ? last.ts : null,
+    growth: prevDps > 0 ? (dps / prevDps - 1) * 100 : null
+  };
+}
+
+async function fetchDividendInfo(symbol) {
+  const cached = divCache.rows[symbol];
+  if (cached && (Date.now() - divCache.ts) < DIV_CACHE_TTL) return cached;
+  try {
+    const url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(symbol) +
+      '?range=2y&interval=1d&events=div';
+    const row = dividendRowFromChart(symbol, JSON.parse(await fetchViaProxy(url, { timeout: 8000 })));
+    if (row) divCache.rows[symbol] = row;
+    return row;
+  } catch (e) { return null; }
+}
+
+/* Four at a time so the dividend scan never competes with the quote load. */
+function loadDividendLeaders() {
+  const rows = [];
+  let index = 0, active = 0;
+  return new Promise(function (resolve) {
+    function next() {
+      if (index >= DIVIDEND_POOL.length && active === 0) return resolve(rows);
+      while (active < 4 && index < DIVIDEND_POOL.length) {
+        const item = DIVIDEND_POOL[index++];
+        active++;
+        fetchDividendInfo(item.symbol).then(function (row) {
+          if (row) { row.name = item.name; rows.push(row); }
+        }).catch(function () {}).finally(function () { active--; next(); });
+      }
+    }
+    next();
+  }).then(function (list) {
+    divCache.ts = Date.now();
+    saveJSON(DIV_CACHE_KEY, divCache);
+    return list.sort(function (a, b) { return b.yieldPct - a.yieldPct; });
+  });
+}
+
+function breadthCounts(list) {
+  let up = 0, down = 0, flat = 0;
+  list.forEach(function (s) {
+    if (!s || !isFinite(s.pct)) return;
+    if (s.pct > 0.0001) up++; else if (s.pct < -0.0001) down++; else flat++;
+  });
+  return { up: up, down: down, flat: flat, total: up + down + flat };
+}
+
+function breadthBarHTML(counts) {
+  if (!counts.total) return '';
+  const up = (counts.up / counts.total) * 100;
+  const flat = (counts.flat / counts.total) * 100;
+  return '<span class="breadth-bar" aria-hidden="true">' +
+    '<i class="b-up" style="width:' + up.toFixed(1) + '%"></i>' +
+    '<i class="b-flat" style="width:' + flat.toFixed(1) + '%"></i>' +
+    '<i class="b-down" style="width:' + (100 - up - flat).toFixed(1) + '%"></i>' +
+    '</span>';
+}
+
+function pulseHTML(allData, idxData, usData) {
+  const t = I18N[state.lang].mkt;
+  const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
+  const ihsg = allData['^JKSE'];
+  const idx = breadthCounts(idxData);
+  const us = breadthCounts(usData);
+  const best = idxData.slice().sort(function (a, b) { return b.pct - a.pct; })[0];
+  const tiles = [];
+
+  tiles.push('<div class="pulse-tile">' +
+    '<span class="pulse-label">IHSG</span>' +
+    '<strong class="pulse-value">' + (ihsg ? ihsg.price.toLocaleString(locale, { maximumFractionDigits: 2 }) : '—') + '</strong>' +
+    '<span class="pulse-sub ' + (ihsg && ihsg.pct >= 0 ? 'up' : 'down') + '">' +
+    (ihsg ? (ihsg.pct >= 0 ? '▲ ' : '▼ ') + Math.abs(ihsg.pct).toFixed(2) + '%' : '—') + '</span></div>');
+
+  tiles.push('<div class="pulse-tile">' +
+    '<span class="pulse-label">' + esc(t.breadth) + ' · IDX</span>' +
+    '<strong class="pulse-value">' + (idx.total ? idx.up + ' / ' + idx.down : '—') + '</strong>' +
+    '<span class="pulse-sub muted">' + esc(t.adv) + ' · ' + esc(t.dec) + '</span>' +
+    breadthBarHTML(idx) + '</div>');
+
+  tiles.push('<div class="pulse-tile">' +
+    '<span class="pulse-label">' + esc(t.breadth) + ' · US</span>' +
+    '<strong class="pulse-value">' + (us.total ? us.up + ' / ' + us.down : '—') + '</strong>' +
+    '<span class="pulse-sub muted">' + esc(t.adv) + ' · ' + esc(t.dec) + '</span>' +
+    breadthBarHTML(us) + '</div>');
+
+  tiles.push('<div class="pulse-tile">' +
+    '<span class="pulse-label">' + esc(t.topGainer) + '</span>' +
+    '<strong class="pulse-value">' + (best ? esc(best.symbol.replace('.JK', '')) : '—') + '</strong>' +
+    '<span class="pulse-sub ' + (best && best.pct >= 0 ? 'up' : 'down') + '">' +
+    (best ? (best.pct >= 0 ? '+' : '') + best.pct.toFixed(2) + '%' : '—') + '</span></div>');
+
+  tiles.push('<div class="pulse-tile" id="pulseTopYield">' +
+    '<span class="pulse-label">' + esc(t.topYield) + '</span>' +
+    '<strong class="pulse-value">…</strong>' +
+    '<span class="pulse-sub muted">' + esc(t.divLoading) + '</span></div>');
+
+  return '<div class="pulse-grid">' + tiles.join('') + '</div>';
+}
+
+function updatePulseTopYield(rows) {
+  const el = document.getElementById('pulseTopYield');
+  if (!el) return;
+  const t = I18N[state.lang].mkt;
+  const top = rows && rows[0];
+  el.innerHTML = '<span class="pulse-label">' + esc(t.topYield) + '</span>' +
+    '<strong class="pulse-value">' + (top ? esc(top.symbol.replace('.JK', '')) : '—') + '</strong>' +
+    '<span class="pulse-sub ' + (top ? 'up' : 'muted') + '">' +
+    (top ? top.yieldPct.toFixed(2) + '%' : esc(t.divEmpty)) + '</span>';
+}
+
+const divView = { sort: 'yieldPct', dir: 'desc', minYield: 0 };
+let divAllRows = [];
+
+function dividendPanelHTML(rows) {
+  const t = I18N[state.lang].mkt;
+  if (!rows.length) {
+    return '<div class="modern-card"><div class="card-title">' + esc(t.dividends) + '</div>' +
+      '<div class="ef-empty">' + esc(t.divEmpty) + '</div></div>';
+  }
+  const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
+  const sorter = {
+    symbol: function (r) { return r.symbol; },
+    name: function (r) { return (r.name || '').toLowerCase(); },
+    price: function (r) { return r.price; },
+    dps: function (r) { return r.dps; },
+    yieldPct: function (r) { return r.yieldPct; },
+    payouts: function (r) { return r.payouts; },
+    lastDate: function (r) { return r.lastDate || 0; }
+  }[divView.sort] || function (r) { return r.yieldPct; };
+
+  // filter() gives us a fresh array, so sorting never reorders the cached rows
+  const list = rows.filter(function (r) { return r.yieldPct >= divView.minYield; })
+    .sort(function (a, b) {
+      const av = sorter(a), bv = sorter(b);
+      const cmp = (typeof av === 'string') ? av.localeCompare(bv) : (av - bv);
+      return divView.dir === 'asc' ? cmp : -cmp;
+    })
+    .slice(0, 20);
+
+  const head = function (key, label, align) {
+    const active = divView.sort === key;
+    const mark = active ? (divView.dir === 'asc' ? '▲' : '▼') : '↕';
+    return '<th class="div-sort' + (active ? ' active' : '') + '" data-sort="' + key +
+      '" style="text-align:' + align + ';" aria-sort="' +
+      (active ? (divView.dir === 'asc' ? 'ascending' : 'descending') : 'none') + '">' +
+      esc(label) + ' <span class="div-arrow' + (active ? '' : ' ghost') + '">' + mark + '</span></th>';
+  };
+
+  const body = list.map(function (row, i) {
+    const ex = row.lastDate ? new Date(row.lastDate).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: '2-digit' }) : '—';
+    const hot = i === 0 ? ' class="div-top"' : '';
+    return '<tr' + hot + '>' +
+      '<td class="div-rank">' + (i + 1) + '</td>' +
+      '<td style="font-weight:800;">' + esc(row.symbol.replace('.JK', '')) + '</td>' +
+      '<td class="div-name">' + esc(row.name || '') + '</td>' +
+      '<td style="text-align:right;">' + row.price.toLocaleString(locale, { maximumFractionDigits: 0 }) + '</td>' +
+      '<td style="text-align:right;">' + row.dps.toLocaleString(locale, { maximumFractionDigits: 2 }) + '</td>' +
+      '<td style="text-align:right; font-weight:800; color:var(--green);">' + row.yieldPct.toFixed(2) + '%</td>' +
+      '<td style="text-align:right; color:var(--muted);">' + row.payouts + '×</td>' +
+      '<td style="text-align:right; color:var(--muted); white-space:nowrap;">' + ex + '</td>' +
+      '</tr>';
+  }).join('');
+
+  const chips = [0, 4, 6, 8, 10].map(function (v) {
+    return '<button type="button" class="div-chip' + (divView.minYield === v ? ' active' : '') +
+      '" data-minyield="' + v + '">' + esc(v === 0 ? t.divAll : '≥' + v + '%') + '</button>';
+  }).join('');
+
+  const table = list.length
+    ? '<div class="div-scroll"><table class="movers-table div-table">' +
+      '<thead><tr><th>' + esc(t.colRank) + '</th>' + head('symbol', t.colSym, 'left') +
+      head('name', t.colName, 'left') + head('price', t.colPrice, 'right') +
+      head('dps', t.colDps, 'right') + head('yieldPct', t.colYield, 'right') +
+      head('payouts', t.colPays, 'right') + head('lastDate', t.colEx, 'right') +
+      '</tr></thead><tbody>' + body + '</tbody></table></div>'
+    : '<div class="ef-empty">' + esc(t.divNoMatch) + '</div>';
+
+  return '<div class="modern-card">' +
+    '<div class="card-title"><span>' + esc(t.dividends) + '</span>' +
+    '<span class="div-sub">' + esc(t.divSub) + '</span></div>' +
+    '<div class="div-tools"><span class="div-tools-label">' + esc(t.divFilter) + '</span>' +
+    '<div class="div-chips">' + chips + '</div>' +
+    '<span class="div-count">' + list.length + ' / ' + rows.length + '</span></div>' +
+    table +
+    '<div class="ef-note">' + esc(t.divNote) + '</div></div>';
+}
+
+function paintDividends() {
+  const el = document.getElementById('dividendPanel');
+  if (!el) return;
+  el.innerHTML = dividendPanelHTML(divAllRows);
+}
+
+function renderDividendPanel(rows) {
+  divAllRows = rows || [];
+  paintDividends();
+}
+
+/* One delegated listener survives every re-paint of the panel. */
+document.addEventListener('click', function (e) {
+  if (!e.target || !e.target.closest) return;
+  const head = e.target.closest('#dividendPanel [data-sort]');
+  if (head) {
+    const key = head.getAttribute('data-sort');
+    if (divView.sort === key) {
+      divView.dir = divView.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      divView.sort = key;
+      divView.dir = (key === 'symbol' || key === 'name') ? 'asc' : 'desc';
+    }
+    paintDividends();
+    return;
+  }
+  const chip = e.target.closest('#dividendPanel [data-minyield]');
+  if (chip) {
+    divView.minYield = parseFloat(chip.getAttribute('data-minyield')) || 0;
+    paintDividends();
+  }
+});
+
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang];
   destroyCharts();
@@ -1232,6 +1529,14 @@ async function loadMarketDashboard() {
   const buildCards = (list) => list.map(s => {
     if (!s) return '';
     const isUp = s.pct >= 0;
+    // Where the price sits inside its 52-week range — a cheap "is this high or low" cue.
+    const lo = s.week52Low, hi = s.week52High;
+    const inRange = isFinite(lo) && isFinite(hi) && hi > lo && isFinite(s.price);
+    const rangePos = inRange ? Math.max(0, Math.min(100, ((s.price - lo) / (hi - lo)) * 100)) : null;
+    const rangeHtml = rangePos === null ? '' :
+      '<div class="sc-range"><span class="sc-range-bar"><i style="left:' + rangePos.toFixed(1) + '%"></i></span>' +
+      '<span class="sc-range-cap">52W ' + lo.toLocaleString('en-US', { maximumFractionDigits: 0 }) + '–' +
+      hi.toLocaleString('en-US', { maximumFractionDigits: 0 }) + '</span></div>';
     // The AI button is a sibling of the link, not inside it: a button nested in
     // an anchor is invalid markup and swallows the link's own navigation.
     return `<div class="stock-card">
@@ -1244,6 +1549,7 @@ async function loadMarketDashboard() {
           <div class="sc-chg ${isUp ? 'up' : 'down'}">${isUp ? '+' : ''}${s.pct.toFixed(2)}%</div>
         </div>
         <div class="sc-price">${s.price.toLocaleString('en-US')}</div>
+        ${rangeHtml}
       </a>
       <div class="sc-foot">
         <div class="sc-fund" data-fund="${esc(s.symbol)}"></div>
@@ -1291,7 +1597,13 @@ async function loadMarketDashboard() {
     </div>
   `;
 
+  const mktT = t.mkt;
+  const locale = state.lang === 'id' ? 'id-ID' : 'en-US';
+  const asOf = new Date().toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+
   dash.innerHTML = `
+    <div class="mkt-asof">${esc(mktT.asOf)} ${esc(asOf)} · ${esc(mktT.delayed)}</div>
+    ${pulseHTML(allData, idxData, usData)}
     <div class="sparkline-grid">${sparkHtml}</div>
     
     <div class="dash-grid" style="align-items: start;">
@@ -1346,10 +1658,20 @@ async function loadMarketDashboard() {
       <h2 class="page-title" style="font-size: 24px; margin-bottom: 16px;">Popular ETFs</h2>
       <div class="stock-card-grid">${buildCards(ETFS.map(e => allData[e.symbol]).filter(Boolean))}</div>
     </div>
-    
+
+    <div id="dividendPanel" style="margin-top: 32px;"></div>
+
     ${macroPanelHtml}
   `;
   hydrateCardFundamentals(dash);
+
+  const divSlot = document.getElementById('dividendPanel');
+  if (divSlot) divSlot.innerHTML = '<div class="modern-card"><div class="card-title">' +
+    esc(mktT.dividends) + '</div><div class="ef-empty">' + esc(mktT.divLoading) + '</div></div>';
+  loadDividendLeaders().then(function (rows) {
+    renderDividendPanel(rows);
+    updatePulseTopYield(rows);
+  }).catch(function () { renderDividendPanel([]); });
 
   if (typeof ApexCharts !== 'undefined') {
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';

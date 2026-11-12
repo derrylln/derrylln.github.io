@@ -2600,3 +2600,62 @@ body, html {
   .filter-select{ max-width:132px; padding-right:24px; font-size:10px; }
   .seg-btn{ padding:6px 9px; letter-spacing:.06em; font-size:10px; }
 }
+
+/* ---- market pulse + dividend leaders ---- */
+.mkt-asof{ font-size:11px; color:var(--muted); letter-spacing:.08em; text-transform:uppercase; font-weight:700; margin:0 0 10px; }
+.pulse-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(165px,1fr)); gap:12px; margin-bottom:22px; }
+.pulse-tile{ background:var(--bg-soft); border:1px solid var(--rule); border-radius:16px; padding:13px 15px; display:flex; flex-direction:column; gap:3px; }
+.pulse-label{ font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:800; }
+.pulse-value{ font-size:22px; font-weight:800; letter-spacing:-.02em; line-height:1.15; }
+.pulse-sub{ font-size:11.5px; font-weight:700; }
+.pulse-sub.up{ color:var(--green); }
+.pulse-sub.down{ color:var(--red); }
+.pulse-sub.muted{ color:var(--muted); }
+.breadth-bar{ display:flex; height:6px; border-radius:999px; overflow:hidden; margin-top:7px; background:var(--rule-2); }
+.breadth-bar i{ display:block; height:100%; }
+.breadth-bar .b-up{ background:var(--green); }
+.breadth-bar .b-down{ background:var(--red); }
+.breadth-bar .b-flat{ background:var(--muted); opacity:.35; }
+
+.div-scroll{ overflow-x:auto; }
+.div-table{ min-width:620px; }
+.div-table .div-rank{ color:var(--muted); font-weight:700; width:30px; }
+.div-table .div-name{ color:var(--muted); font-size:11.5px; }
+.div-table tr.div-top td{ background:rgba(34,197,94,.07); }
+.div-sub{ font-size:10.5px; color:var(--muted); text-transform:none; letter-spacing:0; font-weight:600; }
+
+.sc-range{ margin-top:9px; display:flex; flex-direction:column; gap:4px; }
+.sc-range-bar{ position:relative; display:block; height:4px; border-radius:999px; background:var(--rule-2); }
+.sc-range-bar i{ position:absolute; top:-2px; width:2px; height:8px; background:var(--ink); border-radius:2px; transform:translateX(-1px); }
+.sc-range-cap{ font-size:9.5px; color:var(--muted); letter-spacing:.04em; }
+
+@media (max-width: 560px){
+  .pulse-grid{ grid-template-columns:1fr 1fr; }
+  .pulse-tile:nth-child(5){ grid-column:1 / -1; }
+}
+
+.div-table th{ white-space:nowrap; }
+/* Phone widths: drop company, payout count and ex-date so the yield column
+   itself is never pushed off-screen. */
+@media (max-width: 720px){
+  .div-table{ min-width:0; }
+  .div-table th:nth-child(3), .div-table td:nth-child(3),
+  .div-table th:nth-child(7), .div-table td:nth-child(7),
+  .div-table th:nth-child(8), .div-table td:nth-child(8){ display:none; }
+  .div-table th, .div-table td{ padding-left:5px; padding-right:5px; }
+  .div-table th{ font-size:9px; letter-spacing:.04em; }
+  .div-table td{ font-size:13px; }
+}
+
+.div-tools{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:2px 0 12px; }
+.div-tools-label{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:800; }
+.div-chips{ display:flex; gap:6px; flex-wrap:wrap; }
+.div-chip{ border:1px solid var(--rule); background:transparent; color:var(--muted); font:inherit; font-size:11px; font-weight:700; padding:4px 9px; border-radius:999px; cursor:pointer; }
+.div-chip:hover{ border-color:var(--ink); color:var(--ink); }
+.div-chip.active{ background:var(--ink); border-color:var(--ink); color:var(--bg); }
+.div-count{ font-size:10.5px; color:var(--muted); margin-left:auto; font-weight:700; }
+.div-sort{ cursor:pointer; user-select:none; }
+.div-sort:hover{ color:var(--ink); }
+.div-sort.active{ color:var(--ink); }
+.div-arrow{ font-size:9px; opacity:.9; }
+.div-arrow.ghost{ opacity:.2; }
