@@ -290,9 +290,9 @@ function mktHeroSymbols() {
   if (!Array.isArray(saved)) return [];
   return saved.filter(function (sym, i) {
     return typeof sym === 'string' && sym && saved.indexOf(sym) === i;
-  }).slice(0, 6);
+  });
 }
-function saveMktHeroes(list) { saveJSON(MKT_HERO_KEY, list.slice(0, 6)); }
+function saveMktHeroes(list) { saveJSON(MKT_HERO_KEY, list); }
 
 const SOURCE_BY_ID = {};
 SOURCES.forEach(function (source) { SOURCE_BY_ID[source.id] = source; });
