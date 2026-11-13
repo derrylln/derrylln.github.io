@@ -168,7 +168,7 @@ const I18N = {
       title: 'Financial report', kind: 'Period', quarterly: 'Quarterly', annual: 'Annual',
       loading: 'Loading the report…', close: 'Close', chartRevenue: 'Revenue and net income', aiRead: 'AI read',
       price: 'Share price', priceIn: 'return', priceEmpty: 'No price history for this range.',
-      epsDerived: 'net income ÷ shares',
+      epsDerived: 'net income ÷ shares', epsDerivedToday: 'net income ÷ today\u2019s shares',
       noData: 'No report available for this company.',
       note: 'Reported figures · Yahoo Finance · not investment advice',
       dcfTitle: 'Intrinsic value', dcfValue: 'Value per share', dcfVs: 'vs price',
@@ -278,7 +278,7 @@ const I18N = {
       title: 'Laporan keuangan', kind: 'Periode', quarterly: 'Kuartal', annual: 'Tahunan',
       loading: 'Memuat laporan…', close: 'Tutup', chartRevenue: 'Pendapatan dan laba bersih', aiRead: 'Analisis AI',
       price: 'Harga saham', priceIn: 'imbal hasil', priceEmpty: 'Riwayat harga tidak tersedia untuk rentang ini.',
-      epsDerived: 'laba bersih ÷ saham',
+      epsDerived: 'laba bersih ÷ saham', epsDerivedToday: 'laba bersih ÷ saham saat ini',
       noData: 'Laporan tidak tersedia untuk emiten ini.',
       note: 'Angka laporan · Yahoo Finance · bukan saran investasi',
       dcfTitle: 'Nilai intrinsik', dcfValue: 'Nilai per saham', dcfVs: 'vs harga',
@@ -1151,6 +1151,7 @@ const fundCache = new Map();
 const FUND_TYPES = ['trailingMarketCap', 'trailingPeRatio',
   'annualTotalRevenue', 'annualNetIncome', 'annualDilutedEPS', 'annualFreeCashFlow', 'annualStockholdersEquity',
   'annualTotalDebt', 'annualCashAndCashEquivalents',
+  'annualOrdinarySharesNumber', 'quarterlyOrdinarySharesNumber',
   'quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyDilutedEPS', 'quarterlyFreeCashFlow', 'quarterlyStockholdersEquity'];
 
 async function fetchFundamentals(symbol) {
@@ -1175,7 +1176,7 @@ async function fetchFundamentals(symbol) {
   // market cap reads as a company worth more than the whole US tech sector, so
   // statement figures are converted at spot and the note says so.
   const isIdx = /\.JK$/i.test(symbol);
-  const stmtTypes = ['annualTotalRevenue', 'annualNetIncome', 'annualDilutedEPS', 'annualFreeCashFlow', 'annualStockholdersEquity', 'annualTotalDebt', 'annualCashAndCashEquivalents'];
+  const stmtTypes = ['annualTotalRevenue', 'annualNetIncome', 'annualDilutedEPS', 'annualFreeCashFlow', 'annualStockholdersEquity', 'annualTotalDebt', 'annualCashAndCashEquivalents', 'annualOrdinarySharesNumber', 'quarterlyOrdinarySharesNumber'];
   const stmtCurrency = stmtTypes.map(t => { const s = raw[t]; return s && s.length ? s[s.length - 1].currency : null; }).filter(Boolean)[0] || null;
   let fx = 1;
   let converted = null;
@@ -1411,16 +1412,18 @@ async function paintFinBody() {
   const epsShares = finShares(fund, quote && quote.price, quote && quote.currency);
   const epsOf = function (period) {
     if (period.eps && isFinite(period.eps.raw)) return { value: val(period.eps), derived: false };
-    if (period.netIncome && isFinite(period.netIncome.raw) && epsShares > 0) {
+    const own = (period.shares && isFinite(period.shares.raw) && period.shares.raw > 0) ? period.shares.raw : null;
+    const count = own || epsShares;
+    if (period.netIncome && isFinite(period.netIncome.raw) && count > 0) {
       return {
-        value: compactNum(period.netIncome.raw / epsShares, period.netIncome.currency || fund.currency),
-        derived: true
+        value: compactNum(period.netIncome.raw / count, period.netIncome.currency || fund.currency),
+        derived: true, today: !own
       };
     }
     return { value: '—', derived: false };
   };
   const eps = epsOf(newest);
-  let epsDerivedCount = 0;
+  let epsOwnCount = 0, epsTodayCount = 0;
   const tile = function (label, value, sub, growth) {
     return '<div class="fin-kpi"><span class="fin-kpi-label">' + esc(label) + '</span>' +
       '<strong class="fin-kpi-value">' + esc(value) + '</strong>' +
@@ -1434,7 +1437,7 @@ async function paintFinBody() {
     '<div class="fin-kpis">' +
       tile(f.rev, val(newest.revenue), per, newest.growth) +
       tile(f.netIncome, val(newest.netIncome), newest.margin == null ? per : per + ' · ' + newest.margin.toFixed(1) + '% ' + f.netMargin, null) +
-      tile(f.eps, eps.value, eps.derived ? per + ' · ' + t.epsDerived : per, null) +
+      tile(f.eps, eps.value, eps.derived ? per + ' · ' + (eps.today ? t.epsDerivedToday : t.epsDerived) : per, null) +
       tile(f.fcf, val(newest.fcf), per, null) +
       tile(f.equity, val(newest.equity), per, null) +
       tile(f.roe, roeText(newest), newest.kind === 'Q' ? per + ' · ' + f.annualised : per, null) +
@@ -1454,20 +1457,24 @@ async function paintFinBody() {
       list.map(function (p) {
         const g = p.growth;
         const epsCell = epsOf(p);
-        if (epsCell.derived) epsDerivedCount += 1;
+        if (epsCell.derived) { if (epsCell.today) epsTodayCount += 1; else epsOwnCount += 1; }
         return '<tr><td>' + esc(periodLabel(p, f)) + '</td>' +
           '<td>' + esc(val(p.revenue)) + '</td>' +
           '<td class="' + (g == null ? '' : g >= 0 ? 'up' : 'down') + '">' +
             (g == null ? '—' : (g >= 0 ? '+' : '') + g.toFixed(1) + '%') + '</td>' +
           '<td>' + esc(val(p.netIncome)) + '</td>' +
           '<td>' + (p.margin == null ? '—' : p.margin.toFixed(1) + '%') + '</td>' +
-          '<td>' + esc(epsCell.value) + (epsCell.derived ? '<sup class="fin-dag">†</sup>' : '') + '</td>' +
+          '<td>' + esc(epsCell.value) + (epsCell.derived ? '<sup class="fin-dag">' + (epsCell.today ? '‡' : '†') + '</sup>' : '') + '</td>' +
           '<td>' + esc(val(p.fcf)) + '</td>' +
           '<td>' + esc(val(p.equity)) + '</td>' +
           '<td>' + esc(roeText(p)) + '</td></tr>';
       }).join('') +
     '</tbody></table></div>' +
-    (epsDerivedCount ? '<p class="fin-note">† ' + esc(t.epsDerived) + '</p>' : '');
+    (epsOwnCount || epsTodayCount
+      ? '<p class="fin-note">' +
+        [epsOwnCount ? '† ' + esc(t.epsDerived) : '', epsTodayCount ? '‡ ' + esc(t.epsDerivedToday) : '']
+          .filter(Boolean).join(' · ') + '</p>'
+      : '');
   finDcfPatch(dcf);
   paintFinCharts(list.slice().reverse(), f);
   paintFinAiOut();
@@ -1603,6 +1610,9 @@ function buildPeriods(series, kind) {
     (series[prefix + field] || []).forEach(point => { dates[point.date] = true; });
   });
   const at = (field, date) => (series[prefix + field] || []).filter(point => point.date === date)[0] || null;
+  /* Only an exact date match counts: a share count from a neighbouring
+     quarter would quietly make the derived figure look reported. */
+  const sharesAt = date => at('OrdinarySharesNumber', date);
   const list = Object.keys(dates).sort().reverse().map(date => ({
     kind: kind === 'annual' ? 'FY' : 'Q',
     end: date,
@@ -1610,7 +1620,8 @@ function buildPeriods(series, kind) {
     netIncome: at('NetIncome', date),
     equity: at('StockholdersEquity', date),
     eps: at('DilutedEPS', date),
-    fcf: at('FreeCashFlow', date)
+    fcf: at('FreeCashFlow', date),
+    shares: sharesAt(date)
   }));
   list.forEach(period => {
     const month = period.end.slice(5, 7);
