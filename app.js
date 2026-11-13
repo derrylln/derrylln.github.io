@@ -168,7 +168,16 @@ const I18N = {
       title: 'Financial report', kind: 'Period', quarterly: 'Quarterly', annual: 'Annual',
       loading: 'Loading the report…', close: 'Close', chartRevenue: 'Revenue and net income', aiRead: 'AI read',
       noData: 'No report available for this company.',
-      note: 'Reported figures · Yahoo Finance · not investment advice'
+      note: 'Reported figures · Yahoo Finance · not investment advice',
+      dcfTitle: 'Intrinsic value', dcfValue: 'Value per share', dcfVs: 'vs price',
+      dcfBaseFcf: 'Base free cash flow', dcfGrowth: 'FCF growth', dcfDiscount: 'Discount rate',
+      dcfTerminal: 'Terminal growth', dcfYears: 'Forecast', dcfShares: 'Shares',
+      dcfPerYear: 'a year', dcfYearsUnit: 'years', dcfAssumed: 'from revenue growth',
+      dcfCapped: 'capped', dcfSpan: n => n + 'y',
+      dcfNote: 'Five-year discounted cash flow on reported free cash flow, Gordon terminal value. Assumption-based estimate, not a price target. For banks and lenders the reported figure carries balance-sheet flows, so read it with care.',
+      dcfNoFcf: 'No free cash flow is reported for this company, so there is nothing to discount.',
+      dcfNegFcf: 'Free cash flow is negative, so a discounted cash flow has nothing to grow.',
+      dcfNoShares: 'The share count is unavailable, so no per-share value can be drawn from it.'
     },
     fundAi: {
       btn: 'AI', title: 'AI fundamental read', loading: 'Reading the numbers…',
@@ -257,7 +266,16 @@ const I18N = {
       title: 'Laporan keuangan', kind: 'Periode', quarterly: 'Kuartal', annual: 'Tahunan',
       loading: 'Memuat laporan…', close: 'Tutup', chartRevenue: 'Pendapatan dan laba bersih', aiRead: 'Analisis AI',
       noData: 'Laporan tidak tersedia untuk emiten ini.',
-      note: 'Angka laporan · Yahoo Finance · bukan saran investasi'
+      note: 'Angka laporan · Yahoo Finance · bukan saran investasi',
+      dcfTitle: 'Nilai intrinsik', dcfValue: 'Nilai per saham', dcfVs: 'vs harga',
+      dcfBaseFcf: 'Arus kas bebas dasar', dcfGrowth: 'Pertumbuhan FCF', dcfDiscount: 'Tingkat diskonto',
+      dcfTerminal: 'Pertumbuhan terminal', dcfYears: 'Proyeksi', dcfShares: 'Saham',
+      dcfPerYear: 'per tahun', dcfYearsUnit: 'tahun', dcfAssumed: 'dari pertumbuhan pendapatan',
+      dcfCapped: 'dibatasi', dcfSpan: n => n + 'th',
+      dcfNote: 'DCF lima tahun atas arus kas bebas yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga. Untuk bank dan lembaga pembiayaan angkanya memuat arus neraca, jadi baca dengan hati-hati.',
+      dcfNoFcf: 'Arus kas bebas emiten ini tidak dilaporkan, jadi tidak ada yang bisa didiskontokan.',
+      dcfNegFcf: 'Arus kas bebas negatif, jadi DCF tidak punya arus kas untuk ditumbuhkan.',
+      dcfNoShares: 'Jumlah saham tidak tersedia, nilai per saham tidak bisa dihitung.'
     },
     fundAi: {
       btn: 'AI', title: 'Analisis fundamental AI', loading: 'Membaca angka…',
@@ -1304,8 +1322,12 @@ async function paintFinBody() {
   const symbol = finState.symbol;
   destroyFinCharts();
   body.innerHTML = '<div class="fin-loading">' + esc(t.loading) + '</div>';
-  let fund = null;
-  try { fund = await fetchFundamentals(symbol); } catch (e) { fund = null; }
+  let fund = null, quote = null;
+  const fetched = await Promise.all([
+    fetchFundamentals(symbol).catch(function () { return null; }),
+    fetchStockDetails(symbol).catch(function () { return null; })
+  ]);
+  fund = fetched[0]; quote = fetched[1];
   if (finState.symbol !== symbol) return;
   const list = fund ? (finState.kind === 'q'
     ? fund.periods.filter(p => p.kind === 'Q')
@@ -1319,6 +1341,7 @@ async function paintFinBody() {
   };
   const newest = list[0];
   const per = periodLabel(newest, f);
+  const dcf = fundDcf(fund, quote && quote.price, quote && quote.currency);
   const tile = function (label, value, sub, growth) {
     return '<div class="fin-kpi"><span class="fin-kpi-label">' + esc(label) + '</span>' +
       '<strong class="fin-kpi-value">' + esc(value) + '</strong>' +
@@ -1336,6 +1359,7 @@ async function paintFinBody() {
       tile(f.equity, val(newest.equity), per, null) +
       tile(f.roe, roeText(newest), newest.kind === 'Q' ? per + ' · ' + f.annualised : per, null) +
     '</div>' +
+    finDcfHtml(dcf, t) +
     '<div id="finAiSlot"></div>' +
     '<div class="fin-charts">' +
       '<div class="fin-chart"><h3>' + esc(t.chartRevenue) + '</h3><div class="fin-chart-meta">' +
@@ -1439,6 +1463,131 @@ function buildPeriods(series, kind) {
 }
 
 function fundCurrencySymbol(symbol) { return /\.JK$/i.test(symbol) ? 'IDR' : null; }
+
+/* INTRINSIC VALUE
+   A five-year discounted cash flow on the free cash flow the company actually
+   reported: grow it at its own past rate, discount at 9%, add a Gordon
+   terminal value, divide by the shares outstanding. Every input is printed on
+   the card, because the answer is only ever as good as they are. */
+const FIN_DCF = { years: 5, discount: 0.09, terminal: 0.025, growthMin: -0.10, growthMax: 0.20, growthFallback: 0.06 };
+
+function finAnnualOldestFirst(fund) {
+  return (fund.annual || []).filter(function (p) { return p && p.end; })
+    .slice().sort(function (a, b) { return String(a.end) < String(b.end) ? -1 : 1; });
+}
+
+/* Compound annual growth from the first to the last figure. A sign flip (FCF
+   that went negative, say) is not a growth rate, so it returns null instead. */
+function finCagr(values) {
+  if (!values || values.length < 2) return null;
+  if (values.some(function (v) { return !isFinite(v) || v <= 0; })) return null;
+  const cagr = Math.pow(values[values.length - 1] / values[0], 1 / (values.length - 1)) - 1;
+  return isFinite(cagr) ? cagr : null;
+}
+
+/* Market cap over price is the cleanest share count; diluted EPS is the
+   fallback for a company with no trailing market cap in the feed. */
+function finShares(fund, price, priceCur) {
+  const cap = (fund.mktCap && isFinite(fund.mktCap.raw) && fund.mktCap.raw > 0) ? fund.mktCap.raw : null;
+  const capCur = (fund.mktCap && fund.mktCap.currency) || fund.currency || null;
+  const sameUnit = !priceCur || !capCur || priceCur === capCur;
+  if (cap && price && isFinite(price) && price > 0 && sameUnit) return cap / price;
+  const annual = finAnnualOldestFirst(fund);
+  for (let i = annual.length - 1; i >= 0; i--) {
+    const p = annual[i];
+    if (p.netIncome && p.eps && isFinite(p.netIncome.raw) && isFinite(p.eps.raw) && p.eps.raw > 0) {
+      return p.netIncome.raw / p.eps.raw;
+    }
+  }
+  return null;
+}
+
+function fundDcf(fund, price, priceCur) {
+  if (!fund) return null;
+  const annual = finAnnualOldestFirst(fund);
+  const fcfPeriods = annual.filter(function (p) { return p.fcf && isFinite(p.fcf.raw); }).slice(-5);
+  if (!fcfPeriods.length) return { ok: false, reason: 'noFcf' };
+  const basePeriod = fcfPeriods[fcfPeriods.length - 1];
+  const base = basePeriod.fcf.raw;
+  const currency = basePeriod.fcf.currency || fund.currency || null;
+  if (!(base > 0)) return { ok: false, reason: 'negFcf' };
+  const shares = finShares(fund, price, priceCur);
+  if (!(shares > 0)) return { ok: false, reason: 'noShares' };
+
+  let growth = finCagr(fcfPeriods.map(function (p) { return p.fcf.raw; }));
+  let assumed = false, histYears = fcfPeriods.length - 1;
+  if (growth == null) {
+    growth = finCagr(annual.map(function (p) { return (p.revenue && p.revenue.raw) || null; }));
+    assumed = true;
+    histYears = annual.length - 1;
+  }
+  if (growth == null) { growth = FIN_DCF.growthFallback; assumed = true; histYears = 0; }
+  /* A short history can compound into a rate no company holds for five years,
+     so the cap is part of the model and the card says when it bit. */
+  const capped = growth > FIN_DCF.growthMax || growth < FIN_DCF.growthMin;
+  growth = Math.min(FIN_DCF.growthMax, Math.max(FIN_DCF.growthMin, growth));
+
+  const r = FIN_DCF.discount, tg = FIN_DCF.terminal;
+  let fcf = base, pv = 0;
+  for (let year = 1; year <= FIN_DCF.years; year++) {
+    fcf *= 1 + growth;
+    pv += fcf / Math.pow(1 + r, year);
+  }
+  pv += (fcf * (1 + tg)) / (r - tg) / Math.pow(1 + r, FIN_DCF.years);
+  const perShare = pv / shares;
+  const comparable = price && isFinite(price) && price > 0 && (!priceCur || !currency || priceCur === currency);
+  return {
+    ok: true, perShare: perShare, currency: currency,
+    price: comparable ? price : null, priceCur: priceCur || currency,
+    upside: comparable ? (perShare / price - 1) * 100 : null,
+    base: base, baseYear: String(basePeriod.end).slice(0, 4),
+    growth: growth, assumed: assumed, capped: capped, histYears: histYears,
+    discount: r, terminal: tg, years: FIN_DCF.years,
+    shares: shares, equity: pv
+  };
+}
+
+function finMoney(raw, currency) {
+  if (!isFinite(raw)) return '—';
+  const prefix = currency === 'IDR' ? 'Rp ' : currency === 'USD' ? '$' : (currency ? currency + ' ' : '');
+  const digits = currency === 'IDR' ? 0 : 2;
+  return prefix + raw.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function finDcfHtml(dcf, t) {
+  if (!dcf) return '';
+  const head = '<div class="fin-dcf-head"><h3>' + esc(t.dcfTitle) + '</h3>' +
+    '<span class="fin-dcf-tag">DCF' + (dcf.ok && dcf.currency ? ' · ' + esc(dcf.currency) : '') + '</span></div>';
+  if (!dcf.ok) {
+    const why = dcf.reason === 'negFcf' ? t.dcfNegFcf : dcf.reason === 'noShares' ? t.dcfNoShares : t.dcfNoFcf;
+    return '<section class="fin-dcf is-na">' + head + '<p class="fin-dcf-empty">' + esc(why) + '</p></section>';
+  }
+  const up = dcf.upside;
+  const tone = up == null ? '' : up >= 0 ? 'up' : 'down';
+  const row = function (label, value) {
+    return '<div class="fin-dcf-row"><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>';
+  };
+  const rows = [
+    row(t.dcfBaseFcf, compactNum(dcf.base, dcf.currency) + ' · FY' + dcf.baseYear),
+    row(t.dcfGrowth, (dcf.growth >= 0 ? '+' : '') + (dcf.growth * 100).toFixed(1) + '% ' + t.dcfPerYear +
+      (dcf.histYears > 0 ? ' · ' + t.dcfSpan(dcf.histYears) : '') +
+      (dcf.capped ? ' · ' + t.dcfCapped : '') +
+      (dcf.assumed ? ' · ' + t.dcfAssumed : '')),
+    row(t.dcfDiscount, (dcf.discount * 100).toFixed(1) + '%'),
+    row(t.dcfTerminal, (dcf.terminal * 100).toFixed(1) + '%'),
+    row(t.dcfYears, dcf.years + ' ' + t.dcfYearsUnit),
+    row(t.dcfShares, compactNum(dcf.shares, ''))
+  ].join('');
+  const compare = dcf.price == null ? '' :
+    '<div class="fin-dcf-gap ' + tone + '"><b>' + (up >= 0 ? '+' : '') + up.toFixed(1) + '%</b>' +
+    '<span>' + esc(t.dcfVs) + ' ' + esc(finMoney(dcf.price, dcf.priceCur)) + '</span></div>';
+  return '<section class="fin-dcf">' + head +
+    '<div class="fin-dcf-main"><div><span class="fin-dcf-label">' + esc(t.dcfValue) + '</span>' +
+    '<strong class="fin-dcf-value">' + esc(finMoney(dcf.perShare, dcf.currency)) + '</strong></div>' +
+    compare + '</div>' +
+    '<div class="fin-dcf-rows">' + rows + '</div>' +
+    '<p class="fin-dcf-note">' + esc(t.dcfNote) + '</p></section>';
+}
 
 function compactNum(raw, currency) {
   if (!isFinite(raw)) return '—';
