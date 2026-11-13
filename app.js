@@ -175,7 +175,7 @@ const I18N = {
       dcfTerminal: 'Terminal growth', dcfYears: 'Forecast', dcfShares: 'Shares',
       dcfPerYear: 'a year', dcfYearsUnit: 'years', dcfAssumed: 'from revenue growth',
       dcfCapped: 'capped', dcfSpan: n => n + 'y',
-      dcfNote: n => n + '-year discounted cash flow on reported free cash flow, Gordon terminal value. Assumption-based estimate, not a price target. For banks and lenders the reported figure carries balance-sheet flows, so read it with care.',
+      dcfNote: n => n + '-year discounted cash flow on reported free cash flow, Gordon terminal value. Assumption-based estimate, not a price target.',
       dcfNoteNi: n => n + '-year discounted cash flow on reported net income, Gordon terminal value. Assumption-based estimate, not a price target. Earnings are not cash, so read the result as a comparison rather than a valuation.',
       dcfNoFcf: 'No free cash flow is reported for this company, so there is nothing to discount.',
       dcfNegFcf: 'Free cash flow is negative, so a discounted cash flow has nothing to grow.',
@@ -186,7 +186,7 @@ const I18N = {
       dcfNoNi: 'No net income is reported for this company, so there is nothing to discount.',
       dcfNegNi: 'Net income is negative, so a discounted earnings value has nothing to grow.',
       dcfCapNote: (pct, years) => 'capped from ' + pct + '% a year' + (years > 0 ? ' (' + years + 'y record)' : ''),
-      dcfWarnFcf: 'Base free cash flow is larger than reported net income, which usually means balance-sheet flows (banks, lenders) rather than cash the owners could take out. Treat the value with care, or switch the base to net income.',
+      dcfCashCaveat: 'The base cash flow is larger than reported net income, which usually means balance-sheet flows (banks, lenders) rather than cash the owners could take out, so a net income base is worth trying.',
       dcfBadTerminal: 'Terminal growth has to stay below the discount rate, so no value is shown.'
     },
     fundAi: {
@@ -283,7 +283,7 @@ const I18N = {
       dcfTerminal: 'Pertumbuhan terminal', dcfYears: 'Proyeksi', dcfShares: 'Saham',
       dcfPerYear: 'per tahun', dcfYearsUnit: 'tahun', dcfAssumed: 'dari pertumbuhan pendapatan',
       dcfCapped: 'dibatasi', dcfSpan: n => n + 'th',
-      dcfNote: n => 'DCF ' + n + ' tahun atas arus kas bebas yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga. Untuk bank dan lembaga pembiayaan angkanya memuat arus neraca, jadi baca dengan hati-hati.',
+      dcfNote: n => 'DCF ' + n + ' tahun atas arus kas bebas yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga.',
       dcfNoteNi: n => 'DCF ' + n + ' tahun atas laba bersih yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga. Laba bukan kas, jadi hasilnya lebih cocok jadi pembanding daripada nilai intrinsik.',
       dcfNoFcf: 'Arus kas bebas emiten ini tidak dilaporkan, jadi tidak ada yang bisa didiskontokan.',
       dcfNegFcf: 'Arus kas bebas negatif, jadi DCF tidak punya arus kas untuk ditumbuhkan.',
@@ -294,7 +294,7 @@ const I18N = {
       dcfNoNi: 'Laba bersih emiten ini tidak dilaporkan, jadi tidak ada yang bisa didiskontokan.',
       dcfNegNi: 'Laba bersih negatif, jadi nilai dari laba tidak punya dasar untuk ditumbuhkan.',
       dcfCapNote: (pct, years) => 'dibatasi dari ' + pct + '% per tahun' + (years > 0 ? ' (rekam ' + years + 'th)' : ''),
-      dcfWarnFcf: 'Arus kas bebas dasar lebih besar dari laba bersih yang dilaporkan, biasanya karena arus neraca (bank, lembaga pembiayaan), bukan kas yang bisa diambil pemilik. Baca angkanya dengan hati-hati, atau ganti dasarnya ke laba bersih.',
+      dcfCashCaveat: 'Arus kas dasar lebih besar dari laba bersih yang dilaporkan, biasanya karena arus neraca (bank, lembaga pembiayaan), bukan kas yang bisa diambil pemilik, jadi dasar laba bersih layak dicoba.',
       dcfBadTerminal: 'Pertumbuhan terminal harus di bawah tingkat diskonto, jadi nilai tidak ditampilkan.'
     },
     fundAi: {
@@ -1713,7 +1713,7 @@ function fundDcf(fund, price, priceCur, edits) {
     discount: r, terminal: tg, years: years,
     shares: shares, equity: equity,
     tvShare: equity > 0 ? (tvPv / equity) * 100 : null,
-    warnFcf: basis === 'fcf' && !!(ni && base > ni * 1.05)
+    cashAboveProfit: basis === 'fcf' && !!(ni && base > ni * 1.05)
   };
 }
 
@@ -1778,7 +1778,15 @@ function finDcfHtml(dcf, t) {
     '</div>' +
     '<p class="fin-dcf-note fin-dcf-warn" id="finDcfWarn"></p>' +
     '<p class="fin-dcf-note" id="finDcfTv"></p>' +
-    '<p class="fin-dcf-note" id="finDcfNote">' + esc((dcf.basis === 'ni' ? t.dcfNoteNi : t.dcfNote)(dcf.years)) + '</p></section>';
+    '<p class="fin-dcf-note" id="finDcfNote">' + esc(finDcfCaveat(dcf)) + '</p></section>';
+}
+
+/* One caveat per card: the model it used, then — only when this company's
+   cash flow really does run ahead of its profit — the reason to distrust it. */
+function finDcfCaveat(dcf) {
+  const t = finT();
+  const base = (dcf.basis === 'ni' ? t.dcfNoteNi : t.dcfNote)(dcf.years);
+  return dcf.cashAboveProfit ? base + ' ' + t.dcfCashCaveat : base;
 }
 
 /* The growth field defaults to a cap, not to the record it was cut from, so
@@ -1805,18 +1813,14 @@ function finDcfPatch(dcf) {
       '<span>' + esc(t.dcfVs) + ' ' + esc(finMoney(dcf.price, dcf.priceCur)) + '</span>';
   }
   const warn = document.getElementById('finDcfWarn');
-  if (warn) {
-    const msg = dcf.invalid ? t.dcfBadTerminal : dcf.warnFcf ? t.dcfWarnFcf : '';
-    warn.textContent = msg;
-    warn.style.display = msg ? 'block' : 'none';
-  }
+  if (warn) warn.textContent = dcf.invalid ? t.dcfBadTerminal : '';
   const tv = document.getElementById('finDcfTv');
   if (tv) tv.textContent = dcf.tvShare == null ? '' : t.dcfTv(Math.round(dcf.tvShare));
   const hint = document.getElementById('finDcfGrowthHint');
   if (hint) hint.textContent = dcf.growthEdited ? '' : finGrowthNote(dcf);
   /* The caveat names the base and the horizon, both of which change here. */
   const note = document.getElementById('finDcfNote');
-  if (note) note.textContent = (dcf.basis === 'ni' ? t.dcfNoteNi : t.dcfNote)(dcf.years);
+  if (note) note.textContent = finDcfCaveat(dcf);
 }
 
 function finDcfRecalc() {
