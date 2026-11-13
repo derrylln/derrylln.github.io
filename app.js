@@ -173,6 +173,7 @@ const I18N = {
       dcfTitle: 'Intrinsic value', dcfValue: 'Value per share', dcfVs: 'vs price',
       dcfBaseFcf: 'Base free cash flow', dcfGrowth: 'FCF growth', dcfDiscount: 'Discount rate',
       dcfTerminal: 'Terminal growth', dcfYears: 'Forecast', dcfShares: 'Shares',
+      dcfNetDebt: 'Net debt', dcfNetCash: 'Net cash',
       dcfPerYear: 'a year', dcfYearsUnit: 'years', dcfAssumed: 'from revenue growth',
       dcfCapped: 'capped', dcfSpan: n => n + 'y',
       dcfNote: n => n + '-year discounted cash flow on reported free cash flow, Gordon terminal value. Assumption-based estimate, not a price target.',
@@ -281,6 +282,7 @@ const I18N = {
       dcfTitle: 'Nilai intrinsik', dcfValue: 'Nilai per saham', dcfVs: 'vs harga',
       dcfBaseFcf: 'Arus kas bebas dasar', dcfGrowth: 'Pertumbuhan FCF', dcfDiscount: 'Tingkat diskonto',
       dcfTerminal: 'Pertumbuhan terminal', dcfYears: 'Proyeksi', dcfShares: 'Saham',
+      dcfNetDebt: 'Utang neto', dcfNetCash: 'Kas neto',
       dcfPerYear: 'per tahun', dcfYearsUnit: 'tahun', dcfAssumed: 'dari pertumbuhan pendapatan',
       dcfCapped: 'dibatasi', dcfSpan: n => n + 'th',
       dcfNote: n => 'DCF ' + n + ' tahun atas arus kas bebas yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga.',
@@ -1146,6 +1148,7 @@ function applyChartTheme(theme) {
 const fundCache = new Map();
 const FUND_TYPES = ['trailingMarketCap', 'trailingPeRatio',
   'annualTotalRevenue', 'annualNetIncome', 'annualDilutedEPS', 'annualFreeCashFlow', 'annualStockholdersEquity',
+  'annualTotalDebt', 'annualCashAndCashEquivalents',
   'quarterlyTotalRevenue', 'quarterlyNetIncome', 'quarterlyDilutedEPS', 'quarterlyFreeCashFlow', 'quarterlyStockholdersEquity'];
 
 async function fetchFundamentals(symbol) {
@@ -1170,7 +1173,7 @@ async function fetchFundamentals(symbol) {
   // market cap reads as a company worth more than the whole US tech sector, so
   // statement figures are converted at spot and the note says so.
   const isIdx = /\.JK$/i.test(symbol);
-  const stmtTypes = ['annualTotalRevenue', 'annualNetIncome', 'annualDilutedEPS', 'annualFreeCashFlow', 'annualStockholdersEquity'];
+  const stmtTypes = ['annualTotalRevenue', 'annualNetIncome', 'annualDilutedEPS', 'annualFreeCashFlow', 'annualStockholdersEquity', 'annualTotalDebt', 'annualCashAndCashEquivalents'];
   const stmtCurrency = stmtTypes.map(t => { const s = raw[t]; return s && s.length ? s[s.length - 1].currency : null; }).filter(Boolean)[0] || null;
   let fx = 1;
   let converted = null;
@@ -1194,6 +1197,8 @@ async function fetchFundamentals(symbol) {
   const fund = {
     mktCap: last('trailingMarketCap'),
     pe: last('trailingPeRatio'),
+    debt: last('annualTotalDebt'),
+    cash: last('annualCashAndCashEquivalents'),
     annual: annual,
     periods: buildPeriods(series, 'quarterly').concat(annual),
     roe: annual.length ? annual[0].roe : null,
@@ -1692,8 +1697,20 @@ function fundDcf(fund, price, priceCur, edits) {
     pv += fcf / Math.pow(1 + r, year);
   }
   const tvPv = (fcf * (1 + tg)) / (r - tg) / Math.pow(1 + r, years);
-  const equity = pv + tvPv;
-  const perShare = invalid ? null : equity / shares;
+  const enterprise = pv + tvPv;
+
+  /* Discounting gives an enterprise value. A share is worth that less the
+     debt it answers for, or more when the company holds net cash, so the
+     bridge to equity value belongs in the model rather than in a footnote. */
+  const sameCurrency = function (c) { return !c || !currency || c === currency; };
+  const debtRaw = (fund.debt && isFinite(fund.debt.raw)) ? fund.debt.raw : null;
+  const cashRaw = (fund.cash && isFinite(fund.cash.raw)) ? fund.cash.raw : null;
+  const hasBalance = (debtRaw != null || cashRaw != null) &&
+    sameCurrency(fund.debt && fund.debt.currency) && sameCurrency(fund.cash && fund.cash.currency);
+  const netDebt = hasBalance ? (debtRaw || 0) - (cashRaw || 0) : null;
+
+  const equity = invalid ? null : enterprise - (netDebt || 0);
+  const perShare = equity == null ? null : equity / shares;
   const comparable = price && isFinite(price) && price > 0 && (!priceCur || !currency || priceCur === currency);
 
   /* Two things decide whether the answer is worth reading: how much of it is
@@ -1711,8 +1728,8 @@ function fundDcf(fund, price, priceCur, edits) {
     growth: g, growthRaw: growthRaw, growthDefault: growthDefault,
     assumed: assumed, capped: capped, histYears: histYears,
     discount: r, terminal: tg, years: years,
-    shares: shares, equity: equity,
-    tvShare: equity > 0 ? (tvPv / equity) * 100 : null,
+    shares: shares, enterprise: enterprise, equity: equity, netDebt: netDebt,
+    tvShare: enterprise > 0 ? (tvPv / enterprise) * 100 : null,
     cashAboveProfit: basis === 'fcf' && !!(ni && base > ni * 1.05)
   };
 }
@@ -1748,8 +1765,9 @@ function finDcfHtml(dcf, t) {
     return '<section class="fin-dcf is-na">' + head + basisHtml +
       '<p class="fin-dcf-empty">' + esc(why) + '</p></section>';
   }
-  const row = function (label, value) {
-    return '<div class="fin-dcf-row"><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>';
+  const row = function (label, value, cls) {
+    return '<div class="fin-dcf-row' + (cls ? ' ' + cls : '') + '"><span>' + esc(label) + '</span>' +
+      '<b>' + esc(value) + '</b></div>';
   };
   const inputRow = function (label, key, value, unit, max, extra) {
     return '<div class="fin-dcf-row is-input"><span>' + esc(label) + '</span>' +
@@ -1775,6 +1793,8 @@ function finDcfHtml(dcf, t) {
       inputRow(t.dcfDiscount, 'discount', (dcf.discount * 100).toFixed(1), '%', null) +
       inputRow(t.dcfTerminal, 'terminal', (dcf.terminal * 100).toFixed(1), '%', null) +
       inputRow(t.dcfYears, 'years', dcf.years, '', 15) +
+      row(dcf.netDebt != null && dcf.netDebt < 0 ? t.dcfNetCash : t.dcfNetDebt,
+        dcf.netDebt == null ? '—' : compactNum(Math.abs(dcf.netDebt), dcf.currency), 'is-bridge') +
     '</div>' +
     '<p class="fin-dcf-note fin-dcf-warn" id="finDcfWarn"></p>' +
     '<p class="fin-dcf-note" id="finDcfTv"></p>' +
