@@ -107,6 +107,13 @@ const I18N = {
     refresh: 'Refresh', all: 'All', unreadOnly: 'Unread only', loading: 'Fetching latest stories…',
     noArticles: 'No articles match your filters.', liveLabel: 'Live', cacheLabel: 'Cached', staleLabel: 'Offline · cached',
     errorLabel: 'Could not load feeds.', updated: 'Updated', watch: 'Watch',
+    aiBusy: 'The AI service is busy right now. Try again in a minute.',
+    aiQuota: 'The free AI quota is used up for now. Try again later.',
+    aiTimeout: 'The AI took longer than 30 seconds. Try again.',
+    aiCap: 'You have requested a lot of AI in this session, so generation is paused. Try again later.',
+    aiLimit: 'AI generation is paused because too much was requested. Try again later.',
+    aiSlow: 'Give it a few seconds before the next AI request.',
+    aiFailed: 'Could not reach the AI service.',
     footer: 'FINWIRE — client-side market news aggregator.', justNow: 'just now', minAgo: n => `${n}m ago`,
     hourAgo: n => `${n}h ago`, dayAgo: n => `${n}d ago`, stories: n => `${n} stories`, added: 'Added',
     regions: { all: 'All', id: 'Indonesia', global: 'Global & US' },
@@ -230,6 +237,13 @@ const I18N = {
     refresh: 'Muat ulang', all: 'Semua', unreadOnly: 'Belum dibaca', loading: 'Mengambil berita terbaru…',
     noArticles: 'Tidak ada berita yang cocok.', liveLabel: 'Langsung', cacheLabel: 'Cache', staleLabel: 'Offline · cache',
     errorLabel: 'Gagal memuat feed.', updated: 'Diperbarui', watch: 'Pantau',
+    aiBusy: 'Layanan AI sedang sibuk. Coba lagi sebentar lagi.',
+    aiQuota: 'Kuota AI gratis sedang habis. Coba lagi nanti.',
+    aiTimeout: 'AI memakan waktu lebih dari 30 detik. Coba lagi.',
+    aiCap: 'Anda sudah meminta terlalu banyak AI di sesi ini, jadi pembuatan dijeda. Coba lagi nanti.',
+    aiLimit: 'Pembuatan AI dijeda karena permintaan terlalu banyak. Coba lagi nanti.',
+    aiSlow: 'Tunggu beberapa detik sebelum permintaan AI berikutnya.',
+    aiFailed: 'Tidak bisa menghubungi layanan AI.',
     footer: 'FINWIRE — agregator berita pasar berbasis klien.', justNow: 'baru saja', minAgo: n => `${n}m lalu`,
     hourAgo: n => `${n}j lalu`, dayAgo: n => `${n} hari lalu`, stories: n => `${n} berita`, added: 'Ditambahkan',
     regions: { all: 'Semua', id: 'Indonesia', global: 'Global & AS' },
@@ -1370,6 +1384,7 @@ async function runFinAi() {
     const fund = await fetchFundamentals(symbol);
     const lines = fundFigureLines(fund, state.lang);
     if (!lines.length) throw new Error(I18N[state.lang].fund.noData);
+    if (!aiSpend()) throw aiCapError();
     const data = await aiRequest('/ai-fundamentals', {
       symbol: symbol.replace(/\.JK$/i, ''),
       name: name || '',
@@ -1381,7 +1396,7 @@ async function runFinAi() {
   } catch (err) {
     if (symbol !== finState.symbol) return;
     const message = aiErrorText(err);
-    finState.ai = { text: /\b(404|405)\b/.test(message) ? t.unavailable : message, err: true };
+    finState.ai = { text: aiMissingEndpoint(err) ? t.unavailable : message, err: true };
   } finally {
     finAiStop();
     finAiBusy = false;
@@ -4034,6 +4049,92 @@ async function getFullArticleText(url) {
 
 /* AI calls go through the worker. A cold Gemini start can take 20s, so keep a
    hard limit and narrate the wait — a silent button reads as "it's broken". */
+/* PUBLIC DEMO GUARDS
+   The AI routes run on a free-tier Gemini key, so a traffic spike can exhaust
+   the per-minute quota. Three cheap guards keep the page readable when that
+   happens: a per-session call cap, a per-article summary cache so a repeat
+   click costs nothing, and error text a visitor can understand. */
+const AI_SESSION_KEY = 'finwire.ai.calls.v1';
+const AI_SESSION_CAP = 12;
+const AI_COOLDOWN_MS = 4000;
+const AI_CACHE_KEY   = 'finwire.ai.summaries.v1';
+const AI_CACHE_TTL   = 7 * 24 * 60 * 60 * 1000;
+const AI_CACHE_LIMIT = 300;
+
+let aiSessionCalls = (function () {
+  try { const n = parseInt(sessionStorage.getItem(AI_SESSION_KEY) || '0', 10); return isFinite(n) && n > 0 ? n : 0; }
+  catch (e) { return 0; }
+})();
+
+function aiCanSpend() { return aiSessionCalls < AI_SESSION_CAP; }
+
+let aiLastCallAt = 0;
+let aiBlockReason = '';
+
+/* One gate for every AI entry point. A click during the cooldown is refused
+   without spending anything, so holding down a button costs nothing. */
+function aiSpend() {
+  aiBlockReason = '';
+  if ((Date.now() - aiLastCallAt) < AI_COOLDOWN_MS) { aiBlockReason = 'slow'; return false; }
+  if (!aiCanSpend()) { aiBlockReason = 'cap'; return false; }
+  aiSessionCalls++;
+  aiLastCallAt = Date.now();
+  try { sessionStorage.setItem(AI_SESSION_KEY, String(aiSessionCalls)); } catch (e) {}
+  return true;
+}
+
+function aiBlockText() {
+  const t = I18N[state.lang] || I18N.en;
+  return aiBlockReason === 'slow' ? t.aiSlow : t.aiCap;
+}
+
+function aiCapError() {
+  const error = new Error(aiBlockText());
+  error.code = 'cap';
+  return error;
+}
+
+const aiCache = (function () {
+  const stored = loadJSON(AI_CACHE_KEY, {});
+  const out = {};
+  Object.keys(stored || {}).forEach(function (key) {
+    const entry = stored[key];
+    if (entry && typeof entry.text === 'string' && entry.at) out[key] = entry;
+  });
+  return out;
+})();
+
+let aiCacheTimer = null;
+function aiCacheSave() {
+  if (aiCacheTimer) return;
+  aiCacheTimer = setTimeout(function () {
+    aiCacheTimer = null;
+    const keys = Object.keys(aiCache).sort(function (a, b) { return (aiCache[a].at || 0) - (aiCache[b].at || 0); });
+    while (keys.length > AI_CACHE_LIMIT) { const old = keys.shift(); delete aiCache[old]; }
+    saveJSON(AI_CACHE_KEY, aiCache);
+  }, 500);
+}
+
+function aiCacheKey(text) {
+  const str = String(text || '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) { hash = ((hash << 5) - hash) + str.charCodeAt(i); hash |= 0; }
+  return 'h' + hash;
+}
+
+function aiCacheGet(key) {
+  const hit = aiCache[key];
+  if (!hit) return '';
+  if ((Date.now() - (hit.at || 0)) > AI_CACHE_TTL) { delete aiCache[key]; aiCacheSave(); return ''; }
+  return hit.text;
+}
+
+function aiCacheSet(key, text) {
+  if (!key || !text) return;
+  aiCache[key] = { text: text, at: Date.now() };
+  aiCacheSave();
+}
+
 async function aiRequest(path, payload) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
@@ -4045,15 +4146,34 @@ async function aiRequest(path, payload) {
       signal: controller.signal
     });
     const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error((data && data.error) || ('Server error ' + res.status));
+    if (!res.ok) {
+      const error = new Error((data && data.detail) || (data && data.error) || ('Server error ' + res.status));
+      error.status = res.status;
+      error.code = (data && data.code) || '';
+      throw error;
+    }
     if (!data) throw new Error('Empty response from AI');
     return data;
   } finally { clearTimeout(timer); }
 }
 
+/* A route that is not deployed on this Worker yet (an older build) is reported
+   as unavailable rather than as a generic failure. */
+function aiMissingEndpoint(err) {
+  if (!err) return false;
+  return err.status === 404 || err.status === 405 || /not found|no route/i.test(String(err.message || ''));
+}
+
 function aiErrorText(err) {
-  if (err && err.name === 'AbortError') return 'AI took longer than 30 seconds. Please try again.';
-  return (err && err.message) ? err.message : 'Could not reach the AI service.';
+  const t = I18N[state.lang] || I18N.en;
+  if (err && err.name === 'AbortError') return t.aiTimeout;
+  if (err && err.code === 'cap') return err.message;
+  if (err && err.code === 'limit') return t.aiLimit;
+  const status = err && err.status;
+  const message = String((err && err.message) || '').toLowerCase();
+  if (status === 429 || (err && err.code === 'quota') || /quota|resource_exhausted|rate.?limit|\b429\b/.test(message)) return t.aiQuota;
+  if (status === 503 || (err && err.code === 'busy') || /overloaded|unavailable|busy/.test(message)) return t.aiBusy;
+  return t.aiFailed;
 }
 
 /* Rewrites the label every second so a slow answer still looks alive. */
@@ -4124,6 +4244,7 @@ function bindUI() {
         lines.push('- [' + (a.sourceLabel || 'FINWIRE') + '] ' + a.title);
       });
       if (!lines.length) { out.textContent = p.whyNoNews.replace('{sym}', symbol.replace(/\.JK$/i, '')); return; }
+      if (!aiSpend()) { out.textContent = aiBlockText(); return; }
       const data = await aiRequest('/ai-explain-move', {
         symbol: symbol.replace(/\.JK$/i, ''), pct: pct, isUp: pct >= 0, lang: state.lang, newsText: lines.join('\n')
       });
@@ -4157,6 +4278,7 @@ function bindUI() {
       const fund = await fetchFundamentals(symbol);
       const lines = fundFigureLines(fund, state.lang);
       if (!lines.length) throw new Error(I18N[state.lang].fund.noData);
+      if (!aiSpend()) throw aiCapError();
       const q = pfQuotes[symbol] || {};
       const data = await aiRequest('/ai-fundamentals', {
         symbol: symbol.replace(/\.JK$/i, ''),
@@ -4167,7 +4289,7 @@ function bindUI() {
       out.innerHTML = fundAiHtml((data && data.summary) ? data.summary.trim() : t.failed, false, false);
     } catch (err) {
       const message = aiErrorText(err);
-      out.innerHTML = fundAiHtml(/\b(404|405)\b/.test(message) ? t.unavailable : message, true, false);
+      out.innerHTML = fundAiHtml(aiMissingEndpoint(err) ? t.unavailable : message, true, false);
     } finally {
       stop();
       out.dataset.busy = '';
@@ -4295,6 +4417,28 @@ function bindUI() {
     }
 
     btn.disabled = true;
+    const aiT = I18N[state.lang] || I18N.en;
+    const aiCard = btn.closest('.card');
+    const aiUrl = aiCard ? aiCard.getAttribute('data-url') : null;
+    const aiKey = aiUrl
+      ? 'a|' + aiUrl + '|' + state.lang
+      : 't|' + aiCacheKey(btn.getAttribute('data-text')) + '|' + state.lang;
+
+    /* A cached summary costs no quota, so it is shown even after the cap. */
+    const aiSaved = aiCacheGet(aiKey);
+    if (aiSaved) {
+      targetEl.innerHTML = `<strong>AI Summary:</strong> ${esc(aiSaved)}`;
+      targetEl.style.display = 'block';
+      btn.disabled = false;
+      return;
+    }
+    if (!aiSpend()) {
+      targetEl.innerHTML = `<em>${esc(aiBlockText())}</em>`;
+      targetEl.style.display = 'block';
+      btn.disabled = false;
+      return;
+    }
+
     let stopClock = startClock(btn, '✨ Reading article...');
     
     try {
@@ -4315,16 +4459,14 @@ function bindUI() {
       
       const data = await aiRequest('/ai-summarize', { text: textToSummarize, lang: state.lang });
       
-      if (data && data.summary) {
-        targetEl.innerHTML = `<strong>AI Summary:</strong> ${esc(data.summary)}`;
-        targetEl.style.display = 'block';
-      } else if (data.error) {
-        targetEl.innerHTML = `<em>Error: ${esc(data.error)}</em>`;
-        targetEl.style.display = 'block';
+      const summary = (data && data.summary) ? data.summary.trim() : '';
+      if (summary) {
+        aiCacheSet(aiKey, summary);
+        targetEl.innerHTML = `<strong>AI Summary:</strong> ${esc(summary)}`;
       } else {
-        targetEl.innerHTML = `<em>AI is busy. Try again.</em>`;
-        targetEl.style.display = 'block';
+        targetEl.innerHTML = `<em>${esc(aiT.aiBusy)}</em>`;
       }
+      targetEl.style.display = 'block';
     } catch (err) {
       targetEl.innerHTML = `<em>Failed: ${esc(aiErrorText(err))}</em>`;
       targetEl.style.display = 'block';
@@ -4441,6 +4583,12 @@ function bindUI() {
       if (articles.length === 0) return;
 
       const combinedText = articles.map((a, i) => `${i+1}. ${a.title} - ${a.summary}`).join('\n\n');
+
+      if (!aiSpend()) {
+        contentEl.style.display = 'block';
+        contentEl.innerHTML = `<em>${esc(aiBlockText())}</em>`;
+        return;
+      }
 
       briefingBtn.disabled = true;
       briefingBtn.innerHTML = '✨ Analyzing 15 articles...';

@@ -11,6 +11,81 @@ The static site in the repo root calls this Worker for three things:
 
 `GET /health` returns `{"ok":true}` and is only used to verify a deploy.
 
+## AI limits and error codes
+
+Two independent gates protect the Gemini key. The browser gate is for user
+experience; the Worker gate is the one that actually stops abuse, because
+anything in `localStorage` / `sessionStorage` can be cleared.
+
+### Browser (`app.js`)
+
+| Guard | Value | Constant |
+| --- | --- | --- |
+| AI calls per tab | 12 | `AI_SESSION_CAP` |
+| Cooldown between calls | 4 s | `AI_COOLDOWN_MS` |
+| Summary cache | 7 days, 300 entries | `AI_CACHE_TTL` / `AI_CACHE_LIMIT` |
+| Call counter | `sessionStorage` `finwire.ai.calls.v1` | `AI_SESSION_KEY` |
+| Summary cache | `localStorage` `finwire.ai.summaries.v1` | `AI_CACHE_KEY` |
+
+All AI entry points share one budget: the article summary, the daily briefing,
+"why it moved", a holding's AI read and the financial report's AI read. A
+cached summary is served without spending a call, including after the cap is
+reached. The counter resets when the tab is closed; clearing site data also
+clears the summary cache.
+
+### Worker
+
+| Window | Limit | Constant |
+| --- | --- | --- |
+| 1 minute | 5 | `AI_IP_LIMITS.minute` |
+| 1 hour | 20 | `AI_IP_LIMITS.hour` |
+| 24 hours | 60 | `AI_IP_LIMITS.day` |
+
+Keyed on `CF-Connecting-IP`. A blocked request returns 429 before Gemini is
+called, so it spends no quota. Hits older than 24 hours are dropped, and the
+map prunes itself once it holds more than 1,000 addresses.
+
+These counters live in isolate memory. Cloudflare runs several isolates per
+location, so a visitor rotating IPs can still get through; treat this as burst
+protection, not a hard global quota. For a hard quota, move the counter to D1,
+KV or a Durable Object, keyed the same way.
+
+### Error codes
+
+`POST /ai-summarize`, `/ai-explain-move` and `/ai-fundamentals` return
+`{ error, code, detail? }`. The client translates `code`; only `detail` (when
+present) carries the raw upstream message.
+
+| Code | HTTP | Meaning | Reader sees |
+| --- | --- | --- | --- |
+| `limit` | 429 | This IP exceeded the Worker limits above | "AI generation is paused because too much was requested…" |
+| `quota` | 429 | Gemini's own free-tier quota is exhausted | "The free AI quota is used up for now…" |
+| `busy` | 503 | Gemini is overloaded or timed out | "The AI service is busy right now…" |
+| `upstream` | 502 | Any other Gemini failure | "Could not reach the AI service." |
+| — | 500 | `GEMINI_API_KEY` is not set | Setup error, never shown to readers |
+
+`limit` is checked before `quota` on the client, so a throttled visitor is told
+about their own usage rather than a site-wide outage.
+
+### Tuning
+
+Change the numbers in `worker/src/index.js` (`AI_IP_LIMITS`,
+`AI_IP_WINDOW_MS`) and redeploy the Worker. Change the browser values in
+`app.js` (`AI_SESSION_CAP`, `AI_COOLDOWN_MS`, `AI_CACHE_TTL`,
+`AI_CACHE_LIMIT`) and redeploy the site. The reader-facing text lives in the
+`I18N.en` / `I18N.id` dictionaries (`aiCap`, `aiLimit`, `aiSlow`, `aiQuota`,
+`aiBusy`, `aiTimeout`, `aiFailed`).
+
+Keep the two gates roughly consistent: a browser cap far above the Worker's
+daily limit just means readers hit the server message first.
+
+### Local development
+
+`wrangler dev` has no `CF-Connecting-IP`, so every local AI request shares the
+"unknown" bucket and the sixth request in a minute is refused. Restart the dev
+server, or wait a minute, to reset the in-memory counters. Browser counters
+reset when the tab closes or site data is cleared.
+
 ## Why the old Worker broke
 
 The previous version handed the **same** upstream stream to two responses:

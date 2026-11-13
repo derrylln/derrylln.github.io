@@ -32,6 +32,37 @@ const MAX_AI_INPUT_CHARS = 20000;
 
 // Publishers and Yahoo reject obvious bot traffic. These headers make the
 // request look like a normal browser navigation from a real Chrome build.
+/* AI ABUSE GUARD
+   Anything enforced in the browser can be bypassed by opening a new tab, so the
+   real throttle lives here. Counters are per-isolate memory: Cloudflare runs
+   several isolates, so this is a burst limiter rather than a hard quota. It is
+   what stops someone holding down an AI button (and it costs no storage). */
+const AI_IP_LIMITS = { minute: 5, hour: 20, day: 60 };
+const AI_IP_WINDOW_MS = 24 * 60 * 60 * 1000;
+const aiIpHits = new Map();
+
+function aiRateLimited(request) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const now = Date.now();
+  const list = (aiIpHits.get(ip) || []).filter(function (t) { return now - t < AI_IP_WINDOW_MS; });
+  const count = function (ms) { return list.filter(function (t) { return now - t < ms; }).length; };
+  const blocked = count(60000) >= AI_IP_LIMITS.minute ||
+    count(3600000) >= AI_IP_LIMITS.hour ||
+    list.length >= AI_IP_LIMITS.day;
+  if (!blocked) { list.push(now); aiIpHits.set(ip, list); }
+  if (aiIpHits.size > 1000) {
+    aiIpHits.forEach(function (v, key) {
+      if (!v.length || now - v[v.length - 1] > AI_IP_WINDOW_MS) aiIpHits.delete(key);
+    });
+  }
+  return blocked;
+}
+
+const AI_LIMIT_BODY = {
+  error: "AI generation is paused because too much was requested. Try again later.",
+  code: "limit",
+};
+
 const BROWSER_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
@@ -278,6 +309,22 @@ async function callGemini(prompt, apiKey) {
   }
 }
 
+/* Gemini's own errors are not reader-friendly: a spike on the free tier shows
+   up as HTTP 429 with a RESOURCE_EXHAUSTED payload. Map the two cases a public
+   visitor can actually cause to a stable code the client can translate, and
+   keep the upstream text in 'detail' for debugging. */
+function aiFailure(error) {
+  const message = error && error.message ? error.message : String(error || "Unknown error");
+  const lower = message.toLowerCase();
+  if (/\b429\b|resource_exhausted|quota|rate.?limit/.test(lower)) {
+    return { status: 429, code: "quota", message: "The AI quota for this site is used up right now." };
+  }
+  if (/\b503\b|overloaded|unavailable|deadline/.test(lower)) {
+    return { status: 503, code: "busy", message: "The AI service is busy right now." };
+  }
+  return { status: 502, code: "upstream", message: "The AI service could not answer.", detail: message.slice(0, 300) };
+}
+
 async function readJsonBody(request) {
   try {
     return await request.json();
@@ -289,6 +336,7 @@ async function readJsonBody(request) {
 async function handleSummarize(request, env) {
   if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
   if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
+  if (aiRateLimited(request)) return json(AI_LIMIT_BODY, 429);
 
   const body = await readJsonBody(request);
   if (!body) return json({ error: "Invalid JSON body" }, 400);
@@ -318,13 +366,15 @@ ${input}`
     const summary = await callGemini(prompt, env.GEMINI_API_KEY);
     return json({ summary });
   } catch (error) {
-    return json({ error: error.message }, 502);
+    const failure = aiFailure(error);
+    return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
   }
 }
 
 async function handleExplainMove(request, env) {
   if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
   if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
+  if (aiRateLimited(request)) return json(AI_LIMIT_BODY, 429);
 
   const body = await readJsonBody(request);
   if (!body) return json({ error: "Invalid JSON body" }, 400);
@@ -353,12 +403,14 @@ Every one of these rules is mandatory:
     const summary = await callGemini(prompt, env.GEMINI_API_KEY);
     return json({ summary });
   } catch (error) {
-    return json({ error: error.message }, 502);
+    const failure = aiFailure(error);
+    return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
   }
 }
 async function handleFundamentals(request, env) {
   if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
   if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
+  if (aiRateLimited(request)) return json(AI_LIMIT_BODY, 429);
 
   const body = await readJsonBody(request);
   if (!body) return json({ error: "Invalid JSON body" }, 400);
@@ -391,6 +443,7 @@ These rules are mandatory:
     const summary = await callGemini(prompt, env.GEMINI_API_KEY);
     return json({ summary });
   } catch (error) {
-    return json({ error: error.message }, 502);
+    const failure = aiFailure(error);
+    return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
   }
 }
