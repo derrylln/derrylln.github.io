@@ -168,6 +168,7 @@ const I18N = {
       title: 'Financial report', kind: 'Period', quarterly: 'Quarterly', annual: 'Annual',
       loading: 'Loading the report…', close: 'Close', chartRevenue: 'Revenue and net income', aiRead: 'AI read',
       price: 'Share price', priceIn: 'return', priceEmpty: 'No price history for this range.',
+      epsDerived: 'net income ÷ shares',
       noData: 'No report available for this company.',
       note: 'Reported figures · Yahoo Finance · not investment advice',
       dcfTitle: 'Intrinsic value', dcfValue: 'Value per share', dcfVs: 'vs price',
@@ -277,6 +278,7 @@ const I18N = {
       title: 'Laporan keuangan', kind: 'Periode', quarterly: 'Kuartal', annual: 'Tahunan',
       loading: 'Memuat laporan…', close: 'Tutup', chartRevenue: 'Pendapatan dan laba bersih', aiRead: 'Analisis AI',
       price: 'Harga saham', priceIn: 'imbal hasil', priceEmpty: 'Riwayat harga tidak tersedia untuk rentang ini.',
+      epsDerived: 'laba bersih ÷ saham',
       noData: 'Laporan tidak tersedia untuk emiten ini.',
       note: 'Angka laporan · Yahoo Finance · bukan saran investasi',
       dcfTitle: 'Nilai intrinsik', dcfValue: 'Nilai per saham', dcfVs: 'vs harga',
@@ -1402,6 +1404,23 @@ async function paintFinBody() {
   const newest = list[0];
   const per = periodLabel(newest, f);
   const dcf = fundDcf(fund, quote && quote.price, quote && quote.currency, finDcfEdits[symbol]);
+
+  /* Some feeds report net income without a diluted EPS. A share count turns
+     that profit into the same per-share figure, so the tile says where the
+     number came from rather than showing a dash. */
+  const epsShares = finShares(fund, quote && quote.price, quote && quote.currency);
+  const epsOf = function (period) {
+    if (period.eps && isFinite(period.eps.raw)) return { value: val(period.eps), derived: false };
+    if (period.netIncome && isFinite(period.netIncome.raw) && epsShares > 0) {
+      return {
+        value: compactNum(period.netIncome.raw / epsShares, period.netIncome.currency || fund.currency),
+        derived: true
+      };
+    }
+    return { value: '—', derived: false };
+  };
+  const eps = epsOf(newest);
+  let epsDerivedCount = 0;
   const tile = function (label, value, sub, growth) {
     return '<div class="fin-kpi"><span class="fin-kpi-label">' + esc(label) + '</span>' +
       '<strong class="fin-kpi-value">' + esc(value) + '</strong>' +
@@ -1415,7 +1434,7 @@ async function paintFinBody() {
     '<div class="fin-kpis">' +
       tile(f.rev, val(newest.revenue), per, newest.growth) +
       tile(f.netIncome, val(newest.netIncome), newest.margin == null ? per : per + ' · ' + newest.margin.toFixed(1) + '% ' + f.netMargin, null) +
-      tile(f.eps, val(newest.eps), per, null) +
+      tile(f.eps, eps.value, eps.derived ? per + ' · ' + t.epsDerived : per, null) +
       tile(f.fcf, val(newest.fcf), per, null) +
       tile(f.equity, val(newest.equity), per, null) +
       tile(f.roe, roeText(newest), newest.kind === 'Q' ? per + ' · ' + f.annualised : per, null) +
@@ -1434,18 +1453,21 @@ async function paintFinBody() {
       '<th>' + esc(f.fcf) + '</th><th>' + esc(f.equity) + '</th><th>' + esc(f.roe) + '</th></tr></thead><tbody>' +
       list.map(function (p) {
         const g = p.growth;
+        const epsCell = epsOf(p);
+        if (epsCell.derived) epsDerivedCount += 1;
         return '<tr><td>' + esc(periodLabel(p, f)) + '</td>' +
           '<td>' + esc(val(p.revenue)) + '</td>' +
           '<td class="' + (g == null ? '' : g >= 0 ? 'up' : 'down') + '">' +
             (g == null ? '—' : (g >= 0 ? '+' : '') + g.toFixed(1) + '%') + '</td>' +
           '<td>' + esc(val(p.netIncome)) + '</td>' +
           '<td>' + (p.margin == null ? '—' : p.margin.toFixed(1) + '%') + '</td>' +
-          '<td>' + esc(val(p.eps)) + '</td>' +
+          '<td>' + esc(epsCell.value) + (epsCell.derived ? '<sup class="fin-dag">†</sup>' : '') + '</td>' +
           '<td>' + esc(val(p.fcf)) + '</td>' +
           '<td>' + esc(val(p.equity)) + '</td>' +
           '<td>' + esc(roeText(p)) + '</td></tr>';
       }).join('') +
-    '</tbody></table></div>';
+    '</tbody></table></div>' +
+    (epsDerivedCount ? '<p class="fin-note">† ' + esc(t.epsDerived) + '</p>' : '');
   finDcfPatch(dcf);
   paintFinCharts(list.slice().reverse(), f);
   paintFinAiOut();
