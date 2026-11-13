@@ -167,6 +167,7 @@ const I18N = {
     fin: {
       title: 'Financial report', kind: 'Period', quarterly: 'Quarterly', annual: 'Annual',
       loading: 'Loading the report…', close: 'Close', chartRevenue: 'Revenue and net income', aiRead: 'AI read',
+      price: 'Share price', priceIn: 'return', priceEmpty: 'No price history for this range.',
       noData: 'No report available for this company.',
       note: 'Reported figures · Yahoo Finance · not investment advice',
       dcfTitle: 'Intrinsic value', dcfValue: 'Value per share', dcfVs: 'vs price',
@@ -177,7 +178,10 @@ const I18N = {
       dcfNote: 'Five-year discounted cash flow on reported free cash flow, Gordon terminal value. Assumption-based estimate, not a price target. For banks and lenders the reported figure carries balance-sheet flows, so read it with care.',
       dcfNoFcf: 'No free cash flow is reported for this company, so there is nothing to discount.',
       dcfNegFcf: 'Free cash flow is negative, so a discounted cash flow has nothing to grow.',
-      dcfNoShares: 'The share count is unavailable, so no per-share value can be drawn from it.'
+      dcfNoShares: 'The share count is unavailable, so no per-share value can be drawn from it.',
+      dcfReset: 'Reset', dcfTv: n => 'Terminal value is ' + n + '% of this estimate.',
+      dcfWarnFcf: 'Base free cash flow is larger than reported net income, which usually means balance-sheet flows (banks, lenders) rather than cash the owners could take out. Treat the value with care.',
+      dcfBadTerminal: 'Terminal growth has to stay below the discount rate, so no value is shown.'
     },
     fundAi: {
       btn: 'AI', title: 'AI fundamental read', loading: 'Reading the numbers…',
@@ -265,6 +269,7 @@ const I18N = {
     fin: {
       title: 'Laporan keuangan', kind: 'Periode', quarterly: 'Kuartal', annual: 'Tahunan',
       loading: 'Memuat laporan…', close: 'Tutup', chartRevenue: 'Pendapatan dan laba bersih', aiRead: 'Analisis AI',
+      price: 'Harga saham', priceIn: 'imbal hasil', priceEmpty: 'Riwayat harga tidak tersedia untuk rentang ini.',
       noData: 'Laporan tidak tersedia untuk emiten ini.',
       note: 'Angka laporan · Yahoo Finance · bukan saran investasi',
       dcfTitle: 'Nilai intrinsik', dcfValue: 'Nilai per saham', dcfVs: 'vs harga',
@@ -275,7 +280,10 @@ const I18N = {
       dcfNote: 'DCF lima tahun atas arus kas bebas yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga. Untuk bank dan lembaga pembiayaan angkanya memuat arus neraca, jadi baca dengan hati-hati.',
       dcfNoFcf: 'Arus kas bebas emiten ini tidak dilaporkan, jadi tidak ada yang bisa didiskontokan.',
       dcfNegFcf: 'Arus kas bebas negatif, jadi DCF tidak punya arus kas untuk ditumbuhkan.',
-      dcfNoShares: 'Jumlah saham tidak tersedia, nilai per saham tidak bisa dihitung.'
+      dcfNoShares: 'Jumlah saham tidak tersedia, nilai per saham tidak bisa dihitung.',
+      dcfReset: 'Atur ulang', dcfTv: n => 'Nilai terminal ' + n + '% dari estimasi ini.',
+      dcfWarnFcf: 'Arus kas bebas dasar lebih besar dari laba bersih yang dilaporkan, biasanya karena arus neraca (bank, lembaga pembiayaan), bukan kas yang bisa diambil pemilik. Baca angkanya dengan hati-hati.',
+      dcfBadTerminal: 'Pertumbuhan terminal harus di bawah tingkat diskonto, jadi nilai tidak ditampilkan.'
     },
     fundAi: {
       btn: 'AI', title: 'Analisis fundamental AI', loading: 'Membaca angka…',
@@ -1191,7 +1199,9 @@ async function fetchFundamentals(symbol) {
    quarterly, charted across the periods it has. */
 let finModalEl = null;
 let finCharts = [];
-let finState = { symbol: null, name: '', kind: 'q', ai: null };
+let finState = { symbol: null, name: '', kind: 'q', range: '6mo', quote: null, ai: null };
+let finPriceSeq = 0;
+let finPriceChart = null;
 let finAiClock = null;
 let finAiBusy = false;
 
@@ -1215,6 +1225,20 @@ function finModal() {
   wrap.addEventListener('click', function (e) {
     if (e.target === wrap || (e.target.closest && e.target.closest('.fin-close'))) { closeFinancials(); return; }
     if (e.target.closest && e.target.closest('#finAi')) { runFinAi(); return; }
+    if (e.target.closest && e.target.closest('[data-dcf-reset]')) { finDcfReset(); return; }
+    const rangeBtn = e.target.closest ? e.target.closest('[data-fin-range]') : null;
+    if (rangeBtn) {
+      const range = rangeBtn.getAttribute('data-fin-range');
+      if (range === finState.range) return;
+      finState.range = range;
+      $$('#finPriceSeg button', wrap).forEach(function (b) {
+        const on = b === rangeBtn;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      paintFinPrice();
+      return;
+    }
     const btn = e.target.closest ? e.target.closest('[data-fin-kind]') : null;
     if (!btn) return;
     const kind = btn.getAttribute('data-fin-kind');
@@ -1222,6 +1246,10 @@ function finModal() {
     finState.kind = kind;
     $$('#finSeg button', wrap).forEach(b => b.classList.toggle('active', b === btn));
     paintFinBody();
+  });
+  wrap.addEventListener('input', function (e) {
+    const field = e.target.closest ? e.target.closest('[data-dcf]') : null;
+    if (field) finDcfRecalc();
   });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && finModalEl && finModalEl.classList.contains('open')) closeFinancials();
@@ -1257,6 +1285,9 @@ function openFinancials(symbol, name) {
 function closeFinancials() {
   if (!finModalEl) return;
   finModalEl.classList.remove('open');
+  /* A history fetch that lands after the close would otherwise build a chart
+     inside a hidden card and leave it behind in the registry. */
+  finPriceSeq += 1;
   finAiStop();
   destroyFinCharts();
 }
@@ -1313,6 +1344,7 @@ function paintFinAiOut() {
 function destroyFinCharts() {
   finCharts.forEach(function (c) { try { c.destroy(); } catch (e) {} });
   finCharts = [];
+  finPriceChart = null;
 }
 
 async function paintFinBody() {
@@ -1329,6 +1361,8 @@ async function paintFinBody() {
   ]);
   fund = fetched[0]; quote = fetched[1];
   if (finState.symbol !== symbol) return;
+  finState.quote = quote;
+  finState.fund = fund;
   const list = fund ? (finState.kind === 'q'
     ? fund.periods.filter(p => p.kind === 'Q')
     : fund.annual.slice()).slice(0, 8) : [];
@@ -1341,7 +1375,7 @@ async function paintFinBody() {
   };
   const newest = list[0];
   const per = periodLabel(newest, f);
-  const dcf = fundDcf(fund, quote && quote.price, quote && quote.currency);
+  const dcf = fundDcf(fund, quote && quote.price, quote && quote.currency, finDcfEdits[symbol]);
   const tile = function (label, value, sub, growth) {
     return '<div class="fin-kpi"><span class="fin-kpi-label">' + esc(label) + '</span>' +
       '<strong class="fin-kpi-value">' + esc(value) + '</strong>' +
@@ -1351,6 +1385,7 @@ async function paintFinBody() {
       '</div>';
   };
   body.innerHTML =
+    finPriceHtml(quote, t) +
     '<div class="fin-kpis">' +
       tile(f.rev, val(newest.revenue), per, newest.growth) +
       tile(f.netIncome, val(newest.netIncome), newest.margin == null ? per : per + ' · ' + newest.margin.toFixed(1) + '% ' + f.netMargin, null) +
@@ -1359,7 +1394,7 @@ async function paintFinBody() {
       tile(f.equity, val(newest.equity), per, null) +
       tile(f.roe, roeText(newest), newest.kind === 'Q' ? per + ' · ' + f.annualised : per, null) +
     '</div>' +
-    finDcfHtml(dcf, t) +
+    '<div id="finDcfSlot">' + finDcfHtml(dcf, t) + '</div>' +
     '<div id="finAiSlot"></div>' +
     '<div class="fin-charts">' +
       '<div class="fin-chart"><h3>' + esc(t.chartRevenue) + '</h3><div class="fin-chart-meta">' +
@@ -1385,8 +1420,10 @@ async function paintFinBody() {
           '<td>' + esc(roeText(p)) + '</td></tr>';
       }).join('') +
     '</tbody></table></div>';
+  finDcfPatch(dcf);
   paintFinCharts(list.slice().reverse(), f);
   paintFinAiOut();
+  paintFinPrice();
 }
 
 function paintFinCharts(periods, f) {
@@ -1427,6 +1464,85 @@ function paintFinCharts(periods, f) {
     });
     line.render(); finCharts.push(line);
   }
+}
+
+/* PRICE
+   The report values a share, so the price it is being valued against leads
+   the report instead of hiding behind a link. Only the range is refetched:
+   the fundamentals above stay painted while the line changes. */
+const FIN_RANGES = [['1mo', '1M'], ['3mo', '3M'], ['6mo', '6M'], ['1y', '1Y'], ['5y', '5Y']];
+
+function finPriceHtml(quote, t) {
+  const cur = (quote && quote.currency) || fundCurrencySymbol(finState.symbol) || '';
+  const price = (quote && isFinite(quote.price)) ? quote.price : null;
+  const pct = (quote && isFinite(quote.pct)) ? quote.pct : null;
+  const chg = pct == null ? '' : '<span class="fin-price-chg ' + (pct >= 0 ? 'up' : 'down') + '">' +
+    (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%</span>';
+  const pills = FIN_RANGES.map(function (pair) {
+    const on = finState.range === pair[0];
+    return '<button type="button" class="' + (on ? 'active' : '') + '" data-fin-range="' + pair[0] +
+      '" aria-pressed="' + (on ? 'true' : 'false') + '">' + pair[1] + '</button>';
+  }).join('');
+  return '<section class="fin-price">' +
+    '<div class="fin-price-head">' +
+      '<div><span class="fin-price-label">' + esc(t.price) + (cur ? ' · ' + esc(cur) : '') + '</span>' +
+      '<div class="fin-price-value">' + esc(price == null ? '—' : finMoney(price, cur)) + chg + '</div>' +
+      '<div class="fin-price-meta" id="finPriceMeta"></div></div>' +
+      '<div class="mkt-seg" id="finPriceSeg" role="group" aria-label="' + esc(t.price) + '">' + pills + '</div>' +
+    '</div>' +
+    '<div id="finPriceChart"></div>' +
+  '</section>';
+}
+
+async function paintFinPrice() {
+  const symbol = finState.symbol;
+  const range = finState.range || '6mo';
+  const node = document.getElementById('finPriceChart');
+  if (!node || !symbol) return;
+  const t = finT();
+  const seq = ++finPriceSeq;
+  node.innerHTML = '<div class="fin-empty">' + esc(t.loading) + '</div>';
+  const list = await fetchHistory(symbol, range);
+  if (seq !== finPriceSeq || finState.symbol !== symbol) return;
+  const host = document.getElementById('finPriceChart');
+  if (!host) return;
+  const meta = document.getElementById('finPriceMeta');
+  const points = (list || []).filter(function (p) { return p && isFinite(p.y); });
+  if (!points.length) {
+    host.innerHTML = '<div class="fin-empty">' + esc(t.priceEmpty) + '</div>';
+    if (meta) meta.innerHTML = '';
+    return;
+  }
+  const cur = (finState.quote && finState.quote.currency) || fundCurrencySymbol(symbol) || '';
+  const first = points[0].y, last = points[points.length - 1].y;
+  const pct = first > 0 ? (last / first - 1) * 100 : null;
+  const up = pct == null || pct >= 0;
+  if (meta) {
+    const label = (FIN_RANGES.filter(function (p) { return p[0] === range; })[0] || ['', range])[1];
+    meta.innerHTML = esc(label + ' ' + t.priceIn) + ' <b class="' + (up ? 'up' : 'down') + '">' +
+      (pct == null ? '—' : (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%') + '</b>';
+  }
+  if (typeof ApexCharts === 'undefined') { host.innerHTML = ''; return; }
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if (finPriceChart) { try { finPriceChart.destroy(); } catch (e) {} finPriceChart = null; }
+  host.innerHTML = '';
+  const chart = new ApexCharts(host, {
+    series: [{ name: symbol, data: points.map(function (p) { return { x: p.x, y: p.y }; }) }],
+    chart: { type: 'area', height: 190, toolbar: { show: false }, fontFamily: 'Inter', background: 'transparent', zoom: { enabled: false } },
+    theme: { mode: isDark ? 'dark' : 'light' },
+    colors: [up ? '#0f9d58' : '#d10a11'],
+    stroke: { curve: 'smooth', width: 2.2 },
+    fill: { type: 'gradient', gradient: { opacityFrom: 0.22, opacityTo: 0.01 } },
+    dataLabels: { enabled: false },
+    markers: { size: 0, hover: { size: 4 } },
+    grid: { borderColor: isDark ? '#334155' : '#f1f3f5', strokeDashArray: 4, padding: { left: 6, right: 6 } },
+    xaxis: { type: 'datetime', labels: { datetimeUTC: false, style: { fontSize: '10px' } }, axisBorder: { show: false }, axisTicks: { show: false } },
+    yaxis: { labels: { style: { fontSize: '10px' }, formatter: function (v) { return v == null ? '' : v.toLocaleString('en-US', { maximumFractionDigits: v >= 100 ? 0 : 2 }); } } },
+    tooltip: { x: { format: 'dd MMM yyyy' }, y: { formatter: function (v) { return finMoney(v, cur); } } }
+  });
+  chart.render();
+  finPriceChart = chart;
+  finCharts.push(chart);
 }
 
 /* One entry per reported period, newest first. Growth compares with the same
@@ -1502,7 +1618,9 @@ function finShares(fund, price, priceCur) {
   return null;
 }
 
-function fundDcf(fund, price, priceCur) {
+const finDcfEdits = {};   // symbol -> assumptions the reader typed
+
+function fundDcf(fund, price, priceCur, edits) {
   if (!fund) return null;
   const annual = finAnnualOldestFirst(fund);
   const fcfPeriods = annual.filter(function (p) { return p.fcf && isFinite(p.fcf.raw); }).slice(-5);
@@ -1514,6 +1632,9 @@ function fundDcf(fund, price, priceCur) {
   const shares = finShares(fund, price, priceCur);
   if (!(shares > 0)) return { ok: false, reason: 'noShares' };
 
+  /* The default growth is the company's own record rather than a hope: FCF
+     CAGR over the reported years, revenue CAGR when FCF is too short or its
+     sign flipped. */
   let growth = finCagr(fcfPeriods.map(function (p) { return p.fcf.raw; }));
   let assumed = false, histYears = fcfPeriods.length - 1;
   if (growth == null) {
@@ -1525,25 +1646,45 @@ function fundDcf(fund, price, priceCur) {
   /* A short history can compound into a rate no company holds for five years,
      so the cap is part of the model and the card says when it bit. */
   const capped = growth > FIN_DCF.growthMax || growth < FIN_DCF.growthMin;
-  growth = Math.min(FIN_DCF.growthMax, Math.max(FIN_DCF.growthMin, growth));
+  const growthDefault = Math.min(FIN_DCF.growthMax, Math.max(FIN_DCF.growthMin, growth));
 
-  const r = FIN_DCF.discount, tg = FIN_DCF.terminal;
-  let fcf = base, pv = 0;
-  for (let year = 1; year <= FIN_DCF.years; year++) {
-    fcf *= 1 + growth;
+  /* Every figure the reader can change is an assumption, so each is read back
+     on its own: a blank field falls back to the model's value for that field
+     instead of emptying the whole calculation. */
+  const e = edits || {};
+  const g = isFinite(e.growth) ? e.growth : growthDefault;
+  const r = (isFinite(e.discount) && e.discount > 0) ? e.discount : FIN_DCF.discount;
+  const terminalRaw = isFinite(e.terminal) ? e.terminal : FIN_DCF.terminal;
+  const years = Math.max(1, Math.min(15, isFinite(e.years) ? Math.round(e.years) : FIN_DCF.years));
+  const invalid = !(r > 0) || terminalRaw >= r;
+  const tg = invalid ? Math.min(terminalRaw, r - 0.005) : terminalRaw;
+
+  let pv = 0, fcf = base;
+  for (let year = 1; year <= years; year++) {
+    fcf *= 1 + g;
     pv += fcf / Math.pow(1 + r, year);
   }
-  pv += (fcf * (1 + tg)) / (r - tg) / Math.pow(1 + r, FIN_DCF.years);
-  const perShare = pv / shares;
+  const tvPv = (fcf * (1 + tg)) / (r - tg) / Math.pow(1 + r, years);
+  const equity = pv + tvPv;
+  const perShare = invalid ? null : equity / shares;
   const comparable = price && isFinite(price) && price > 0 && (!priceCur || !currency || priceCur === currency);
+
+  /* Two things decide whether the answer is worth reading: how much of it is
+     terminal value, and whether the cash flow it starts from is really cash
+     the owners could take out. */
+  const last = annual[annual.length - 1];
+  const ni = (last && last.netIncome && isFinite(last.netIncome.raw)) ? last.netIncome.raw : null;
+
   return {
-    ok: true, perShare: perShare, currency: currency,
+    ok: true, perShare: perShare, currency: currency, invalid: invalid,
     price: comparable ? price : null, priceCur: priceCur || currency,
-    upside: comparable ? (perShare / price - 1) * 100 : null,
+    upside: (comparable && perShare != null) ? (perShare / price - 1) * 100 : null,
     base: base, baseYear: String(basePeriod.end).slice(0, 4),
-    growth: growth, assumed: assumed, capped: capped, histYears: histYears,
-    discount: r, terminal: tg, years: FIN_DCF.years,
-    shares: shares, equity: pv
+    growth: g, growthDefault: growthDefault, assumed: assumed, capped: capped, histYears: histYears,
+    discount: r, terminal: tg, years: years,
+    shares: shares, equity: equity,
+    tvShare: equity > 0 ? (tvPv / equity) * 100 : null,
+    warnFcf: !!(ni && base > ni * 1.05)
   };
 }
 
@@ -1557,36 +1698,92 @@ function finMoney(raw, currency) {
 function finDcfHtml(dcf, t) {
   if (!dcf) return '';
   const head = '<div class="fin-dcf-head"><h3>' + esc(t.dcfTitle) + '</h3>' +
-    '<span class="fin-dcf-tag">DCF' + (dcf.ok && dcf.currency ? ' · ' + esc(dcf.currency) : '') + '</span></div>';
+    '<div class="fin-dcf-head-side"><span class="fin-dcf-tag">DCF' +
+      (dcf.ok && dcf.currency ? ' · ' + esc(dcf.currency) : '') + '</span>' +
+      (dcf.ok ? '<button type="button" class="fin-dcf-reset" data-dcf-reset>' + esc(t.dcfReset) + '</button>' : '') +
+    '</div></div>';
   if (!dcf.ok) {
     const why = dcf.reason === 'negFcf' ? t.dcfNegFcf : dcf.reason === 'noShares' ? t.dcfNoShares : t.dcfNoFcf;
     return '<section class="fin-dcf is-na">' + head + '<p class="fin-dcf-empty">' + esc(why) + '</p></section>';
   }
-  const up = dcf.upside;
-  const tone = up == null ? '' : up >= 0 ? 'up' : 'down';
   const row = function (label, value) {
     return '<div class="fin-dcf-row"><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>';
   };
-  const rows = [
-    row(t.dcfBaseFcf, compactNum(dcf.base, dcf.currency) + ' · FY' + dcf.baseYear),
-    row(t.dcfGrowth, (dcf.growth >= 0 ? '+' : '') + (dcf.growth * 100).toFixed(1) + '% ' + t.dcfPerYear +
-      (dcf.histYears > 0 ? ' · ' + t.dcfSpan(dcf.histYears) : '') +
-      (dcf.capped ? ' · ' + t.dcfCapped : '') +
-      (dcf.assumed ? ' · ' + t.dcfAssumed : '')),
-    row(t.dcfDiscount, (dcf.discount * 100).toFixed(1) + '%'),
-    row(t.dcfTerminal, (dcf.terminal * 100).toFixed(1) + '%'),
-    row(t.dcfYears, dcf.years + ' ' + t.dcfYearsUnit),
-    row(t.dcfShares, compactNum(dcf.shares, ''))
-  ].join('');
-  const compare = dcf.price == null ? '' :
-    '<div class="fin-dcf-gap ' + tone + '"><b>' + (up >= 0 ? '+' : '') + up.toFixed(1) + '%</b>' +
-    '<span>' + esc(t.dcfVs) + ' ' + esc(finMoney(dcf.price, dcf.priceCur)) + '</span></div>';
-  return '<section class="fin-dcf">' + head +
+  const inputRow = function (label, key, value, unit, max) {
+    return '<div class="fin-dcf-row is-input"><span>' + esc(label) + '</span>' +
+      '<label class="fin-dcf-field"><input type="number" inputmode="decimal" data-dcf="' + key + '"' +
+      ' step="' + (key === 'years' ? '1' : '0.1') + '" min="' + (key === 'terminal' ? '-5' : key === 'years' ? '1' : key === 'growth' ? '-50' : '0.1') + '"' +
+      (max ? ' max="' + max + '"' : '') + ' value="' + esc(String(value)) + '" />' +
+      (unit ? '<i>' + unit + '</i>' : '') + '</label></div>';
+  };
+  const up = dcf.upside;
+  const tone = up == null ? '' : up >= 0 ? 'up' : 'down';
+  const growthText = (dcf.growth * 100).toFixed(1);
+  return '<section class="fin-dcf" id="finDcf">' + head +
     '<div class="fin-dcf-main"><div><span class="fin-dcf-label">' + esc(t.dcfValue) + '</span>' +
-    '<strong class="fin-dcf-value">' + esc(finMoney(dcf.perShare, dcf.currency)) + '</strong></div>' +
-    compare + '</div>' +
-    '<div class="fin-dcf-rows">' + rows + '</div>' +
+    '<strong class="fin-dcf-value" id="finDcfValue">' +
+      esc(dcf.perShare == null ? '—' : finMoney(dcf.perShare, dcf.currency)) + '</strong></div>' +
+    (dcf.price == null ? '' : '<div class="fin-dcf-gap ' + tone + '" id="finDcfGap"></div>') +
+    '</div>' +
+    '<div class="fin-dcf-rows">' +
+      row(t.dcfBaseFcf, compactNum(dcf.base, dcf.currency) + ' · FY' + dcf.baseYear) +
+      row(t.dcfShares, compactNum(dcf.shares, '')) +
+      inputRow(t.dcfGrowth, 'growth', growthText, '% per year', null) +
+      inputRow(t.dcfDiscount, 'discount', (dcf.discount * 100).toFixed(1), '%', null) +
+      inputRow(t.dcfTerminal, 'terminal', (dcf.terminal * 100).toFixed(1), '%', null) +
+      inputRow(t.dcfYears, 'years', dcf.years, '', 15) +
+    '</div>' +
+    '<p class="fin-dcf-note fin-dcf-warn" id="finDcfWarn"></p>' +
+    '<p class="fin-dcf-note" id="finDcfTv"></p>' +
     '<p class="fin-dcf-note">' + esc(t.dcfNote) + '</p></section>';
+}
+
+/* Recompute from the inputs and patch only the numbers, so typing never
+   re-renders the card and never steals the focus of the field being used. */
+function finDcfPatch(dcf) {
+  if (!dcf || !dcf.ok) return;
+  const t = finT();
+  const val = document.getElementById('finDcfValue');
+  if (val) val.textContent = dcf.perShare == null ? '—' : finMoney(dcf.perShare, dcf.currency);
+  const gap = document.getElementById('finDcfGap');
+  if (gap) {
+    const up = dcf.upside;
+    gap.className = 'fin-dcf-gap ' + (up == null ? '' : up >= 0 ? 'up' : 'down');
+    gap.innerHTML = up == null ? '' : '<b>' + (up >= 0 ? '+' : '') + up.toFixed(1) + '%</b>' +
+      '<span>' + esc(t.dcfVs) + ' ' + esc(finMoney(dcf.price, dcf.priceCur)) + '</span>';
+  }
+  const warn = document.getElementById('finDcfWarn');
+  if (warn) {
+    const msg = dcf.invalid ? t.dcfBadTerminal : dcf.warnFcf ? t.dcfWarnFcf : '';
+    warn.textContent = msg;
+    warn.style.display = msg ? 'block' : 'none';
+  }
+  const tv = document.getElementById('finDcfTv');
+  if (tv) tv.textContent = dcf.tvShare == null ? '' : t.dcfTv(Math.round(dcf.tvShare));
+}
+
+function finDcfRecalc() {
+  const card = document.getElementById('finDcf');
+  if (!card || !finState.fund) return;
+  const edits = {};
+  [['growth', 100], ['discount', 100], ['terminal', 100], ['years', 1]].forEach(function (pair) {
+    const el = card.querySelector('[data-dcf="' + pair[0] + '"]');
+    const v = el ? parseFloat(el.value) : NaN;
+    if (isFinite(v)) edits[pair[0]] = v / pair[1];
+  });
+  finDcfEdits[finState.symbol] = edits;
+  const quote = finState.quote || {};
+  finDcfPatch(fundDcf(finState.fund, quote.price, quote.currency, edits));
+}
+
+function finDcfReset() {
+  delete finDcfEdits[finState.symbol];
+  const slot = document.getElementById('finDcfSlot');
+  if (!slot || !finState.fund) return;
+  const quote = finState.quote || {};
+  const dcf = fundDcf(finState.fund, quote.price, quote.currency, null);
+  slot.innerHTML = finDcfHtml(dcf, finT());
+  finDcfPatch(dcf);
 }
 
 function compactNum(raw, currency) {
