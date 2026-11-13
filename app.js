@@ -116,7 +116,7 @@ const I18N = {
     market: {
       gauges: 'Markets at a glance',
       addTicker: 'Add ticker', addTickerPh: 'Ticker, e.g. BBCA.JK', notFound: 'No quote found', removeTicker: 'Remove ticker',
-      performance: 'Performance', performanceSub: 'All indexes in US dollars, each day converted at that day\u2019s USD/IDR or USD/JPY close, then rebased to the start of the period',
+      performance: 'Performance', performanceSub: 'All indexes in US dollars, each day converted at that day\u2019s USD/IDR or USD/JPY close, then rebased over the dates every selected index shares',
       movers: 'Top movers', gainers: 'Gainers', losers: 'Losers',
       mostActive: 'Most active', watch: 'Market watch', rates: 'Rates & volatility',
       coverage: 'Coverage', coverageSub: 'Open a card for its fundamentals and the AI read',
@@ -205,7 +205,7 @@ const I18N = {
     market: {
       gauges: 'Pasar sekilas',
       addTicker: 'Tambah ticker', addTickerPh: 'Ticker, mis. BBCA.JK', notFound: 'Harga tidak ditemukan', removeTicker: 'Hapus ticker',
-      performance: 'Kinerja', performanceSub: 'Semua indeks dalam dolar AS, tiap hari dikonversi memakai kurs USD/IDR atau USD/JPY penutupan hari itu, lalu diindeks dari awal periode',
+      performance: 'Kinerja', performanceSub: 'Semua indeks dalam dolar AS, tiap hari dikonversi memakai kurs USD/IDR atau USD/JPY penutupan hari itu, lalu diindeks pada tanggal yang dimiliki semua indeks terpilih',
       movers: 'Penggerak teratas', gainers: 'Naik', losers: 'Turun',
       mostActive: 'Teraktif', watch: 'Pantauan pasar', rates: 'Suku bunga & volatilitas',
       coverage: 'Liputan', coverageSub: 'Buka kartu untuk fundamental dan analisis AI',
@@ -1014,17 +1014,43 @@ async function pfBenchHistories(range) {
   const fxLists = await Promise.all(sel.map(function (b) {
     return needsFx(b) ? mktBenchLoad(b.currency + '=X', range) : Promise.resolve([]);
   }));
-  return sel.map(function (b, i) {
+  const converted = sel.map(function (b, i) {
     const rates = pfRateSeries(fxLists[i]);
-    const converted = (lists[i] || []).map(function (p) {
+    return (lists[i] || []).map(function (p) {
       if (!p || !isFinite(p.y) || p.y <= 0) return { x: p && p.x, y: null };
       if (!needsFx(b)) return { x: p.x, y: p.y };
       /* Spot is only a fallback for a range too short to carry a rate. */
       const units = pfRateOn(rates, pfDayKey(p.x)) || pfUnitsPerUsd(b.currency);
       return units ? { x: p.x, y: p.y / units } : { x: p.x, y: null };
     });
-    return { id: b.id, label: b.label, color: b.color, currency: PF_BENCH_CCY, data: pctSeries(converted) };
   });
+
+  /* Jakarta, New York and Tokyo close on different days, so untrimmed lines
+     start and end a day apart. The span kept is the one every selected index
+     traded in — the same days at both ends, rebased from that first day. */
+  const span = pfSharedSpan(converted);
+  return sel.map(function (b, i) {
+    const list = span ? converted[i].filter(function (p) {
+      if (!p || !isFinite(p.y)) return false;
+      const k = pfDayKey(p.x);
+      return k >= span.from && k <= span.to;
+    }) : converted[i];
+    return { id: b.id, label: b.label, color: b.color, currency: PF_BENCH_CCY, data: pctSeries(list) };
+  });
+}
+
+function pfSharedSpan(lists) {
+  if (!lists || lists.length < 2) return null;
+  const sets = lists.map(function (list) {
+    const set = Object.create(null);
+    (list || []).forEach(function (p) { if (p && isFinite(p.y)) set[pfDayKey(p.x)] = 1; });
+    return set;
+  });
+  const shared = Object.keys(sets[0]).filter(function (k) {
+    return sets.every(function (set) { return set[k]; });
+  }).sort();
+  if (shared.length < 2) return null;
+  return { from: shared[0], to: shared[shared.length - 1] };
 }
 
 function paintBenchChips(scope, series) {
