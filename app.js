@@ -116,7 +116,7 @@ const I18N = {
     market: {
       gauges: 'Markets at a glance',
       addTicker: 'Add ticker', addTickerPh: 'Ticker, e.g. BBCA.JK', notFound: 'No quote found', removeTicker: 'Remove ticker',
-      performance: 'Performance', performanceSub: 'Selected indexes in their own currency, indexed to the start of the period',
+      performance: 'Performance', performanceSub: 'All indexes in US dollars, each day converted at that day\u2019s USD/IDR or USD/JPY close, then rebased to the start of the period',
       movers: 'Top movers', gainers: 'Gainers', losers: 'Losers',
       mostActive: 'Most active', watch: 'Market watch', rates: 'Rates & volatility',
       coverage: 'Coverage', coverageSub: 'Open a card for its fundamentals and the AI read',
@@ -205,7 +205,7 @@ const I18N = {
     market: {
       gauges: 'Pasar sekilas',
       addTicker: 'Tambah ticker', addTickerPh: 'Ticker, mis. BBCA.JK', notFound: 'Harga tidak ditemukan', removeTicker: 'Hapus ticker',
-      performance: 'Kinerja', performanceSub: 'Indeks terpilih dalam mata uangnya sendiri, diindeks dari awal periode',
+      performance: 'Kinerja', performanceSub: 'Semua indeks dalam dolar AS, tiap hari dikonversi memakai kurs USD/IDR atau USD/JPY penutupan hari itu, lalu diindeks dari awal periode',
       movers: 'Penggerak teratas', gainers: 'Naik', losers: 'Turun',
       mostActive: 'Teraktif', watch: 'Pantauan pasar', rates: 'Suku bunga & volatilitas',
       coverage: 'Liputan', coverageSub: 'Buka kartu untuk fundamental dan analisis AI',
@@ -974,19 +974,56 @@ function pfToggleBench(id) {
 let marketBenchRange = '6mo';
 const mktBenchCache = Object.create(null);
 
-function pfBenchHistories(range) {
+/* IHSG is quoted in rupiah, the Nikkei in yen, the American indexes in
+   dollars: on one axis those are different units, so every line is converted
+   to dollars before it is rebased. The rate is that day's own close, the same
+   way the portfolio chart does it. */
+const PF_BENCH_CCY = 'USD';
+
+function pfRateSeries(list) {
+  return (list || []).filter(function (p) { return p && isFinite(p.y) && p.y > 0; })
+    .map(function (p) { return { k: pfDayKey(p.x), v: p.y }; })
+    .sort(function (a, b) { return a.k < b.k ? -1 : a.k > b.k ? 1 : 0; });
+}
+
+/* The last rate on or before that day: FX closes on its own holidays, so a
+   missing day borrows the previous one instead of leaving a hole. */
+function pfRateOn(series, day) {
+  if (!series.length) return null;
+  let hit = null;
+  for (let i = 0; i < series.length; i++) {
+    if (series[i].k <= day) hit = series[i].v; else break;
+  }
+  return hit == null ? series[0].v : hit;
+}
+
+function mktBenchLoad(symbol, range) {
+  const cacheKey = symbol + '|' + range;
+  if (mktBenchCache[cacheKey]) return Promise.resolve(mktBenchCache[cacheKey]);
+  return fetchHistory(symbol, range).catch(function () { return []; }).then(function (list) {
+    if (list && list.length) mktBenchCache[cacheKey] = list;
+    return list || [];
+  });
+}
+
+async function pfBenchHistories(range) {
   const sel = PF_BENCH.filter(function (b) { return pfBenchSel.indexOf(b.id) !== -1; });
-  return Promise.all(sel.map(function (b) {
-    const cacheKey = b.symbol + '|' + range;
-    if (mktBenchCache[cacheKey]) return Promise.resolve(mktBenchCache[cacheKey]);
-    return fetchHistory(b.symbol, range).catch(function () { return []; }).then(function (list) {
-      if (list && list.length) mktBenchCache[cacheKey] = list;
-      return list || [];
+  const needsFx = function (b) { return b.currency !== PF_BENCH_CCY; };
+  await Promise.all(sel.map(function (b) { return needsFx(b) ? pfEnsureFx(b.currency) : 1; }));
+  const lists = await Promise.all(sel.map(function (b) { return mktBenchLoad(b.symbol, range); }));
+  const fxLists = await Promise.all(sel.map(function (b) {
+    return needsFx(b) ? mktBenchLoad(b.currency + '=X', range) : Promise.resolve([]);
+  }));
+  return sel.map(function (b, i) {
+    const rates = pfRateSeries(fxLists[i]);
+    const converted = (lists[i] || []).map(function (p) {
+      if (!p || !isFinite(p.y) || p.y <= 0) return { x: p && p.x, y: null };
+      if (!needsFx(b)) return { x: p.x, y: p.y };
+      /* Spot is only a fallback for a range too short to carry a rate. */
+      const units = pfRateOn(rates, pfDayKey(p.x)) || pfUnitsPerUsd(b.currency);
+      return units ? { x: p.x, y: p.y / units } : { x: p.x, y: null };
     });
-  })).then(function (lists) {
-    return sel.map(function (b, i) {
-      return { id: b.id, label: b.label, color: b.color, data: pctSeries(lists[i]) };
-    });
+    return { id: b.id, label: b.label, color: b.color, currency: PF_BENCH_CCY, data: pctSeries(converted) };
   });
 }
 
