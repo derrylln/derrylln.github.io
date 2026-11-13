@@ -1707,16 +1707,23 @@ function finShares(fund, price, priceCur) {
 
 const finDcfEdits = {};   // symbol -> assumptions the reader typed
 
-/* One projection, used by the point value, the band and the reverse solve, so
-   the three can never disagree about what the model is. */
-function finProject(base, growth, discount, terminal, years) {
-  let fcf = base, pv = 0;
-  for (let year = 1; year <= years; year++) {
-    fcf *= 1 + growth;
-    pv += fcf / Math.pow(1 + discount, year);
+/* The model is the reported numbers; growth and discount are the guesses. One
+   projection serves the point value, the band and the reverse solve, so the
+   three can never drift apart. */
+function finValue(model, growth, discount) {
+  const terminal = Math.min(model.terminal, discount - 0.005);
+  let flow = model.base, pv = 0;
+  for (let year = 1; year <= model.years; year++) {
+    flow *= 1 + growth;
+    pv += flow / Math.pow(1 + discount, year);
   }
-  const tvPv = (fcf * (1 + terminal)) / (discount - terminal) / Math.pow(1 + discount, years);
-  return { enterprise: pv + tvPv, tvPv: tvPv };
+  const tvPv = (flow * (1 + terminal)) / (discount - terminal) / Math.pow(1 + discount, model.years);
+  const enterprise = pv + tvPv;
+  return {
+    enterprise: enterprise,
+    perShare: (enterprise - model.netDebt) / model.shares,
+    tvShare: enterprise > 0 ? (tvPv / enterprise) * 100 : null
+  };
 }
 
 function fundDcf(fund, price, priceCur, edits) {
@@ -1764,10 +1771,6 @@ function fundDcf(fund, price, priceCur, edits) {
   const invalid = !(r > 0) || terminalRaw >= r;
   const tg = invalid ? Math.min(terminalRaw, r - 0.005) : terminalRaw;
 
-  const projected = finProject(base, g, r, tg, years);
-  const tvPv = projected.tvPv;
-  const enterprise = projected.enterprise;
-
   /* Discounting gives an enterprise value. A share is worth that less the
      debt it answers for, or more when the company holds net cash, so the
      bridge to equity value belongs in the model rather than in a footnote. */
@@ -1778,8 +1781,9 @@ function fundDcf(fund, price, priceCur, edits) {
     sameCurrency(fund.debt && fund.debt.currency) && sameCurrency(fund.cash && fund.cash.currency);
   const netDebt = hasBalance ? (debtRaw || 0) - (cashRaw || 0) : null;
 
-  const equity = invalid ? null : enterprise - (netDebt || 0);
-  const perShare = equity == null ? null : equity / shares;
+  const model = { base: base, shares: shares, netDebt: netDebt || 0, terminal: tg, years: years };
+  const valued = invalid ? null : finValue(model, g, r);
+  const perShare = valued ? valued.perShare : null;
   const comparable = price && isFinite(price) && price > 0 && (!priceCur || !currency || priceCur === currency);
 
   /* Two things decide whether the answer is worth reading: how much of it is
@@ -1794,11 +1798,11 @@ function fundDcf(fund, price, priceCur, edits) {
     upside: (comparable && perShare != null) ? (perShare / price - 1) * 100 : null,
     base: base, baseYear: String(basePeriod.end).slice(0, 4),
     basis: basis, growthEdited: isFinite(e.growth),
-    growth: g, growthRaw: growthRaw, growthDefault: growthDefault,
+    growth: g, growthRaw: growthRaw,
     assumed: assumed, capped: capped, histYears: histYears,
     discount: r, terminal: tg, years: years,
-    shares: shares, enterprise: enterprise, equity: equity, netDebt: netDebt,
-    tvShare: enterprise > 0 ? (tvPv / enterprise) * 100 : null,
+    shares: shares, netDebt: netDebt, model: model,
+    tvShare: valued ? valued.tvShare : null,
     cashAboveProfit: basis === 'fcf' && !!(ni && base > ni * 1.05)
   };
 }
@@ -1813,52 +1817,45 @@ const FIN_BAND = {
   edge: 0.15, impliedMin: -0.5, impliedMax: 1.5
 };
 
-function finPerShare(dcf, growth, discount) {
-  const terminal = Math.min(dcf.terminal, discount - 0.005);
-  const projected = finProject(dcf.base, growth, discount, terminal, dcf.years);
-  return (projected.enterprise - (dcf.netDebt || 0)) / dcf.shares;
-}
-
 function finDcfBand(dcf) {
-  if (!dcf || !dcf.ok || dcf.perShare == null || !(dcf.price > 0)) return null;
-  const rows = [], seenGrowth = Object.create(null);
+  if (!dcf || !dcf.ok || !(dcf.price > 0)) return null;
+  const rows = [], seen = Object.create(null);
   FIN_BAND.growthSteps.forEach(function (step) {
-    const raw = dcf.growth + step;
-    const growth = Math.min(FIN_DCF.growthMax, Math.max(FIN_DCF.growthMin, raw));
-    /* When the cap flattens two rows into one rate, showing both would be the
-       same number twice; the band keeps the distinct rates only. */
+    const growth = Math.min(FIN_DCF.growthMax, Math.max(FIN_DCF.growthMin, dcf.growth + step));
+    /* A capped row can land on the same rate as its neighbour: one row each. */
     const key = growth.toFixed(9);
-    if (seenGrowth[key]) return;
-    seenGrowth[key] = 1;
+    if (seen[key]) return;
+    seen[key] = 1;
+    const current = Math.abs(growth - dcf.growth) < 1e-9;
     const cells = FIN_BAND.discounts.map(function (offset) {
       const discount = Math.max(0.01, dcf.discount + offset);
-      const value = finPerShare(dcf, growth, discount);
-      const side = value >= dcf.price * (1 + FIN_BAND.edge) ? 'under'
-        : value <= dcf.price / (1 + FIN_BAND.edge) ? 'over' : 'mid';
+      const value = finValue(dcf.model, growth, discount).perShare;
       return {
-        discount: discount, value: value, side: side,
-        spot: offset === 0 && Math.abs(growth - dcf.growth) < 1e-9
+        discount: discount, value: value,
+        side: value >= dcf.price * (1 + FIN_BAND.edge) ? 'under'
+          : value <= dcf.price / (1 + FIN_BAND.edge) ? 'over' : 'mid',
+        spot: current && offset === 0
       };
     });
-    rows.push({ growth: growth, step: step, cells: cells });
+    rows.push({ growth: growth, current: current, cells: cells });
   });
-  const values = [];
-  rows.forEach(function (row) {
-    row.cells.forEach(function (cell) { if (isFinite(cell.value)) values.push(cell.value); });
-  });
-  if (!values.length) return null;
-  const min = Math.min.apply(null, values), max = Math.max.apply(null, values);
-  const verdict = min >= dcf.price * (1 + FIN_BAND.edge) ? 'under'
-    : max <= dcf.price / (1 + FIN_BAND.edge) ? 'over' : 'none';
-  return { rows: rows, min: min, max: max, verdict: verdict };
+  if (!rows.length) return null;
+  const values = rows.reduce(function (all, row) {
+    return all.concat(row.cells.map(function (cell) { return cell.value; }));
+  }, []);
+  return {
+    rows: rows,
+    verdict: Math.min.apply(null, values) >= dcf.price * (1 + FIN_BAND.edge) ? 'under'
+      : Math.max.apply(null, values) <= dcf.price / (1 + FIN_BAND.edge) ? 'over' : 'none'
+  };
 }
 
 /* The price read backwards: the growth that, held for the same horizon at the
    same discount rate, makes the model return exactly today's price. Value is
    monotone in growth, so bisection is enough. */
 function finImpliedGrowth(dcf) {
-  if (!dcf || !dcf.ok || dcf.perShare == null || !(dcf.price > 0)) return null;
-  const at = function (growth) { return finPerShare(dcf, growth, dcf.discount); };
+  if (!dcf || !dcf.ok || !(dcf.price > 0)) return null;
+  const at = function (growth) { return finValue(dcf.model, growth, dcf.discount).perShare; };
   if (at(FIN_BAND.impliedMax) < dcf.price) return { value: FIN_BAND.impliedMax, above: true, below: false };
   if (at(FIN_BAND.impliedMin) > dcf.price) return { value: FIN_BAND.impliedMin, above: false, below: true };
   let lo = FIN_BAND.impliedMin, hi = FIN_BAND.impliedMax;
@@ -1887,7 +1884,7 @@ function finVerdictHtml(dcf, t) {
   const head = '<tr><th>' + esc(t.vGrowthRow) + '</th>' +
     band.rows[0].cells.map(function (cell) { return '<th>' + (cell.discount * 100).toFixed(1) + '%</th>'; }).join('') + '</tr>';
   const body = band.rows.map(function (row) {
-    const lead = '<td>' + (row.growth * 100).toFixed(1) + '%' + (row.step === 0 ? ' <em>' + esc(t.vSpot) + '</em>' : '') + '</td>';
+    const lead = '<td>' + (row.growth * 100).toFixed(1) + '%' + (row.current ? ' <em>' + esc(t.vSpot) + '</em>' : '') + '</td>';
     return '<tr>' + lead + row.cells.map(function (cell) {
       return '<td class="is-' + cell.side + (cell.spot ? ' is-spot' : '') + '">' + esc(finMoney(cell.value, dcf.currency)) + '</td>';
     }).join('') + '</tr>';
