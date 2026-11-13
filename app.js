@@ -189,7 +189,20 @@ const I18N = {
       dcfNegNi: 'Net income is negative, so a discounted earnings value has nothing to grow.',
       dcfCapNote: (pct, years) => 'capped from ' + pct + '% a year' + (years > 0 ? ' (' + years + 'y record)' : ''),
       dcfCashCaveat: 'The base cash flow is larger than reported net income, which usually means balance-sheet flows (banks, lenders) rather than cash the owners could take out, so a net income base is worth trying.',
-      dcfBadTerminal: 'Terminal growth has to stay below the discount rate, so no value is shown.'
+      dcfBadTerminal: 'Terminal growth has to stay below the discount rate, so no value is shown.',
+      vTitle: 'Undervalued or overvalued?',
+      vUnder: 'Indicated undervalued', vOver: 'Indicated overvalued', vNone: 'No verdict',
+      vLine: (pct, years) => 'The price asks for ' + pct + ' a year for ' + years + ' years.',
+      vRecord: (pct, years) => 'The company\u2019s own record is ' + pct + ' a year (' + years + 'y).',
+      vRecordNone: 'No reported growth rate to compare against.',
+      vMore: 'more than 150% a year', vLess: 'less than \u221250% a year',
+      vUnderWhy: 'Every value in the band sits at least 15% above the price.',
+      vOverWhy: 'Every value in the band sits at least 15% below the price.',
+      vNoneWhy: 'The band straddles the price, so the data does not support a verdict.',
+      vSuspectWhy: 'The cash flow this model discounts runs far above reported profit, which usually means balance-sheet flows. Switch the basis to net income before reading a verdict.',
+      vGrowthRow: 'Growth', vSpot: 'your model',
+      vBand: 'Value per share',
+      vNote: 'The price is read backwards through the same model. The band moves growth 2 points either way and the discount rate 1 point either way; a verdict needs every value to clear the price by 15%.'
     },
     fundAi: {
       btn: 'AI', title: 'AI fundamental read', loading: 'Reading the numbers…',
@@ -299,7 +312,20 @@ const I18N = {
       dcfNegNi: 'Laba bersih negatif, jadi nilai dari laba tidak punya dasar untuk ditumbuhkan.',
       dcfCapNote: (pct, years) => 'dibatasi dari ' + pct + '% per tahun' + (years > 0 ? ' (rekam ' + years + 'th)' : ''),
       dcfCashCaveat: 'Arus kas dasar lebih besar dari laba bersih yang dilaporkan, biasanya karena arus neraca (bank, lembaga pembiayaan), bukan kas yang bisa diambil pemilik, jadi dasar laba bersih layak dicoba.',
-      dcfBadTerminal: 'Pertumbuhan terminal harus di bawah tingkat diskonto, jadi nilai tidak ditampilkan.'
+      dcfBadTerminal: 'Pertumbuhan terminal harus di bawah tingkat diskonto, jadi nilai tidak ditampilkan.',
+      vTitle: 'Murah atau mahal?',
+      vUnder: 'Terindikasi murah', vOver: 'Terindikasi mahal', vNone: 'Tanpa kesimpulan',
+      vLine: (pct, years) => 'Harga meminta ' + pct + ' per tahun selama ' + years + ' tahun.',
+      vRecord: (pct, years) => 'Rekam jejak emiten ' + pct + ' per tahun (' + years + 'th).',
+      vRecordNone: 'Tidak ada laju pertumbuhan yang bisa dibandingkan.',
+      vMore: 'lebih dari 150% per tahun', vLess: 'kurang dari \u221250% per tahun',
+      vUnderWhy: 'Setiap nilai dalam rentang berada minimal 15% di atas harga.',
+      vOverWhy: 'Setiap nilai dalam rentang berada minimal 15% di bawah harga.',
+      vNoneWhy: 'Rentang nilai mengapit harga, jadi data belum mendukung kesimpulan.',
+      vSuspectWhy: 'Arus kas yang didiskontokan jauh di atas laba yang dilaporkan, biasanya karena arus neraca. Ubah dasar ke laba bersih sebelum membaca kesimpulan.',
+      vGrowthRow: 'Pertumbuhan', vSpot: 'model Anda',
+      vBand: 'Nilai per saham',
+      vNote: 'Harga dibaca terbalik lewat model yang sama. Rentang menggeser pertumbuhan 2 poin dan tingkat diskonto 1 poin ke dua arah; kesimpulan baru muncul bila semua nilai melewati harga sebesar 15%.'
     },
     fundAi: {
       btn: 'AI', title: 'Analisis fundamental AI', loading: 'Membaca angka…',
@@ -1443,6 +1469,7 @@ async function paintFinBody() {
       tile(f.roe, roeText(newest), newest.kind === 'Q' ? per + ' · ' + f.annualised : per, null) +
     '</div>' +
     '<div id="finDcfSlot">' + finDcfHtml(dcf, t) + '</div>' +
+    '<div id="finVerdictSlot"></div>' +
     '<div id="finAiSlot"></div>' +
     '<div class="fin-charts">' +
       '<div class="fin-chart"><h3>' + esc(t.chartRevenue) + '</h3><div class="fin-chart-meta">' +
@@ -1476,6 +1503,7 @@ async function paintFinBody() {
           .filter(Boolean).join(' · ') + '</p>'
       : '');
   finDcfPatch(dcf);
+  paintFinVerdict(dcf);
   paintFinCharts(list.slice().reverse(), f);
   paintFinAiOut();
   paintFinPrice();
@@ -1679,6 +1707,18 @@ function finShares(fund, price, priceCur) {
 
 const finDcfEdits = {};   // symbol -> assumptions the reader typed
 
+/* One projection, used by the point value, the band and the reverse solve, so
+   the three can never disagree about what the model is. */
+function finProject(base, growth, discount, terminal, years) {
+  let fcf = base, pv = 0;
+  for (let year = 1; year <= years; year++) {
+    fcf *= 1 + growth;
+    pv += fcf / Math.pow(1 + discount, year);
+  }
+  const tvPv = (fcf * (1 + terminal)) / (discount - terminal) / Math.pow(1 + discount, years);
+  return { enterprise: pv + tvPv, tvPv: tvPv };
+}
+
 function fundDcf(fund, price, priceCur, edits) {
   if (!fund) return null;
   const annual = finAnnualOldestFirst(fund);
@@ -1724,13 +1764,9 @@ function fundDcf(fund, price, priceCur, edits) {
   const invalid = !(r > 0) || terminalRaw >= r;
   const tg = invalid ? Math.min(terminalRaw, r - 0.005) : terminalRaw;
 
-  let pv = 0, fcf = base;
-  for (let year = 1; year <= years; year++) {
-    fcf *= 1 + g;
-    pv += fcf / Math.pow(1 + r, year);
-  }
-  const tvPv = (fcf * (1 + tg)) / (r - tg) / Math.pow(1 + r, years);
-  const enterprise = pv + tvPv;
+  const projected = finProject(base, g, r, tg, years);
+  const tvPv = projected.tvPv;
+  const enterprise = projected.enterprise;
 
   /* Discounting gives an enterprise value. A share is worth that less the
      debt it answers for, or more when the company holds net cash, so the
@@ -1765,6 +1801,112 @@ function fundDcf(fund, price, priceCur, edits) {
     tvShare: enterprise > 0 ? (tvPv / enterprise) * 100 : null,
     cashAboveProfit: basis === 'fcf' && !!(ni && base > ni * 1.05)
   };
+}
+
+/* VALUATION VERDICT
+   A single point is a guess wearing a number, so the verdict rests on a band:
+   nine valuations across three discount rates and three growth rates. Only
+   when every one of them sits clear of the price by the margin below does the
+   card commit to a word. */
+const FIN_BAND = {
+  discounts: [-0.01, 0, 0.01], growthSteps: [-0.02, 0, 0.02],
+  edge: 0.15, impliedMin: -0.5, impliedMax: 1.5
+};
+
+function finPerShare(dcf, growth, discount) {
+  const terminal = Math.min(dcf.terminal, discount - 0.005);
+  const projected = finProject(dcf.base, growth, discount, terminal, dcf.years);
+  return (projected.enterprise - (dcf.netDebt || 0)) / dcf.shares;
+}
+
+function finDcfBand(dcf) {
+  if (!dcf || !dcf.ok || dcf.perShare == null || !(dcf.price > 0)) return null;
+  const rows = [], seenGrowth = Object.create(null);
+  FIN_BAND.growthSteps.forEach(function (step) {
+    const raw = dcf.growth + step;
+    const growth = Math.min(FIN_DCF.growthMax, Math.max(FIN_DCF.growthMin, raw));
+    /* When the cap flattens two rows into one rate, showing both would be the
+       same number twice; the band keeps the distinct rates only. */
+    const key = growth.toFixed(9);
+    if (seenGrowth[key]) return;
+    seenGrowth[key] = 1;
+    const cells = FIN_BAND.discounts.map(function (offset) {
+      const discount = Math.max(0.01, dcf.discount + offset);
+      const value = finPerShare(dcf, growth, discount);
+      const side = value >= dcf.price * (1 + FIN_BAND.edge) ? 'under'
+        : value <= dcf.price / (1 + FIN_BAND.edge) ? 'over' : 'mid';
+      return {
+        discount: discount, value: value, side: side,
+        spot: offset === 0 && Math.abs(growth - dcf.growth) < 1e-9
+      };
+    });
+    rows.push({ growth: growth, step: step, cells: cells });
+  });
+  const values = [];
+  rows.forEach(function (row) {
+    row.cells.forEach(function (cell) { if (isFinite(cell.value)) values.push(cell.value); });
+  });
+  if (!values.length) return null;
+  const min = Math.min.apply(null, values), max = Math.max.apply(null, values);
+  const verdict = min >= dcf.price * (1 + FIN_BAND.edge) ? 'under'
+    : max <= dcf.price / (1 + FIN_BAND.edge) ? 'over' : 'none';
+  return { rows: rows, min: min, max: max, verdict: verdict };
+}
+
+/* The price read backwards: the growth that, held for the same horizon at the
+   same discount rate, makes the model return exactly today's price. Value is
+   monotone in growth, so bisection is enough. */
+function finImpliedGrowth(dcf) {
+  if (!dcf || !dcf.ok || dcf.perShare == null || !(dcf.price > 0)) return null;
+  const at = function (growth) { return finPerShare(dcf, growth, dcf.discount); };
+  if (at(FIN_BAND.impliedMax) < dcf.price) return { value: FIN_BAND.impliedMax, above: true, below: false };
+  if (at(FIN_BAND.impliedMin) > dcf.price) return { value: FIN_BAND.impliedMin, above: false, below: true };
+  let lo = FIN_BAND.impliedMin, hi = FIN_BAND.impliedMax;
+  for (let i = 0; i < 80; i++) {
+    const mid = (lo + hi) / 2;
+    if (at(mid) < dcf.price) lo = mid; else hi = mid;
+  }
+  return { value: (lo + hi) / 2, above: false, below: false };
+}
+
+function finVerdictHtml(dcf, t) {
+  const band = finDcfBand(dcf);
+  const implied = finImpliedGrowth(dcf);
+  if (!band || !implied) return '';
+  const pct = function (v) { return (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%'; };
+  const impliedText = implied.above ? t.vMore : implied.below ? t.vLess : pct(implied.value);
+  const record = dcf.histYears > 0 ? t.vRecord(pct(dcf.growthRaw), dcf.histYears) : t.vRecordNone;
+  /* A bank's reported cash flow is not owner earnings, so the band can look
+     decisive for the wrong reason. The card refuses a word there and says why. */
+  const suspect = dcf.cashAboveProfit && dcf.basis === 'fcf';
+  const verdict = suspect ? 'none' : band.verdict;
+  const why = suspect ? t.vSuspectWhy
+    : verdict === 'under' ? t.vUnderWhy
+    : verdict === 'over' ? t.vOverWhy : t.vNoneWhy;
+  const label = verdict === 'under' ? t.vUnder : verdict === 'over' ? t.vOver : t.vNone;
+  const head = '<tr><th>' + esc(t.vGrowthRow) + '</th>' +
+    band.rows[0].cells.map(function (cell) { return '<th>' + (cell.discount * 100).toFixed(1) + '%</th>'; }).join('') + '</tr>';
+  const body = band.rows.map(function (row) {
+    const lead = '<td>' + (row.growth * 100).toFixed(1) + '%' + (row.step === 0 ? ' <em>' + esc(t.vSpot) + '</em>' : '') + '</td>';
+    return '<tr>' + lead + row.cells.map(function (cell) {
+      return '<td class="is-' + cell.side + (cell.spot ? ' is-spot' : '') + '">' + esc(finMoney(cell.value, dcf.currency)) + '</td>';
+    }).join('') + '</tr>';
+  }).join('');
+  return '<section class="fin-verdict" id="finVerdict">' +
+    '<div class="fin-verdict-head"><h3>' + esc(t.vTitle) + '</h3>' +
+      '<span class="fin-verdict-badge is-' + verdict + '">' + esc(label) + '</span></div>' +
+    '<p class="fin-verdict-line" id="finVerdictLine"><b>' + esc(impliedText) + '</b> · ' + esc(record) + '</p>' +
+    '<p class="fin-verdict-say" id="finVerdictSay">' + esc(why) + '</p>' +
+    '<div class="fin-band-wrap"><table class="fin-band">' +
+      '<caption>' + esc(t.vBand) + '</caption><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>' +
+    '<p class="fin-verdict-note">' + esc(t.vNote) + '</p></section>';
+}
+
+/* Rebuilt whenever the assumptions change, since the band is centred on them. */
+function paintFinVerdict(dcf) {
+  const slot = document.getElementById('finVerdictSlot');
+  if (!slot) return;
+  slot.innerHTML = dcf ? finVerdictHtml(dcf, finT()) : '';
 }
 
 function finMoney(raw, currency) {
@@ -1889,7 +2031,9 @@ function finDcfRecalc() {
   if (prev && prev.basis) edits.basis = prev.basis;
   finDcfEdits[finState.symbol] = edits;
   const quote = finState.quote || {};
-  finDcfPatch(fundDcf(finState.fund, quote.price, quote.currency, edits));
+  const dcf = fundDcf(finState.fund, quote.price, quote.currency, edits);
+  finDcfPatch(dcf);
+  paintFinVerdict(dcf);
 }
 
 function paintDcfSlot() {
@@ -1899,6 +2043,7 @@ function paintDcfSlot() {
   const dcf = fundDcf(finState.fund, quote.price, quote.currency, finDcfEdits[finState.symbol]);
   slot.innerHTML = finDcfHtml(dcf, finT());
   finDcfPatch(dcf);
+  paintFinVerdict(dcf);
 }
 
 function finDcfReset() {

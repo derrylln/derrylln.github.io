@@ -1502,6 +1502,45 @@ button{ font-family:inherit; }
 .fin-dcf-note { margin: 9px 0 0; font-size: 10px; color: var(--muted); line-height: 1.45; }
 .fin-dcf-note:empty { display: none; }
 .fin-dcf.is-na .fin-dcf-empty { margin: 0; font-size: 12px; color: var(--muted); }
+/* --- valuation verdict: a band, not a single guess --- */
+.fin-verdict {
+  margin: 0 0 12px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 16px;
+  background: rgba(255, 255, 255, 0.55);
+}
+.fin-verdict-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.fin-verdict-head h3 { margin: 0; font-family: var(--serif); font-size: 15px; font-weight: 700; color: var(--ink); }
+.fin-verdict-badge {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 3px 9px;
+  border-radius: 999px; white-space: nowrap;
+}
+.fin-verdict-badge.is-under { background: #e6f6ec; color: var(--green); }
+.fin-verdict-badge.is-over { background: #fdeaea; color: var(--red); }
+.fin-verdict-badge.is-none { background: var(--rule-2); color: var(--muted); }
+.fin-verdict-line { margin: 8px 0 0; font-size: 12px; color: var(--ink-2); }
+.fin-verdict-line b { font-weight: 800; color: var(--ink); }
+.fin-verdict-say { margin: 3px 0 0; font-size: 11px; color: var(--muted); }
+.fin-band-wrap { margin-top: 10px; overflow-x: auto; }
+.fin-band { width: 100%; border-collapse: collapse; font-size: 11px; }
+.fin-band caption {
+  text-align: left; padding-bottom: 5px; font-size: 9.5px; font-weight: 800;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+.fin-band th {
+  padding: 5px 8px; text-align: right; font-size: 10px; font-weight: 800;
+  color: var(--muted); border-bottom: 1px solid var(--rule);
+}
+.fin-band th:first-child, .fin-band td:first-child { text-align: left; }
+.fin-band td {
+  padding: 6px 8px; text-align: right; font-weight: 700; color: var(--ink);
+  border-bottom: 1px solid var(--rule-2); white-space: nowrap;
+}
+.fin-band tbody tr:last-child td { border-bottom: 0; }
+.fin-band td em { font-style: normal; font-weight: 600; font-size: 9px; color: var(--muted); }
+.fin-band td.is-under { color: var(--green); background: rgba(10, 143, 74, 0.07); }
+.fin-band td.is-over { color: var(--red); background: rgba(209, 10, 17, 0.06); }
+.fin-band td.is-mid { color: var(--muted); }
+.fin-band td.is-spot { box-shadow: inset 0 0 0 1px var(--ink); border-radius: 4px; }
+.fin-verdict-note { margin: 9px 0 0; font-size: 10px; color: var(--muted); line-height: 1.45; }
 @media (max-width: 760px) {
   .fin-modal { padding: 12px; }
   .fin-card { padding: 18px 16px 14px; border-radius: 22px; max-height: 92vh; }
@@ -1511,6 +1550,8 @@ button{ font-family:inherit; }
   .fin-kpi-value { font-size: 18px; }
   .fin-charts { grid-template-columns: 1fr; }
   .fin-dcf-rows { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-band { font-size: 10px; }
+  .fin-band th, .fin-band td { padding: 5px 5px; }
   .fin-dcf-value { font-size: 24px; }
 }
 [data-theme="dark"] .fin-card { background: #111827; border-color: rgba(148, 163, 184, 0.18); }
@@ -1523,6 +1564,11 @@ button{ font-family:inherit; }
 [data-theme="dark"] .fin-table td { color: #e2e8f0; }
 [data-theme="dark"] .fin-kpi { background: rgba(148, 163, 184, 0.06); }
 [data-theme="dark"] .fin-dcf { background: rgba(148, 163, 184, 0.06); border-color: rgba(148, 163, 184, 0.18); }
+[data-theme="dark"] .fin-verdict { background: rgba(148, 163, 184, 0.06); border-color: rgba(148, 163, 184, 0.18); }
+[data-theme="dark"] .fin-band td { color: #e2e8f0; }
+[data-theme="dark"] .fin-band td.is-spot { box-shadow: inset 0 0 0 1px #e2e8f0; }
+[data-theme="dark"] .fin-verdict-badge.is-under { background: rgba(15, 157, 88, 0.2); }
+[data-theme="dark"] .fin-verdict-badge.is-over { background: rgba(209, 10, 17, 0.2); }
 [data-theme="dark"] .fin-price { background: rgba(148, 163, 184, 0.06); border-color: rgba(148, 163, 184, 0.18); }
 [data-theme="dark"] .fin-price-value { color: #e2e8f0; }
 [data-theme="dark"] .fin-price-chg.up { background: rgba(15, 157, 88, 0.2); }
