@@ -175,12 +175,18 @@ const I18N = {
       dcfTerminal: 'Terminal growth', dcfYears: 'Forecast', dcfShares: 'Shares',
       dcfPerYear: 'a year', dcfYearsUnit: 'years', dcfAssumed: 'from revenue growth',
       dcfCapped: 'capped', dcfSpan: n => n + 'y',
-      dcfNote: 'Five-year discounted cash flow on reported free cash flow, Gordon terminal value. Assumption-based estimate, not a price target. For banks and lenders the reported figure carries balance-sheet flows, so read it with care.',
+      dcfNote: n => n + '-year discounted cash flow on reported free cash flow, Gordon terminal value. Assumption-based estimate, not a price target. For banks and lenders the reported figure carries balance-sheet flows, so read it with care.',
+      dcfNoteNi: n => n + '-year discounted cash flow on reported net income, Gordon terminal value. Assumption-based estimate, not a price target. Earnings are not cash, so read the result as a comparison rather than a valuation.',
       dcfNoFcf: 'No free cash flow is reported for this company, so there is nothing to discount.',
       dcfNegFcf: 'Free cash flow is negative, so a discounted cash flow has nothing to grow.',
       dcfNoShares: 'The share count is unavailable, so no per-share value can be drawn from it.',
       dcfReset: 'Reset', dcfTv: n => 'Terminal value is ' + n + '% of this estimate.',
-      dcfWarnFcf: 'Base free cash flow is larger than reported net income, which usually means balance-sheet flows (banks, lenders) rather than cash the owners could take out. Treat the value with care.',
+      dcfBasis: 'Value based on', dcfFcf: 'Free cash flow', dcfNi: 'Net income',
+      dcfBaseNi: 'Base net income',
+      dcfNoNi: 'No net income is reported for this company, so there is nothing to discount.',
+      dcfNegNi: 'Net income is negative, so a discounted earnings value has nothing to grow.',
+      dcfCapNote: (pct, years) => 'capped from ' + pct + '% a year' + (years > 0 ? ' (' + years + 'y record)' : ''),
+      dcfWarnFcf: 'Base free cash flow is larger than reported net income, which usually means balance-sheet flows (banks, lenders) rather than cash the owners could take out. Treat the value with care, or switch the base to net income.',
       dcfBadTerminal: 'Terminal growth has to stay below the discount rate, so no value is shown.'
     },
     fundAi: {
@@ -277,12 +283,18 @@ const I18N = {
       dcfTerminal: 'Pertumbuhan terminal', dcfYears: 'Proyeksi', dcfShares: 'Saham',
       dcfPerYear: 'per tahun', dcfYearsUnit: 'tahun', dcfAssumed: 'dari pertumbuhan pendapatan',
       dcfCapped: 'dibatasi', dcfSpan: n => n + 'th',
-      dcfNote: 'DCF lima tahun atas arus kas bebas yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga. Untuk bank dan lembaga pembiayaan angkanya memuat arus neraca, jadi baca dengan hati-hati.',
+      dcfNote: n => 'DCF ' + n + ' tahun atas arus kas bebas yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga. Untuk bank dan lembaga pembiayaan angkanya memuat arus neraca, jadi baca dengan hati-hati.',
+      dcfNoteNi: n => 'DCF ' + n + ' tahun atas laba bersih yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga. Laba bukan kas, jadi hasilnya lebih cocok jadi pembanding daripada nilai intrinsik.',
       dcfNoFcf: 'Arus kas bebas emiten ini tidak dilaporkan, jadi tidak ada yang bisa didiskontokan.',
       dcfNegFcf: 'Arus kas bebas negatif, jadi DCF tidak punya arus kas untuk ditumbuhkan.',
       dcfNoShares: 'Jumlah saham tidak tersedia, nilai per saham tidak bisa dihitung.',
       dcfReset: 'Atur ulang', dcfTv: n => 'Nilai terminal ' + n + '% dari estimasi ini.',
-      dcfWarnFcf: 'Arus kas bebas dasar lebih besar dari laba bersih yang dilaporkan, biasanya karena arus neraca (bank, lembaga pembiayaan), bukan kas yang bisa diambil pemilik. Baca angkanya dengan hati-hati.',
+      dcfBasis: 'Dasar penilaian', dcfFcf: 'Arus kas bebas', dcfNi: 'Laba bersih',
+      dcfBaseNi: 'Laba bersih dasar',
+      dcfNoNi: 'Laba bersih emiten ini tidak dilaporkan, jadi tidak ada yang bisa didiskontokan.',
+      dcfNegNi: 'Laba bersih negatif, jadi nilai dari laba tidak punya dasar untuk ditumbuhkan.',
+      dcfCapNote: (pct, years) => 'dibatasi dari ' + pct + '% per tahun' + (years > 0 ? ' (rekam ' + years + 'th)' : ''),
+      dcfWarnFcf: 'Arus kas bebas dasar lebih besar dari laba bersih yang dilaporkan, biasanya karena arus neraca (bank, lembaga pembiayaan), bukan kas yang bisa diambil pemilik. Baca angkanya dengan hati-hati, atau ganti dasarnya ke laba bersih.',
       dcfBadTerminal: 'Pertumbuhan terminal harus di bawah tingkat diskonto, jadi nilai tidak ditampilkan.'
     },
     fundAi: {
@@ -1226,6 +1238,15 @@ function finModal() {
     if (e.target === wrap || (e.target.closest && e.target.closest('.fin-close'))) { closeFinancials(); return; }
     if (e.target.closest && e.target.closest('#finAi')) { runFinAi(); return; }
     if (e.target.closest && e.target.closest('[data-dcf-reset]')) { finDcfReset(); return; }
+    const basisBtn = e.target.closest ? e.target.closest('[data-dcf-basis]') : null;
+    if (basisBtn) {
+      const basis = basisBtn.getAttribute('data-dcf-basis');
+      const prev = finDcfEdits[finState.symbol] || {};
+      if (prev.basis === basis) return;
+      finDcfEdits[finState.symbol] = Object.assign({}, prev, { basis: basis });
+      paintDcfSlot();
+      return;
+    }
     const rangeBtn = e.target.closest ? e.target.closest('[data-fin-range]') : null;
     if (rangeBtn) {
       const range = rangeBtn.getAttribute('data-fin-range');
@@ -1623,20 +1644,26 @@ const finDcfEdits = {};   // symbol -> assumptions the reader typed
 function fundDcf(fund, price, priceCur, edits) {
   if (!fund) return null;
   const annual = finAnnualOldestFirst(fund);
-  const fcfPeriods = annual.filter(function (p) { return p.fcf && isFinite(p.fcf.raw); }).slice(-5);
-  if (!fcfPeriods.length) return { ok: false, reason: 'noFcf' };
-  const basePeriod = fcfPeriods[fcfPeriods.length - 1];
-  const base = basePeriod.fcf.raw;
-  const currency = basePeriod.fcf.currency || fund.currency || null;
-  if (!(base > 0)) return { ok: false, reason: 'negFcf' };
+  const e = edits || {};
+  /* Reported cash flow is the default because it is the cleanest owner
+     earnings for most companies, but for a bank it carries the balance sheet,
+     so the same model can run on net income instead. */
+  const basis = e.basis === 'ni' ? 'ni' : 'fcf';
+  const field = basis === 'ni' ? 'netIncome' : 'fcf';
+  const periods = annual.filter(function (p) { return p[field] && isFinite(p[field].raw); }).slice(-5);
+  if (!periods.length) return { ok: false, reason: basis === 'ni' ? 'noNi' : 'noFcf', basis: basis };
+  const basePeriod = periods[periods.length - 1];
+  const base = basePeriod[field].raw;
+  const currency = basePeriod[field].currency || fund.currency || null;
+  if (!(base > 0)) return { ok: false, reason: basis === 'ni' ? 'negNi' : 'negFcf', basis: basis };
   const shares = finShares(fund, price, priceCur);
   if (!(shares > 0)) return { ok: false, reason: 'noShares' };
 
   /* The default growth is the company's own record rather than a hope: FCF
      CAGR over the reported years, revenue CAGR when FCF is too short or its
      sign flipped. */
-  let growth = finCagr(fcfPeriods.map(function (p) { return p.fcf.raw; }));
-  let assumed = false, histYears = fcfPeriods.length - 1;
+  let growth = finCagr(periods.map(function (p) { return p[field].raw; }));
+  let assumed = false, histYears = periods.length - 1;
   if (growth == null) {
     growth = finCagr(annual.map(function (p) { return (p.revenue && p.revenue.raw) || null; }));
     assumed = true;
@@ -1645,13 +1672,13 @@ function fundDcf(fund, price, priceCur, edits) {
   if (growth == null) { growth = FIN_DCF.growthFallback; assumed = true; histYears = 0; }
   /* A short history can compound into a rate no company holds for five years,
      so the cap is part of the model and the card says when it bit. */
+  const growthRaw = growth;
   const capped = growth > FIN_DCF.growthMax || growth < FIN_DCF.growthMin;
   const growthDefault = Math.min(FIN_DCF.growthMax, Math.max(FIN_DCF.growthMin, growth));
 
   /* Every figure the reader can change is an assumption, so each is read back
      on its own: a blank field falls back to the model's value for that field
      instead of emptying the whole calculation. */
-  const e = edits || {};
   const g = isFinite(e.growth) ? e.growth : growthDefault;
   const r = (isFinite(e.discount) && e.discount > 0) ? e.discount : FIN_DCF.discount;
   const terminalRaw = isFinite(e.terminal) ? e.terminal : FIN_DCF.terminal;
@@ -1680,11 +1707,13 @@ function fundDcf(fund, price, priceCur, edits) {
     price: comparable ? price : null, priceCur: priceCur || currency,
     upside: (comparable && perShare != null) ? (perShare / price - 1) * 100 : null,
     base: base, baseYear: String(basePeriod.end).slice(0, 4),
-    growth: g, growthDefault: growthDefault, assumed: assumed, capped: capped, histYears: histYears,
+    basis: basis, growthEdited: isFinite(e.growth),
+    growth: g, growthRaw: growthRaw, growthDefault: growthDefault,
+    assumed: assumed, capped: capped, histYears: histYears,
     discount: r, terminal: tg, years: years,
     shares: shares, equity: equity,
     tvShare: equity > 0 ? (tvPv / equity) * 100 : null,
-    warnFcf: !!(ni && base > ni * 1.05)
+    warnFcf: basis === 'fcf' && !!(ni && base > ni * 1.05)
   };
 }
 
@@ -1702,40 +1731,63 @@ function finDcfHtml(dcf, t) {
       (dcf.ok && dcf.currency ? ' · ' + esc(dcf.currency) : '') + '</span>' +
       (dcf.ok ? '<button type="button" class="fin-dcf-reset" data-dcf-reset>' + esc(t.dcfReset) + '</button>' : '') +
     '</div></div>';
+  const basisBtn = function (id, label) {
+    const on = dcf.basis === id;
+    return '<button type="button" data-dcf-basis="' + id + '" class="' + (on ? 'active' : '') +
+      '" aria-pressed="' + (on ? 'true' : 'false') + '">' + esc(label) + '</button>';
+  };
+  const basisHtml = '<div class="fin-dcf-basis"><span class="fin-dcf-basis-label">' + esc(t.dcfBasis) + '</span>' +
+    '<div class="fin-seg" role="group" aria-label="' + esc(t.dcfBasis) + '">' +
+      basisBtn('fcf', t.dcfFcf) + basisBtn('ni', t.dcfNi) +
+    '</div></div>';
   if (!dcf.ok) {
-    const why = dcf.reason === 'negFcf' ? t.dcfNegFcf : dcf.reason === 'noShares' ? t.dcfNoShares : t.dcfNoFcf;
-    return '<section class="fin-dcf is-na">' + head + '<p class="fin-dcf-empty">' + esc(why) + '</p></section>';
+    const why = dcf.reason === 'negFcf' ? t.dcfNegFcf
+      : dcf.reason === 'negNi' ? t.dcfNegNi
+      : dcf.reason === 'noShares' ? t.dcfNoShares
+      : dcf.reason === 'noNi' ? t.dcfNoNi : t.dcfNoFcf;
+    return '<section class="fin-dcf is-na">' + head + basisHtml +
+      '<p class="fin-dcf-empty">' + esc(why) + '</p></section>';
   }
   const row = function (label, value) {
     return '<div class="fin-dcf-row"><span>' + esc(label) + '</span><b>' + esc(value) + '</b></div>';
   };
-  const inputRow = function (label, key, value, unit, max) {
+  const inputRow = function (label, key, value, unit, max, extra) {
     return '<div class="fin-dcf-row is-input"><span>' + esc(label) + '</span>' +
       '<label class="fin-dcf-field"><input type="number" inputmode="decimal" data-dcf="' + key + '"' +
       ' step="' + (key === 'years' ? '1' : '0.1') + '" min="' + (key === 'terminal' ? '-5' : key === 'years' ? '1' : key === 'growth' ? '-50' : '0.1') + '"' +
       (max ? ' max="' + max + '"' : '') + ' value="' + esc(String(value)) + '" />' +
-      (unit ? '<i>' + unit + '</i>' : '') + '</label></div>';
+      (unit ? '<i>' + unit + '</i>' : '') + '</label>' + (extra || '') + '</div>';
   };
   const up = dcf.upside;
   const tone = up == null ? '' : up >= 0 ? 'up' : 'down';
   const growthText = (dcf.growth * 100).toFixed(1);
-  return '<section class="fin-dcf" id="finDcf">' + head +
+  return '<section class="fin-dcf" id="finDcf">' + head + basisHtml +
     '<div class="fin-dcf-main"><div><span class="fin-dcf-label">' + esc(t.dcfValue) + '</span>' +
     '<strong class="fin-dcf-value" id="finDcfValue">' +
       esc(dcf.perShare == null ? '—' : finMoney(dcf.perShare, dcf.currency)) + '</strong></div>' +
     (dcf.price == null ? '' : '<div class="fin-dcf-gap ' + tone + '" id="finDcfGap"></div>') +
     '</div>' +
     '<div class="fin-dcf-rows">' +
-      row(t.dcfBaseFcf, compactNum(dcf.base, dcf.currency) + ' · FY' + dcf.baseYear) +
+      row(dcf.basis === 'ni' ? t.dcfBaseNi : t.dcfBaseFcf, compactNum(dcf.base, dcf.currency) + ' · FY' + dcf.baseYear) +
       row(t.dcfShares, compactNum(dcf.shares, '')) +
-      inputRow(t.dcfGrowth, 'growth', growthText, '% per year', null) +
+      inputRow(t.dcfGrowth, 'growth', growthText, '% per year', null,
+        '<em class="fin-dcf-hint" id="finDcfGrowthHint"></em>') +
       inputRow(t.dcfDiscount, 'discount', (dcf.discount * 100).toFixed(1), '%', null) +
       inputRow(t.dcfTerminal, 'terminal', (dcf.terminal * 100).toFixed(1), '%', null) +
       inputRow(t.dcfYears, 'years', dcf.years, '', 15) +
     '</div>' +
     '<p class="fin-dcf-note fin-dcf-warn" id="finDcfWarn"></p>' +
     '<p class="fin-dcf-note" id="finDcfTv"></p>' +
-    '<p class="fin-dcf-note">' + esc(t.dcfNote) + '</p></section>';
+    '<p class="fin-dcf-note" id="finDcfNote">' + esc((dcf.basis === 'ni' ? t.dcfNoteNi : t.dcfNote)(dcf.years)) + '</p></section>';
+}
+
+/* The growth field defaults to a cap, not to the record it was cut from, so
+   the card says the raw rate out loud next to the number. */
+function finGrowthNote(dcf) {
+  const t = finT();
+  if (dcf.assumed) return t.dcfAssumed + (dcf.histYears > 0 ? ' · ' + t.dcfSpan(dcf.histYears) : '');
+  if (dcf.capped) return t.dcfCapNote((Math.round(dcf.growthRaw * 1000) / 10).toFixed(1), dcf.histYears);
+  return '';
 }
 
 /* Recompute from the inputs and patch only the numbers, so typing never
@@ -1760,6 +1812,11 @@ function finDcfPatch(dcf) {
   }
   const tv = document.getElementById('finDcfTv');
   if (tv) tv.textContent = dcf.tvShare == null ? '' : t.dcfTv(Math.round(dcf.tvShare));
+  const hint = document.getElementById('finDcfGrowthHint');
+  if (hint) hint.textContent = dcf.growthEdited ? '' : finGrowthNote(dcf);
+  /* The caveat names the base and the horizon, both of which change here. */
+  const note = document.getElementById('finDcfNote');
+  if (note) note.textContent = (dcf.basis === 'ni' ? t.dcfNoteNi : t.dcfNote)(dcf.years);
 }
 
 function finDcfRecalc() {
@@ -1771,19 +1828,25 @@ function finDcfRecalc() {
     const v = el ? parseFloat(el.value) : NaN;
     if (isFinite(v)) edits[pair[0]] = v / pair[1];
   });
+  const prev = finDcfEdits[finState.symbol];
+  if (prev && prev.basis) edits.basis = prev.basis;
   finDcfEdits[finState.symbol] = edits;
   const quote = finState.quote || {};
   finDcfPatch(fundDcf(finState.fund, quote.price, quote.currency, edits));
 }
 
-function finDcfReset() {
-  delete finDcfEdits[finState.symbol];
+function paintDcfSlot() {
   const slot = document.getElementById('finDcfSlot');
   if (!slot || !finState.fund) return;
   const quote = finState.quote || {};
-  const dcf = fundDcf(finState.fund, quote.price, quote.currency, null);
+  const dcf = fundDcf(finState.fund, quote.price, quote.currency, finDcfEdits[finState.symbol]);
   slot.innerHTML = finDcfHtml(dcf, finT());
   finDcfPatch(dcf);
+}
+
+function finDcfReset() {
+  delete finDcfEdits[finState.symbol];
+  paintDcfSlot();
 }
 
 function compactNum(raw, currency) {
