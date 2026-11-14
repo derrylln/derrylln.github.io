@@ -193,6 +193,7 @@ const I18N = {
       whyNoNews: 'No news about {sym} today. Check the company filings for the reason.',
       whyFailed: 'No analysis came back. Try again.',
       totalValue: 'Total value', invested: 'Invested capital', netPl: 'Net gain / loss \u00b7 since purchase',
+      held: 'Held for', heldDay: '1 day', heldDays: '{n} days', heldMonths: '{n} months', heldYears: '{n} years', heldSince: 'first trade {date}',
       perfTitle: 'Portfolio performance', perfSub: 'Portfolio and benchmarks, indexed to 100 at the first day every holding has a price in this window, so the line measures the window, not what the whole book has gained',
       perfSubOn: 'Portfolio and benchmarks, indexed to 100 on {date}, the first day every holding has a price in this window, so the line measures the window, not what the whole book has gained',
       portfolio: 'Portfolio this window', benchmark: 'IHSG',
@@ -336,6 +337,7 @@ const I18N = {
       whyNoNews: 'Belum ada berita {sym} hari ini. Periksa laporan perusahaan untuk penyebabnya.',
       whyFailed: 'Analisis tidak tersedia. Coba lagi.',
       totalValue: 'Nilai total', invested: 'Modal', netPl: 'Laba / rugi bersih \u00b7 sejak pembelian',
+      held: 'Sudah dipegang', heldDay: '1 hari', heldDays: '{n} hari', heldMonths: '{n} bulan', heldYears: '{n} tahun', heldSince: 'transaksi pertama {date}',
       perfTitle: 'Kinerja portofolio', perfSub: 'Portofolio dan pembanding, diindeks ke 100 pada hari pertama semua kepemilikan punya harga di rentang ini, jadi garis ini mengukur rentang tersebut, bukan total keuntungan buku',
       perfSubOn: 'Portofolio dan pembanding, diindeks ke 100 pada {date}, hari pertama semua kepemilikan punya harga di rentang ini, jadi garis ini mengukur rentang tersebut, bukan total keuntungan buku',
       portfolio: 'Portofolio di rentang ini', benchmark: 'IHSG',
@@ -3227,6 +3229,29 @@ function pfXirr(flows) {
   return null;
 }
 
+/* How long the book has actually been held: the first dated trade, not the
+   first day a price was stored, so an annualised rate can be read against the
+   time behind it. */
+function pfFirstTradeDate() {
+  let first = null;
+  pfLedger.forEach(function (e) {
+    if (e.date && (!first || e.date < first)) first = e.date;
+  });
+  return first;
+}
+
+function pfHeldText(p) {
+  const first = pfFirstTradeDate();
+  if (!first) return null;
+  const then = Date.parse(first + 'T00:00:00Z');
+  if (!isFinite(then)) return null;
+  const days = Math.max(0, Math.floor((Date.now() - then) / 864e5));
+  if (days <= 1) return p.heldDay;
+  if (days < 60) return p.heldDays.replace('{n}', String(days));
+  if (days < 730) return p.heldMonths.replace('{n}', String(Math.round(days / 30.44)));
+  return p.heldYears.replace('{n}', String(Math.round(days / 365.25)));
+}
+
 function pfBookXirr(target, value) {
   if (value == null || !(value > 0)) return null;
   const flows = [];
@@ -4296,10 +4321,18 @@ function renderPortfolio() {
   const xirr = pfBookXirr(primaryCur, book.value);
   const xirrClass = xirr == null ? '' : (xirr >= 0 ? 'up' : 'down');
   const xirrText = xirr == null ? '—' : pfPctText(xirr * 100);
+  /* Beside the annualised rate, the time it is annualised over. */
+  const heldText = pfHeldText(p);
+  const heldFirst = pfFirstTradeDate();
+  const heldTitle = heldFirst
+    ? p.heldSince.replace('{date}', new Date(heldFirst + 'T00:00:00Z').toLocaleDateString(
+        state.lang === 'id' ? 'id-ID' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))
+    : '';
   const heroStats = `<div class="pf-hero-stats">
       <span><em>${esc(p.invested)}</em><strong>${book.costed ? pfMoney(book.cost, primaryCur) : '—'}</strong></span>
       <span><em>${esc(p.today)}</em><strong class="${dayClass}">${book.dayed ? pfSignedMoney(book.day, primaryCur) + '<i>' + pfPctText(bookDayPct) + '</i>' : '—'}</strong></span>
       <span><em>${esc(p.xirr)}</em><strong class="${xirrClass}">${xirrText}</strong></span>
+      ${heldText ? `<span title="${esc(heldTitle)}"><em>${esc(p.held)}</em><strong>${esc(heldText)}</strong></span>` : ''}
     </div>
     <p class="pf-xirr-note">${esc(p.xirrNote)}</p>`;
 

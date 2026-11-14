@@ -3559,6 +3559,6 @@ body, html {
 @media (max-width: 720px) {
   .pf-hero-value { font-size: 26px; }
   .pf-hero-stats { flex-wrap: wrap; }
-  .pf-hero-stats > span { flex: 1 1 33%; }
+  .pf-hero-stats > span { flex: 1 1 50%; }
   .mkt-tiles { gap: 8px; }
 }
