@@ -2418,6 +2418,28 @@ body, html {
 .pf-ledger-sym { font-weight: 800; }
 .pf-xirr-note { margin: 6px 0 0; font-size: 10px; color: var(--muted); line-height: 1.45; }
 
+/* --- news buzz: mention ranking over the cached stories --- */
+.pf-buzz { list-style: none; margin: 0; padding: 0; max-width: 760px; }
+.pf-buzz-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--rule-2); }
+.pf-buzz-row:first-child { border-top: none; padding-top: 2px; }
+.pf-buzz-rank {
+  flex: none; width: 16px; padding-top: 1px; font-size: 11px; font-weight: 800;
+  color: var(--muted); font-variant-numeric: tabular-nums;
+}
+.pf-buzz-body { flex: 1; min-width: 0; }
+.pf-buzz-top { display: flex; align-items: center; gap: 8px; }
+.pf-buzz-sym { font-size: 12.5px; font-weight: 800; letter-spacing: .02em; color: var(--ink); }
+.pf-buzz-count { font-size: 10.5px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pf-buzz-spark { flex: none; margin-left: auto; fill: var(--ink); }
+.pf-buzz-spark rect { fill-opacity: .5; }
+.pf-buzz-spark rect.empty { fill-opacity: .14; }
+.pf-buzz-head {
+  display: block; margin-top: 4px; font-size: 12.5px; line-height: 1.4;
+  color: var(--ink); text-decoration: none;
+}
+.pf-buzz-head:hover { text-decoration: underline; }
+.pf-buzz-meta { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); }
+
 .pf-msg { font-size: 12px; font-weight: 600; color: var(--red); margin: 0 0 12px; }
 .pf-msg:empty { display: none; }
 

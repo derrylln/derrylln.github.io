@@ -169,7 +169,10 @@ const I18N = {
       filterLabel: 'Filter holdings', filterAll: 'All',
       trendEmpty: 'Add a holding to chart performance.', loadingTrend: 'Rebuilding your trend…',
       chartNote: 'Rebuilt from your holdings as they stand today — not a recorded portfolio history. Index lines are converted at each day’s rate.',
-      chartNoteFx: 'Converted at 1 USD = {rate}.'
+      chartNoteFx: 'Converted at 1 USD = {rate}.',
+      buzzTitle: 'News buzz', buzzSub: 'Holdings and pinned tickers, ranked by mentions in the last 7 days',
+      buzzEmpty: 'None of your names appear in the stories this page has cached right now.',
+      buzzMentions: n => n + (n === 1 ? ' mention' : ' mentions')
     },
     fund: {
       title: 'Fundamentals', mktCap: 'Market cap', pe: 'P/E', rev: 'Revenue', revGrowth: 'Revenue growth',
@@ -307,7 +310,10 @@ const I18N = {
       filterLabel: 'Saring kepemilikan', filterAll: 'Semua',
       trendEmpty: 'Tambahkan posisi untuk melihat grafik kinerja.', loadingTrend: 'Menyusun tren Anda…',
       chartNote: 'Disusun ulang dari posisi Anda hari ini — bukan riwayat portofolio yang tercatat. Garis indeks dikonversi pada kurs harian.',
-      chartNoteFx: 'Dikonversi pada 1 USD = {rate}.'
+      chartNoteFx: 'Dikonversi pada 1 USD = {rate}.',
+      buzzTitle: 'Sorotan berita', buzzSub: 'Kepemilikan dan ticker tersemat, diurutkan dari jumlah sebutan 7 hari terakhir',
+      buzzEmpty: 'Belum ada nama Anda di berita yang tersimpan di halaman ini.',
+      buzzMentions: n => n + ' sebutan'
     },
     fund: {
       title: 'Fundamental', mktCap: 'Kap. pasar', pe: 'P/E', rev: 'Pendapatan', revGrowth: 'Pertumbuhan pendapatan',
@@ -844,6 +850,7 @@ function currentArticles() {
 }
 
 function render() {
+  renderBuzz();
   renderHoldingsNews();
   const heroEl = $('#hero'), gridEl = $('#grid'), t = I18N[state.lang]; const list = currentArticles();
   if (!list.length) { if (heroEl) heroEl.innerHTML = ''; if (gridEl) gridEl.innerHTML = `<div class="empty">${esc(t.noArticles)}</div>`; return; }
@@ -3268,6 +3275,184 @@ function pfLoadFund(symbol) {
     });
 }
 
+/* ---- news buzz ------------------------------------------------
+   Which of the names you watch are actually being written about. The count
+   runs over the stories this page already cached, so it needs no key, no
+   request and no AI call; a sentiment feed can be layered on top later.
+   Each row is scored on the last seven days, with one bar per day. ---- */
+const PF_BUZZ_DAYS = 7;
+const PF_BUZZ_ROWS = 6;
+
+/* Index and commodity pins have no company name to look for, and their
+   symbols never appear in copy, so they carry the words writers use. */
+const PF_BUZZ_ALIASES = {
+  '^JKSE': ['ihsg'], '^GSPC': ['s&p 500'], '^IXIC': ['nasdaq'], '^DJI': ['dow jones'],
+  '^N225': ['nikkei'], 'IDR=X': ['rupiah'], 'SGD=X': ['singapore dollar'], 'CHF=X': ['swiss franc'],
+  'GC=F': ['gold'], 'CL=F': ['crude oil'], 'BTC-USD': ['bitcoin'], '^TNX': ['treasury yield']
+};
+
+/* The names eligible for the ranking: what you hold, then what you pinned.
+   A symbol is stored once even when it is both. */
+function pfBuzzUniverse() {
+  const out = [];
+  const add = function (symbol, held) {
+    const up = String(symbol || '').trim().toUpperCase();
+    if (!up) return;
+    const found = out.filter(function (u) { return u.symbol === up; })[0];
+    if (found) { if (held) found.held = true; return; }
+    const q = pfQuotes[up] || {};
+    /* "NVIDIA Corporation" is written as "Nvidia" in copy, so the legal
+       suffix has to come off or the count misses most of the coverage. */
+    const names = pfBuzzNameTerms(q.name);
+    out.push({
+      symbol: up,
+      code: up.replace(/\.JK$/i, ''),
+      name: q.name || '',
+      held: !!held,
+      terms: [],
+      res: Object.create(null)
+    });
+    const unit = out[out.length - 1];
+    /* A two-letter ticker is indistinguishable from a word ("A", "IT", "ON"),
+       so short codes are only matched through the company name. */
+    if (unit.code.length >= 3) unit.terms.push(unit.code.toLowerCase());
+    names.concat(PF_BUZZ_ALIASES[up] || []).forEach(function (term) {
+      if (unit.terms.indexOf(term) === -1) unit.terms.push(term);
+    });
+    if (!unit.terms.length) unit.terms.push(unit.code.toLowerCase());
+  };
+  portfolio.forEach(function (h) { add(h.symbol, true); });
+  mktHeroSymbols().forEach(function (sym) { add(sym, false); });
+  return out;
+}
+
+/* Company names as writers use them: parentheticals and legal suffixes
+   removed, so "Bank Central Asia Tbk" also matches "Bank Central Asia". */
+function pfBuzzNameTerms(name) {
+  const clean = String(name || '').toLowerCase()
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/[.,]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return [];
+  const bare = clean
+    .replace(/\b(inc|incorporated|corp|corporation|company|co|ltd|limited|plc|tbk|nv|sa|ag|se|holdings|holding|group|class [a-z])\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const out = [];
+  if (bare.length > 3) out.push(bare);
+  if (clean.length > 3 && clean !== bare) out.push(clean);
+  return out;
+}
+
+function pfBuzzHit(unit, text) {
+  for (let i = 0; i < unit.terms.length; i++) {
+    const term = unit.terms[i];
+    if (!unit.res[term]) {
+      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      unit.res[term] = new RegExp('(^|[^a-z0-9])' + escaped + '($|[^a-z0-9])');
+    }
+    if (unit.res[term].test(text)) return true;
+  }
+  return false;
+}
+
+function pfBuzzRank() {
+  const units = pfBuzzUniverse();
+  if (!units.length) return [];
+  const dayMs = 86400000;
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  const from = midnight.getTime() - (PF_BUZZ_DAYS - 1) * dayMs;
+
+  const rows = units.map(function (u) {
+    /* Stocks read by ticker; an index or commodity pin reads by the name it
+       wears in the top strip, because "^JKSE" means nothing in a ranking. */
+    const strip = TICKERS.filter(function (t) { return t.symbol === u.symbol; })[0];
+    return { symbol: u.symbol, code: u.code, label: strip ? strip.label : u.code, held: u.held,
+      days: new Array(PF_BUZZ_DAYS).fill(0), total: 0, latest: null, sources: Object.create(null) };
+  });
+  const bySymbol = Object.create(null);
+  rows.forEach(function (r) { bySymbol[r.symbol] = r; });
+
+  const seen = Object.create(null);
+  state.articles.forEach(function (a) {
+    if (!a || !a.ts || a.ts < from) return;
+    const key = String(a.title || '').toLowerCase();
+    if (!key || seen[key]) return;
+    seen[key] = 1;
+    const text = (String(a.title || '') + ' ' + String(a.summary || '')).toLowerCase();
+    units.forEach(function (u) {
+      if (!pfBuzzHit(u, text)) return;
+      const row = bySymbol[u.symbol];
+      const bucket = Math.floor((a.ts - from) / dayMs);
+      if (bucket >= 0 && bucket < PF_BUZZ_DAYS) row.days[bucket] += 1;
+      row.total += 1;
+      row.sources[a.sourceLabel || 'FINWIRE'] = 1;
+      if (!row.latest || a.ts > row.latest.ts) row.latest = a;
+    });
+  });
+
+  return rows.filter(function (r) { return r.total > 0; }).sort(function (x, y) {
+    return (y.total - x.total) || ((y.latest ? y.latest.ts : 0) - (x.latest ? x.latest.ts : 0));
+  });
+}
+
+/* Seven thin bars, tallest day full height. Drawn inline so the card costs
+   no chart library and stays readable in both themes. */
+function pfBuzzSpark(days) {
+  const max = days.reduce(function (a, b) { return Math.max(a, b); }, 1);
+  const bar = 4, gap = 3, h = 22;
+  const bars = days.map(function (count, i) {
+    const full = count ? Math.max(2, Math.round((count / max) * h)) : 1;
+    return `<rect class="${count ? '' : 'empty'}" x="${i * (bar + gap)}" y="${h - full}" width="${bar}" height="${full}" rx="1"></rect>`;
+  }).join('');
+  return `<svg class="pf-buzz-spark" width="${days.length * (bar + gap) - gap}" height="${h}" viewBox="0 0 ${days.length * (bar + gap) - gap} ${h}" aria-hidden="true">${bars}</svg>`;
+}
+
+function pfBuzzHtml(p) {
+  const rows = pfBuzzRank();
+  if (!rows.length) return `<div class="pf-empty-sm">${esc(p.buzzEmpty)}</div>`;
+  return `<ol class="pf-buzz">${rows.slice(0, PF_BUZZ_ROWS).map(function (r, i) {
+    const a = r.latest;
+    const meta = a ? [a.sourceLabel || 'FINWIRE', a.ts ? timeAgo(a.ts, state.lang) : ''].filter(Boolean).join(' · ') : '';
+    return `<li class="pf-buzz-row">
+        <span class="pf-buzz-rank">${i + 1}</span>
+        <div class="pf-buzz-body">
+          <div class="pf-buzz-top">
+            <b class="pf-buzz-sym">${esc(r.label || r.code)}</b>
+            <span class="pf-buzz-count">${esc(p.buzzMentions(r.total))}</span>
+            ${pfBuzzSpark(r.days)}
+          </div>
+          ${a ? `<a class="pf-buzz-head" href="${esc(a.link || '#')}" target="_blank" rel="noopener noreferrer">${esc(a.title || '')}</a>
+          <span class="pf-buzz-meta">${esc(meta)}</span>` : ''}
+        </div>
+      </li>`;
+  }).join('')}</ol>`;
+}
+
+/* Repainting this on every news render is wasteful, so the output is kept
+   against the inputs that can change it. */
+let pfBuzzCache = { key: '', html: '' };
+
+function renderBuzz() {
+  const slot = document.getElementById('pfBuzzSlot');
+  if (!slot) return;
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const key = [
+    state.lang,
+    state.articles.length,
+    (state.articles[0] && state.articles[0].ts) || 0,
+    mktHeroSymbols().join(','),
+    portfolio.map(function (h) { return h.symbol + ':' + h.shares; }).join(','),
+    Object.keys(pfQuotes).length
+  ].join('|');
+  if (pfBuzzCache.key !== key) {
+    pfBuzzCache.key = key;
+    pfBuzzCache.html = pfBuzzHtml(p);
+  }
+  slot.innerHTML = pfBuzzCache.html;
+}
+
 /* Headlines that name a company you actually own, so the Markets view also
    answers "is anything happening at my companies" without leaving the page. */
 function pfHoldingTerms() {
@@ -3854,6 +4039,15 @@ function pfRenderTrend(target) {
 function renderPortfolio() {
   const host = $('#portfolioPanel'); if (!host) return;
   const p = (I18N[state.lang] || I18N.en).portfolio;
+  const buzzCard = `<section class="mkt-card">
+      <div class="mkt-card-head">
+        <div>
+          <h2 class="mkt-title">${esc(p.buzzTitle)}</h2>
+          <p class="mkt-sub">${esc(p.buzzSub)}</p>
+        </div>
+      </div>
+      <div id="pfBuzzSlot"></div>
+    </section>`;
 
   if (host.dataset.lang !== state.lang) { host.dataset.lang = state.lang; host.dataset.ready = ''; }
 
@@ -3906,7 +4100,9 @@ function renderPortfolio() {
 
   const sorted = portfolio.slice().sort(function (a, b) { return a.symbol.localeCompare(b.symbol); });
   if (!sorted.length) {
-    body.innerHTML = `<div class="pf-empty">${esc(p.empty)}</div><p class="pf-note">${esc(p.note)}</p>`;
+    body.innerHTML = `<div class="pf-empty">${esc(p.empty)}</div><p class="pf-note">${esc(p.note)}</p>` +
+      (mktHeroSymbols().length ? buzzCard : '');
+    renderBuzz();
     renderHoldingsNews();
     return;
   }
@@ -4118,12 +4314,15 @@ function renderPortfolio() {
         </div>
       </div>
       ${pfLedgerHtml(p)}
-    </section>`;
+    </section>
+
+    ${buzzCard}`;
 
   pfActTarget = primaryCur;
   pfEnsureHoldingDividends();
   pfOpen.forEach(pfLoadFund);
   pfRenderTrend(primaryCur);
+  renderBuzz();
   renderHoldingsNews();
 }
 
