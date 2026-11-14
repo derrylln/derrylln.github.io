@@ -194,6 +194,7 @@ const I18N = {
       whyFailed: 'No analysis came back. Try again.',
       totalValue: 'Total value', invested: 'Invested capital', netPl: 'Net gain / loss \u00b7 since purchase',
       perfTitle: 'Portfolio performance', perfSub: 'Portfolio and benchmarks, indexed to 100 at the first day every holding has a price in this window, so the line measures the window, not what the whole book has gained',
+      perfSubOn: 'Portfolio and benchmarks, indexed to 100 on {date}, the first day every holding has a price in this window, so the line measures the window, not what the whole book has gained',
       portfolio: 'Portfolio this window', benchmark: 'IHSG',
       allocTitle: 'Allocation', allocSub: 'By asset class',
       classIdx: 'IDX equities', classUs: 'US equities', classEtf: 'ETFs', classCrypto: 'Crypto',
@@ -336,6 +337,7 @@ const I18N = {
       whyFailed: 'Analisis tidak tersedia. Coba lagi.',
       totalValue: 'Nilai total', invested: 'Modal', netPl: 'Laba / rugi bersih \u00b7 sejak pembelian',
       perfTitle: 'Kinerja portofolio', perfSub: 'Portofolio dan pembanding, diindeks ke 100 pada hari pertama semua kepemilikan punya harga di rentang ini, jadi garis ini mengukur rentang tersebut, bukan total keuntungan buku',
+      perfSubOn: 'Portofolio dan pembanding, diindeks ke 100 pada {date}, hari pertama semua kepemilikan punya harga di rentang ini, jadi garis ini mengukur rentang tersebut, bukan total keuntungan buku',
       portfolio: 'Portofolio di rentang ini', benchmark: 'IHSG',
       allocTitle: 'Alokasi', allocSub: 'Menurut kelas aset',
       classIdx: 'Saham IDX', classUs: 'Saham AS', classEtf: 'ETF', classCrypto: 'Kripto',
@@ -4083,7 +4085,9 @@ async function pfLoadTrend(range, target) {
     return { id: b.id, label: b.label, color: b.color, idx: idx, pct: pfLastPct(idx) };
   }).filter(function (b) { return b.idx.length > 1; });
 
-  const data = { portIdx: portIdx, portPct: pfLastPct(portIdx), benches: benches };
+  const baseDay = calendar.filter(function (day) { return day.k === baseKey; })[0];
+  const data = { portIdx: portIdx, portPct: pfLastPct(portIdx), benches: benches,
+    baseDate: baseDay ? baseDay.k : null };
   pfTrendState.key = key;
   pfTrendState.data = data;
   return data;
@@ -4102,6 +4106,17 @@ function pfRenderTrend(target) {
       el.textContent = (value > 0 ? '+' : '') + value.toFixed(2) + '%';
       el.className = value >= 0 ? 'up' : 'down';
     };
+    /* The line rebases on a day this card cannot know until the history
+       lands, so the sub-line names that day rather than saying "the period". */
+    const sub = document.getElementById('pfPerfSub');
+    if (sub) {
+      const locale = state.lang === 'id' ? 'id-ID' : 'en-GB';
+      /* The base is a calendar day from the feed, so format it in UTC: in a
+         timezone behind it the same day would otherwise print as the day before. */
+      sub.textContent = (data && data.baseDate)
+        ? p.perfSubOn.replace('{date}', new Date(data.baseDate + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))
+        : p.perfSub;
+    }
     paint(document.getElementById('pfTrendPort'), data ? data.portPct : null);
     PF_BENCH.forEach(function (b) {
       const chip = document.querySelector('#pfTrendLegend [data-pf-bench="' + b.id + '"]');
@@ -4336,7 +4351,7 @@ function renderPortfolio() {
         <div class="mkt-card-head">
           <div>
             <h2 class="mkt-title">${esc(p.perfTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
-            <p class="mkt-sub">${esc(p.perfSub)}</p>
+            <p class="mkt-sub" id="pfPerfSub">${esc(p.perfSub)}</p>
             <div class="pf-hero-value">${book.priced ? pfMoney(book.value, primaryCur) : '—'}</div>
             ${heroDelta}
           </div>
