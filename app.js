@@ -3129,6 +3129,18 @@ function pfHeldShares(symbol) {
   return hit ? hit.shares : 0;
 }
 
+/* Shares on the book on a given day, from the dated trades rather than from
+   today's total. A trade dated the payment day does not count: the feed gives
+   a date, not a time, so the reader was not holding before that morning. */
+function pfSharesBefore(symbol, day) {
+  let shares = 0;
+  pfLedger.forEach(function (e) {
+    if (e.symbol !== symbol || !e.date || e.date >= day) return;
+    shares += e.side === 'sell' ? -e.qty : e.qty;
+  });
+  return shares > 1e-9 ? shares : 0;
+}
+
 let pfLedger = pfLedgerInit();
 let portfolio = pfLedgerHoldings(pfLedger);
 
@@ -3816,7 +3828,12 @@ function pfHoldingDividends(months) {
     if (!row || !row.events) return;
     row.events.forEach(function (ev) {
       if (!ev.ts || ev.ts < since || !isFinite(ev.amount)) return;
-      out.push({ ts: ev.ts, symbol: h.symbol, perShare: ev.amount, shares: h.shares, currency: pfCurrency(h.symbol) });
+      /* A payment made before the first trade is not income this book earned,
+         and one paid while only part of the position was open is not paid on
+         today's share count either. */
+      const shares = pfSharesBefore(h.symbol, new Date(ev.ts).toISOString().slice(0, 10));
+      if (!(shares > 0)) return;
+      out.push({ ts: ev.ts, symbol: h.symbol, perShare: ev.amount, shares: shares, currency: pfCurrency(h.symbol) });
     });
   });
   return out;
