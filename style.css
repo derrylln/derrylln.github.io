@@ -2396,6 +2396,27 @@ body, html {
   transition: background 0.15s, color 0.15s;
 }
 .pf-form button:hover { background: var(--red); color: #fff; }
+.pf-form select {
+  flex: 0 0 auto; padding: 10px 10px; font-size: 14px; font-family: var(--sans);
+  border: 1px solid var(--rule); border-radius: 8px; background: var(--bg);
+  color: var(--ink); outline: none; cursor: pointer;
+}
+.pf-form select:focus, .pf-form .pf-date:focus { border-color: var(--ink); }
+.pf-form .pf-date { flex: 0 0 160px; }
+/* --- trade ledger: the dated events the positions are built from --- */
+.pf-side-chip {
+  display: inline-block; padding: 2px 8px; border-radius: 999px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.pf-side-chip.buy { background: #e6f6ec; color: var(--green); }
+.pf-side-chip.sell { background: #fdeaea; color: var(--red); }
+.pf-tag {
+  margin-left: 6px; padding: 1px 6px; border: 1px solid var(--rule); border-radius: 999px;
+  font-size: 8.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted);
+}
+.pf-ledger td:first-child { white-space: nowrap; }
+.pf-ledger-sym { font-weight: 800; }
+.pf-xirr-note { margin: 6px 0 0; font-size: 10px; color: var(--muted); line-height: 1.45; }
 
 .pf-msg { font-size: 12px; font-weight: 600; color: var(--red); margin: 0 0 12px; }
 .pf-msg:empty { display: none; }
@@ -2522,6 +2543,9 @@ body, html {
 
 [data-theme="dark"] .pf-stat { background: rgba(255, 255, 255, 0.04); }
 [data-theme="dark"] .pf-form input { background: var(--bg); color: var(--ink); }
+[data-theme="dark"] .pf-form select { background: var(--bg); color: var(--ink); }
+[data-theme="dark"] .pf-side-chip.buy { background: rgba(15, 157, 88, 0.2); }
+[data-theme="dark"] .pf-side-chip.sell { background: rgba(209, 10, 17, 0.2); }
 
 .pf-toolbar {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
@@ -2579,6 +2603,8 @@ body, html {
     display: grid; grid-template-columns: 0.85fr 1.5fr; gap: 7px; margin-bottom: 0;
   }
   .pf-form #pfSymbol { grid-column: 1 / -1; }
+  .pf-form select { grid-column: 1 / -1; }
+  .pf-form .pf-date { grid-column: 1 / -1; }
   .pf-form .pf-cost { grid-column: 2; flex: none; }
   .pf-form button[type="submit"] { grid-column: 1 / -1; width: 100%; }
   .pf-form input { width: 100%; padding: 9px 10px; font-size: 13px; }

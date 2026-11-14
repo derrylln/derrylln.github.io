@@ -139,7 +139,15 @@ const I18N = {
       colSym: 'Symbol', colShares: 'Shares', colCost: 'Avg Cost', colLast: 'Last', colValue: 'Value', colPl: 'P/L',
       remove: 'Remove', note: 'Prices from Yahoo Finance and may be delayed. Holdings are saved in this browser only.',
       invalidSym: 'Enter a valid ticker, e.g. AAPL or BBCA.JK.', invalidQty: 'Shares must be greater than zero.',
-      invalidCost: 'Average cost cannot be negative.',
+      invalidCost: 'Price cannot be negative.',
+      invalidDate: 'A trade cannot be dated in the future.',
+      invalidSell: 'You hold {qty} {sym}, so a larger sale cannot be recorded.',
+      buy: 'Buy', sell: 'Sell', qtyPh: 'Quantity', pricePh: 'Price', addTrade: 'Add trade',
+      colDate: 'Date', colSide: 'Side', colQty: 'Quantity', colPrice: 'Price',
+      ledgerTitle: 'Trade ledger', ledgerSub: 'Every buy and sell, dated — the positions above are built from these',
+      ledgerEmpty: 'No trades yet. Add one above and the ledger starts here.',
+      ledgerOpening: 'opening',
+      xirr: 'Annual return', xirrNote: 'Money-weighted return: each trade is a dated cash flow, converted at the rate that held on its own day, and today\u2019s value closes the series.',
       curLabel: 'Show in', curAuto: 'Auto', costIn: 'Cost in',
       notFound: 'No price found for {sym}. Check the ticker — IDX stocks need .JK, e.g. CUAN.JK.',
       unresolved: 'No price found',
@@ -269,7 +277,15 @@ const I18N = {
       colSym: 'Simbol', colShares: 'Lembar', colCost: 'Harga Rata²', colLast: 'Terakhir', colValue: 'Nilai', colPl: 'L/R',
       remove: 'Hapus', note: 'Harga dari Yahoo Finance dan dapat tertunda. Posisi hanya tersimpan di peramban ini.',
       invalidSym: 'Masukkan ticker yang valid, mis. AAPL atau BBCA.JK.', invalidQty: 'Jumlah lembar harus lebih dari nol.',
-      invalidCost: 'Harga rata-rata tidak boleh negatif.',
+      invalidCost: 'Harga tidak boleh negatif.',
+      invalidDate: 'Transaksi tidak boleh bertanggal di masa depan.',
+      invalidSell: 'Anda memegang {qty} {sym}, jadi penjualan lebih besar tidak bisa dicatat.',
+      buy: 'Beli', sell: 'Jual', qtyPh: 'Jumlah', pricePh: 'Harga', addTrade: 'Catat transaksi',
+      colDate: 'Tanggal', colSide: 'Jenis', colQty: 'Jumlah', colPrice: 'Harga',
+      ledgerTitle: 'Buku transaksi', ledgerSub: 'Setiap beli dan jual, bertanggal — posisi di atas dihitung dari sini',
+      ledgerEmpty: 'Belum ada transaksi. Catat di atas dan buku ini akan terisi.',
+      ledgerOpening: 'saldo awal',
+      xirr: 'Imbal hasil tahunan', xirrNote: 'Imbal hasil berbobot uang: tiap transaksi jadi arus kas bertanggal, dikonversi dengan kurs hari itu, dan nilai hari ini menutup rangkaiannya.',
       curLabel: 'Tampilkan dalam', curAuto: 'Otomatis', costIn: 'Harga dalam',
       notFound: 'Harga {sym} tidak ditemukan. Periksa ticker — saham IDX perlu .JK, mis. CUAN.JK.',
       unresolved: 'Harga tidak ditemukan',
@@ -2979,20 +2995,199 @@ let pfInCur = (pfSavedInCur === 'USD' || pfSavedInCur === 'IDR') ? pfSavedInCur 
 let pfFx = loadJSON(PF.fx, null);
 let pfMessage = '';
 
-const portfolio = (function () {
-  const saved = loadJSON(PF.store, []);
-  if (!Array.isArray(saved)) return [];
-  return saved.map(function (h) {
-    return {
-      symbol: String((h && h.symbol) || '').toUpperCase().trim(), shares: Number(h && h.shares), avgCost: Number(h && h.avgCost),
-      avgCur: (h && (h.avgCur === 'IDR' || h.avgCur === 'USD')) ? h.avgCur : null
-    };
-  }).filter(function (h) {
-    return h.symbol && isFinite(h.shares) && h.shares > 0 && isFinite(h.avgCost) && h.avgCost >= 0;
-  }).map(function (h) { h.avgCur = h.avgCur || pfCurrency(h.symbol); return h; });
-})();
+/* THE LEDGER
+   A holding is a claim on dated trades, so the trades are what gets stored:
+   one event per buy or sell with its own quantity, price, currency and date.
+   Shares, average cost and the money-weighted return are all derived from
+   those events rather than typed in beside them, so they cannot disagree. */
+const PF_LEDGER_KEY = 'finwire.portfolio.ledger.v1';
 
-function savePortfolio() { saveJSON(PF.store, portfolio); }
+function pfToday() { return new Date().toISOString().slice(0, 10); }
+
+function pfEvent(raw) {
+  if (!raw) return null;
+  const symbol = String(raw.symbol || '').toUpperCase().trim();
+  const qty = Number(raw.qty);
+  const price = Number(raw.price);
+  if (!/^[A-Z0-9.^=-]{1,15}$/.test(symbol)) return null;
+  if (!isFinite(qty) || qty <= 0 || !isFinite(price) || price < 0) return null;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(raw.date)) ? String(raw.date) : pfToday();
+  return {
+    id: String(raw.id || ('ev' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36))),
+    side: raw.side === 'sell' ? 'sell' : 'buy',
+    symbol: symbol, qty: qty, price: price,
+    cur: (raw.cur === 'IDR' || raw.cur === 'USD') ? raw.cur : pfCurrency(symbol),
+    date: date, opening: !!raw.opening
+  };
+}
+
+/* A browser from before the ledger holds a snapshot of positions and no dates.
+   Each one becomes a single opening buy dated today — which is all that is
+   actually known — and can be deleted once the real trade is entered. */
+function pfLedgerInit() {
+  const saved = loadJSON(PF_LEDGER_KEY, null);
+  if (Array.isArray(saved) && saved.length) {
+    const list = saved.map(pfEvent).filter(Boolean);
+    if (list.length) return list;
+  }
+  const legacy = loadJSON(PF.store, []);
+  if (!Array.isArray(legacy)) return [];
+  return legacy.map(function (h) {
+    return pfEvent({
+      symbol: h && h.symbol, qty: h && h.shares, price: h && h.avgCost,
+      cur: h && h.avgCur, date: pfToday(), side: 'buy', opening: true
+    });
+  }).filter(Boolean);
+}
+
+/* Average cost, walked in date order: a buy adds to the pot, a sell takes its
+   share of the running average back out of it. */
+function pfLedgerHoldings(events) {
+  const bySymbol = Object.create(null);
+  (events || []).slice()
+    .sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; })
+    .forEach(function (e) { (bySymbol[e.symbol] = bySymbol[e.symbol] || []).push(e); });
+  const out = [];
+  Object.keys(bySymbol).forEach(function (symbol) {
+    let shares = 0, cost = 0, cur = null;
+    bySymbol[symbol].forEach(function (e) {
+      cur = cur || e.cur || pfCurrency(symbol);
+      const price = e.cur === cur ? e.price : (pfConvert(e.price, e.cur, cur) || e.price);
+      if (e.side === 'buy') { cost += price * e.qty; shares += e.qty; return; }
+      if (shares <= 0) return;
+      const sold = Math.min(e.qty, shares);
+      cost -= (cost / shares) * sold;
+      shares -= sold;
+    });
+    if (shares > 1e-9) out.push({ symbol: symbol, shares: shares, avgCost: cost / shares, avgCur: cur || pfCurrency(symbol) });
+  });
+  return out;
+}
+
+function pfHeldShares(symbol) {
+  const hit = pfLedgerHoldings(pfLedger).filter(function (h) { return h.symbol === symbol; })[0];
+  return hit ? hit.shares : 0;
+}
+
+let pfLedger = pfLedgerInit();
+let portfolio = pfLedgerHoldings(pfLedger);
+
+function savePortfolio() {
+  saveJSON(PF_LEDGER_KEY, pfLedger);
+  portfolio = pfLedgerHoldings(pfLedger);
+  pfTrendState.key = '';
+}
+
+/* MONEY-WEIGHTED RETURN
+   A snapshot profit says what the book gained; it cannot say how fast, because
+   it ignores when the money went in. Each trade becomes a dated cash flow in
+   the display currency — converted at the rate that held on its own day — and
+   today's value closes the series. The internal rate of return of that series
+   is the annual return the reader actually earned. */
+let pfFxHist = null, pfFxHistBusy = false;
+
+function pfFxHistory() {
+  if (pfFxHist) return pfFxHist;
+  if (!pfFxHistBusy) {
+    pfFxHistBusy = true;
+    fetchHistory(PF.fxSymbol, '10y').then(function (list) {
+      pfFxHist = pfRateSeries(list);
+      pfFxHistBusy = false;
+      if (pfFxHist.length) renderPortfolio();
+    }).catch(function () { pfFxHistBusy = false; });
+  }
+  return null;
+}
+
+function pfRateThen(cur, iso) {
+  if (!cur || cur === 'USD') return 1;
+  const series = pfFxHistory();
+  const day = String(iso || pfToday()).slice(0, 10);
+  if (series && series.length) {
+    const rate = pfRateOn(series, day);
+    if (isFinite(rate) && rate > 0) return rate;
+  }
+  return pfUnitsPerUsd(cur);
+}
+
+function pfConvertThen(amount, from, to, iso) {
+  if (amount == null || !isFinite(amount)) return null;
+  if (!from || !to || from === to) return amount;
+  const usdIdr = pfRateThen('IDR', iso);
+  if (!isFinite(usdIdr) || usdIdr <= 0) return null;
+  if (from === 'USD' && to === 'IDR') return amount * usdIdr;
+  if (from === 'IDR' && to === 'USD') return amount / usdIdr;
+  return null;
+}
+
+function pfXirr(flows) {
+  const list = (flows || []).filter(function (f) { return f && isFinite(f.v) && f.v !== 0; })
+    .sort(function (a, b) { return a.t - b.t; });
+  if (list.length < 2) return null;
+  if (!list.some(function (f) { return f.v > 0; })) return null;
+  if (!list.some(function (f) { return f.v < 0; })) return null;
+  const t0 = list[0].t;
+  const npv = function (rate) {
+    return list.reduce(function (sum, f) {
+      return sum + f.v / Math.pow(1 + rate, (f.t - t0) / 31557600000);
+    }, 0);
+  };
+  /* A money-weighted return below -95% is not a return worth naming, so the
+     scan starts there and brackets the first sign change it finds. */
+  let prevRate = -0.95, prev = npv(prevRate);
+  for (let rate = -0.94; rate <= 10.0001; rate += 0.005) {
+    const value = npv(rate);
+    if (!isFinite(prev) || !isFinite(value)) { prevRate = rate; prev = value; continue; }
+    if (prev === 0) return prevRate;
+    if (prev * value < 0) {
+      let lo = prevRate, hi = rate;
+      for (let i = 0; i < 80; i++) {
+        const mid = (lo + hi) / 2;
+        if (npv(lo) * npv(mid) <= 0) hi = mid; else lo = mid;
+      }
+      return (lo + hi) / 2;
+    }
+    prevRate = rate;
+    prev = value;
+  }
+  return null;
+}
+
+function pfBookXirr(target, value) {
+  if (value == null || !(value > 0)) return null;
+  const flows = [];
+  pfLedger.forEach(function (e) {
+    const amount = pfConvertThen(e.qty * e.price, e.cur, target, e.date);
+    if (amount == null || !isFinite(amount)) return;
+    flows.push({ t: Date.parse(e.date + 'T12:00:00Z'), v: e.side === 'sell' ? amount : -amount });
+  });
+  flows.push({ t: Date.now(), v: value });
+  return pfXirr(flows);
+}
+
+function pfLedgerHtml(p) {
+  const events = pfLedger.slice().sort(function (a, b) {
+    return a.date < b.date ? 1 : a.date > b.date ? -1 : 0;
+  });
+  if (!events.length) return `<div class="pf-empty-sm">${esc(p.ledgerEmpty)}</div>`;
+  const rows = events.map(function (e) {
+    return `<tr class="${e.side === 'sell' ? 'is-sell' : 'is-buy'}">
+        <td>${esc(e.date)}${e.opening ? `<span class="pf-tag">${esc(p.ledgerOpening)}</span>` : ''}</td>
+        <td><span class="pf-side-chip ${e.side}">${esc(e.side === 'sell' ? p.sell : p.buy)}</span></td>
+        <td class="pf-ledger-sym">${esc(e.symbol)}</td>
+        <td class="num">${e.qty.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
+        <td class="num">${esc(pfPrice(e.price, e.cur))}</td>
+        <td class="num">${esc(pfMoney(e.qty * e.price, e.cur))}</td>
+        <td class="num"><button type="button" class="pf-remove" data-pf-del="${esc(e.id)}" aria-label="${esc(p.remove)}" title="${esc(p.remove)}">×</button></td>
+      </tr>`;
+  }).join('');
+  return `<div class="pf-table-wrap"><table class="pf-table pf-ledger">
+      <thead><tr>
+        <th>${esc(p.colDate)}</th><th>${esc(p.colSide)}</th><th>${esc(p.colSym)}</th>
+        <th class="num">${esc(p.colQty)}</th><th class="num">${esc(p.colPrice)}</th><th class="num">${esc(p.colValue)}</th><th></th>
+      </tr></thead><tbody>${rows}</tbody>
+    </table></div>`;
+}
 function pfCurrency(symbol) { return /\.JK$/i.test(symbol) ? 'IDR' : 'USD'; }
 function pfMoney(value, currency) {
   if (value == null || !isFinite(value)) return '—';
@@ -3207,17 +3402,9 @@ async function pfLookupIdr(symbol) {
 function pfApplyQuote(symbol, hit) {
   const resolved = hit.symbol;
   if (resolved !== symbol) {
-    const target = portfolio.filter(function (h) { return h.symbol === resolved; })[0];
-    const source = portfolio.filter(function (h) { return h.symbol === symbol; })[0];
-    if (target && source && target !== source) {
-      const total = target.shares + source.shares;
-      const targetCur = target.avgCur || pfCurrency(target.symbol);
-      const sourceCur = source.avgCur || pfCurrency(source.symbol);
-      const conv = sourceCur === targetCur ? source.avgCost : pfConvert(source.avgCost, sourceCur, targetCur);
-      target.avgCost = ((target.avgCost * target.shares) + ((conv == null ? source.avgCost : conv) * source.shares)) / total;
-      target.shares = total;
-      portfolio.splice(portfolio.indexOf(source), 1);
-    } else if (source) { source.symbol = resolved; }
+    /* Yahoo names the listing; the trades follow it, so the ledger keeps the
+       name the quote feed recognised. */
+    pfLedger.forEach(function (e) { if (e.symbol === symbol) e.symbol = resolved; });
     delete pfQuotes[symbol];
     savePortfolio();
   }
@@ -3254,10 +3441,10 @@ function pfSyncInputCur() {
     const on = b.getAttribute('data-pf-in') === pfInCur;
     b.classList.toggle('active', on); b.setAttribute('aria-pressed', on ? 'true' : 'false');
   });
-  const el = $('#pfCost'); if (!el) return;
+  const el = $('#pfPrice'); if (!el) return;
   const p = (I18N[state.lang] || I18N.en).portfolio;
   const cur = pfInputCurrency();
-  const text = cur ? p.costPh + ' (' + cur + ')' : p.costPh;
+  const text = cur ? p.pricePh + ' (' + cur + ')' : p.pricePh;
   el.setAttribute('placeholder', text); el.setAttribute('aria-label', text);
 }
 
@@ -3469,8 +3656,9 @@ function pfMoveHtml(views, target) {
 /* ---- performance trend -------------------------------------
    The portfolio has no stored history, so the line is rebuilt from
    each holding's own closes at today's share count (and today's FX).
-   Both lines are indexed to 100 at the start of the range, which is
-   the only way a rupiah portfolio and an index compare fairly. ---- */
+   Every line is indexed to 100, the portfolio at the first day all of
+   its holdings are priced, which is the only way a rupiah book and an
+   index compare fairly. ---- */
 
 const pfTrendState = { range: '6mo', key: '', data: null };
 let pfFxBusy = false;
@@ -3544,11 +3732,27 @@ async function pfLoadTrend(range, target) {
     (list || []).forEach(function (p) { if (p && isFinite(p.y)) map[pfDayKey(p.x)] = p.y; });
     return map;
   });
-  const last = holdings.map(function () { return null; });
+  /* The base is the first day every holding has a close, not the first day
+     any of them does: one early listing would otherwise set the index at 100
+     on a fraction of the book and the next point would jump a hundredfold.
+     Prices are carried forward from that base, never valued before it. */
+  let baseKey = null;
+  const live = [];
+  holdings.forEach(function (h, i) {
+    const firstDay = calendar.filter(function (day) { return byDay[i][day.k] != null; })[0];
+    if (!firstDay) return;
+    live.push(i);
+    if (!baseKey || firstDay.k > baseKey) baseKey = firstDay.k;
+  });
+  if (!baseKey) return null;
 
-  const total = calendar.map(function (day) {
+  const last = holdings.map(function () { return null; });
+  live.forEach(function (i) { last[i] = byDay[i][baseKey]; });
+
+  const total = calendar.filter(function (day) { return day.k >= baseKey; }).map(function (day) {
     let sum = 0, priced = 0;
-    holdings.forEach(function (h, i) {
+    live.forEach(function (i) {
+      const h = holdings[i];
       const px = byDay[i][day.k];
       if (px != null) last[i] = px;
       if (last[i] == null) return;
@@ -3673,15 +3877,19 @@ function renderPortfolio() {
           </div>
           <form class="pf-form" id="pfForm" autocomplete="off">
             <input id="pfSymbol" type="text" spellcheck="false" placeholder="${esc(p.symPh)}" aria-label="${esc(p.symPh)}" />
-            <input id="pfShares" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.sharesPh)}" aria-label="${esc(p.sharesPh)}" />
+            <select id="pfSide" class="pf-side" aria-label="${esc(p.colSide)}">
+              <option value="buy">${esc(p.buy)}</option><option value="sell">${esc(p.sell)}</option>
+            </select>
+            <input id="pfQty" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.qtyPh)}" aria-label="${esc(p.qtyPh)}" />
             <div class="pf-cost">
-              <input id="pfCost" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.costPh)}" aria-label="${esc(p.costPh)}" />
+              <input id="pfPrice" type="number" min="0" step="any" inputmode="decimal" placeholder="${esc(p.pricePh)}" aria-label="${esc(p.pricePh)}" />
               <div class="pf-cost-cur" id="pfCostCur" role="group" aria-label="${esc(p.costIn)}" title="${esc(p.costIn)}">
                 <button type="button" data-pf-in="auto">${esc(p.curAuto)}</button>
                 <button type="button" data-pf-in="USD">USD</button>
                 <button type="button" data-pf-in="IDR">IDR</button>
               </div>
             </div>
+            <input id="pfDate" type="date" class="pf-date" value="${pfToday()}" aria-label="${esc(p.colDate)}" />
             <button type="submit">${esc(p.add)}</button>
           </form>
           <div id="pfMsg" class="pf-msg"></div>
@@ -3776,10 +3984,15 @@ function renderPortfolio() {
   const heroDelta = `<div class="pf-hero-delta ${plClass}">${bookPl == null ? '—' : pfSignedMoney(bookPl, primaryCur) + ' (' + pfPctText(bookPlPct) + ')'}<span>${esc(p.netPl)}</span></div>`;
   /* The gain already sits under the value, so the strip carries the two facts
      that are not repeated anywhere else. */
+  const xirr = pfBookXirr(primaryCur, book.value);
+  const xirrClass = xirr == null ? '' : (xirr >= 0 ? 'up' : 'down');
+  const xirrText = xirr == null ? '—' : pfPctText(xirr * 100);
   const heroStats = `<div class="pf-hero-stats">
       <span><em>${esc(p.invested)}</em><strong>${book.costed ? pfMoney(book.cost, primaryCur) : '—'}</strong></span>
       <span><em>${esc(p.today)}</em><strong class="${dayClass}">${book.dayed ? pfSignedMoney(book.day, primaryCur) + '<i>' + pfPctText(bookDayPct) + '</i>' : '—'}</strong></span>
-    </div>`;
+      <span><em>${esc(p.xirr)}</em><strong class="${xirrClass}">${xirrText}</strong></span>
+    </div>
+    <p class="pf-xirr-note">${esc(p.xirrNote)}</p>`;
 
   const chartNote = esc(p.chartNote) + (paneFx ? ' ' + esc((p.chartNoteFx || '').replace('{rate}', pfMoney(pfRate(), 'IDR'))) : '');
 
@@ -3895,6 +4108,16 @@ function renderPortfolio() {
         </table>
       </div>
       <p class="pf-note">${esc(p.note)}</p>
+    </section>
+
+    <section class="mkt-card">
+      <div class="mkt-card-head">
+        <div>
+          <h2 class="mkt-title">${esc(p.ledgerTitle)}</h2>
+          <p class="mkt-sub">${esc(p.ledgerSub)}</p>
+        </div>
+      </div>
+      ${pfLedgerHtml(p)}
     </section>`;
 
   pfActTarget = primaryCur;
@@ -3940,47 +4163,47 @@ async function refreshPortfolio() {
   renderPortfolio();
 }
 
-async function addHolding(rawSymbol, rawShares, rawCost, rawCur) {
+async function addHolding(rawSymbol, rawQty, rawPrice, rawCur, rawSide, rawDate) {
   const p = (I18N[state.lang] || I18N.en).portfolio;
   const symbol = String(rawSymbol == null ? '' : rawSymbol).toUpperCase().replace(/\s+/g, '');
-  const shares = Number(String(rawShares == null ? '' : rawShares).replace(/,/g, ''));
-  const avgCost = Number(String(rawCost == null ? '' : rawCost).replace(/,/g, ''));
+  const qty = Number(String(rawQty == null ? '' : rawQty).replace(/,/g, ''));
+  const price = Number(String(rawPrice == null ? '' : rawPrice).replace(/,/g, ''));
+  const side = rawSide === 'sell' ? 'sell' : 'buy';
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(rawDate)) ? String(rawDate) : pfToday();
   const fixedCur = (rawCur === 'USD' || rawCur === 'IDR') ? rawCur : null;
 
   if (!/^[A-Z0-9.^=-]{1,15}$/.test(symbol)) { pfMessage = p.invalidSym; renderPortfolio(); return; }
-  if (!isFinite(shares) || shares <= 0) { pfMessage = p.invalidQty; renderPortfolio(); return; }
-  if (!isFinite(avgCost) || avgCost < 0) { pfMessage = p.invalidCost; renderPortfolio(); return; }
+  if (!isFinite(qty) || qty <= 0) { pfMessage = p.invalidQty; renderPortfolio(); return; }
+  if (!isFinite(price) || price < 0) { pfMessage = p.invalidCost; renderPortfolio(); return; }
+  if (date > pfToday()) { pfMessage = p.invalidDate; renderPortfolio(); return; }
 
   pfMessage = '';
   /* With "Auto" the ticker is resolved first, so a bare IDX symbol such as
      CUAN is read in rupiah instead of being taken for dollars. */
-  let hit = null, resolved = symbol, costCur = fixedCur;
+  let hit = null, resolved = symbol, tradeCur = fixedCur;
   const lookup = function () { return fixedCur === 'IDR' ? pfLookupIdr(symbol) : pfLookup(symbol); };
-  if (!costCur) {
+  if (!tradeCur) {
     hit = await lookup();
-    if (hit) { resolved = hit.symbol; costCur = pfQuoteCurrency(hit.quote, hit.symbol); }
-    else costCur = pfCurrency(symbol);
+    if (hit) { resolved = hit.symbol; tradeCur = pfQuoteCurrency(hit.quote, hit.symbol); }
+    else tradeCur = pfCurrency(symbol);
   }
 
-  const existing = portfolio.filter(function (h) { return h.symbol === resolved; })[0]
-    || portfolio.filter(function (h) { return h.symbol === symbol; })[0];
-  if (existing) {
-    const totalShares = existing.shares + shares;
-    const prevCur = existing.avgCur || pfCurrency(existing.symbol);
-    const conv = prevCur === costCur ? existing.avgCost : pfConvert(existing.avgCost, prevCur, costCur);
-    const prevCost = conv == null ? existing.avgCost : conv;
-    existing.avgCost = ((prevCost * existing.shares) + (avgCost * shares)) / totalShares;
-    existing.shares = totalShares;
-    existing.avgCur = costCur;
-  } else {
-    portfolio.push({ symbol: resolved, shares: shares, avgCost: avgCost, avgCur: costCur });
+  /* A sell has to have something behind it, or the average cost would divide
+     by a position that never existed. */
+  if (side === 'sell') {
+    const held = pfHeldShares(resolved);
+    if (qty > held + 1e-9) {
+      pfMessage = (p.invalidSell || '').replace('{qty}', held.toLocaleString('en-US', { maximumFractionDigits: 4 })).replace('{sym}', resolved);
+      renderPortfolio();
+      return;
+    }
   }
 
-  pfLogActivity({ action: 'add', symbol: resolved, shares: shares, price: avgCost, currency: costCur });
-  pfTrendState.key = '';
+  pfLedger.push(pfEvent({ side: side, symbol: resolved, qty: qty, price: price, cur: tradeCur, date: date }));
+  pfLogActivity({ action: side === 'sell' ? 'sell' : 'add', symbol: resolved, shares: qty, price: price, currency: tradeCur, date: date });
 
   savePortfolio();
-  ['#pfSymbol', '#pfShares', '#pfCost'].forEach(function (sel) { const el = $(sel); if (el) el.value = ''; });
+  ['#pfSymbol', '#pfQty', '#pfPrice'].forEach(function (sel) { const el = $(sel); if (el) el.value = ''; });
   renderPortfolio();
 
   if (!hit) hit = await lookup();
@@ -3991,13 +4214,22 @@ async function addHolding(rawSymbol, rawShares, rawCost, rawCur) {
   renderPortfolio();
 }
 
+/* Removing a holding removes its trades: with the ledger as the source of
+   truth there is nowhere else for a position to hide. */
 function removeHolding(symbol) {
-  const idx = portfolio.findIndex(function (h) { return h.symbol === symbol; });
-  if (idx === -1) return;
-  const held = portfolio[idx];
+  const held = portfolio.filter(function (h) { return h.symbol === symbol; })[0];
+  if (!held) return;
   pfLogActivity({ action: 'remove', symbol: symbol, shares: held.shares, price: held.avgCost, currency: held.avgCur || pfCurrency(symbol) });
-  portfolio.splice(idx, 1);
-  pfTrendState.key = '';
+  pfLedger = pfLedger.filter(function (e) { return e.symbol !== symbol; });
+  savePortfolio();
+  renderPortfolio();
+}
+
+function removeTrade(id) {
+  const before = pfLedger.length;
+  pfLedger = pfLedger.filter(function (e) { return e.id !== id; });
+  if (pfLedger.length === before) return;
+  pfLogActivity({ action: 'remove', symbol: '—', shares: 0, price: 0, currency: 'USD' });
   savePortfolio();
   renderPortfolio();
 }
@@ -4318,7 +4550,10 @@ function bindUI() {
     pfHost.addEventListener('submit', (e) => {
       if (!e.target || e.target.id !== 'pfForm') return;
       e.preventDefault();
-      addHolding($('#pfSymbol').value, $('#pfShares').value, $('#pfCost').value, pfInCur);
+      addHolding(
+        $('#pfSymbol').value, $('#pfQty').value, $('#pfPrice').value, pfInCur,
+        ($('#pfSide') || {}).value, ($('#pfDate') || {}).value
+      );
     });
     pfHost.addEventListener('input', (e) => {
       if (e.target && e.target.id === 'pfSymbol') pfSyncInputCur();
@@ -4345,6 +4580,8 @@ function bindUI() {
       if (readBtn) { pfAiRead(readBtn.getAttribute('data-pf-read'), readBtn); return; }
       const whyBtn = e.target.closest('[data-pf-why]');
       if (whyBtn) { pfWhyMoved(whyBtn.getAttribute('data-pf-why')); return; }
+      const delBtn = e.target.closest('[data-pf-del]');
+      if (delBtn) { removeTrade(delBtn.getAttribute('data-pf-del')); return; }
       const removeBtn = e.target.closest('[data-pf-remove]');
       if (!removeBtn) return;
       removeHolding(removeBtn.getAttribute('data-pf-remove'));
