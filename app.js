@@ -279,7 +279,10 @@ const I18N = {
       buzzTitle: 'Most talked about', buzzSub: 'News mentions in the last 7 days, across the stories this page has cached',
       buzzUs: 'United States', buzzIdx: 'Indonesia', buzzTop: 'Top 10',
       buzzEmpty: 'No name in this market appeared in the cached stories.',
-      buzzMentions: n => n + (n === 1 ? ' mention' : ' mentions')
+      buzzMentions: n => n + (n === 1 ? ' mention' : ' mentions'),
+      buzzAi: 'AI read',
+      buzzAiNoNews: 'No cached headline for this name yet.',
+      buzzAiNote: 'Gemini reads the cached headlines once a day, per name. It is a read of the news, not advice.'
     }
   },
   id: {
@@ -423,7 +426,10 @@ const I18N = {
       buzzTitle: 'Paling diperbincangkan', buzzSub: 'Jumlah sebutan berita 7 hari terakhir, dari berita yang tersimpan di halaman ini',
       buzzUs: 'Amerika Serikat', buzzIdx: 'Indonesia', buzzTop: '10 teratas',
       buzzEmpty: 'Tidak ada nama di pasar ini yang muncul di berita tersimpan.',
-      buzzMentions: n => n + ' sebutan'
+      buzzMentions: n => n + ' sebutan',
+      buzzAi: 'Analisis AI',
+      buzzAiNoNews: 'Belum ada berita tersimpan untuk nama ini.',
+      buzzAiNote: 'Gemini membaca berita tersimpan sekali sehari per nama. Ini tafsiran berita, bukan saran.'
     }
   }
 };
@@ -3529,18 +3535,23 @@ function pfBuzzSpark(days) {
 }
 
 function pfBuzzRowHtml(r, i) {
+  const t = I18N[state.lang].mkt;
   const a = r.latest;
   const meta = a ? [a.sourceLabel || 'FINWIRE', a.ts ? timeAgo(a.ts, state.lang) : ''].filter(Boolean).join(' · ') : '';
+  const read = buzzAiCached(r.symbol);
+  const tone = read ? pfBuzzTone(read) : '';
   return `<li class="pf-buzz-row">
       <span class="pf-buzz-rank">${i + 1}</span>
       <div class="pf-buzz-body">
         <div class="pf-buzz-top">
           <b class="pf-buzz-sym">${esc(r.code)}</b>
           <span class="pf-buzz-count">${esc(pfBuzzMentions(r.total))}</span>
+          <button type="button" class="pf-buzz-ai" data-buzz-ai="${esc(r.symbol)}">✨ ${esc(t.buzzAi)}</button>
           ${pfBuzzSpark(r.days)}
         </div>
         ${a ? `<a class="pf-buzz-head" href="${esc(a.link || '#')}" target="_blank" rel="noopener noreferrer" title="${esc(a.title || '')}">${esc(a.title || '')}</a>
         <span class="pf-buzz-meta">${esc(meta)}</span>` : ''}
+        <div class="pf-buzz-read${tone ? ' is-' + tone : ''}"${read ? '' : ' hidden'}>${esc(read)}</div>
       </div>
     </li>`;
 }
@@ -3548,6 +3559,114 @@ function pfBuzzRowHtml(r, i) {
 function pfBuzzMentions(count) {
   const t = I18N[state.lang].mkt;
   return typeof t.buzzMentions === 'function' ? t.buzzMentions(count) : String(count);
+}
+
+/* ONE AI READ PER NAME PER DAY
+   A row asks the model at most once a day, and the answer is kept in
+   localStorage keyed by symbol and the reader's local day, so a repaint, a
+   reload, a second click or a language switch costs nothing — the same rule
+   the article summaries follow. */
+const BUZZ_AI_KEY = 'finwire.ai.buzz.v1';
+const BUZZ_AI_LIMIT = 200;
+let buzzAiCache = (function () {
+  const stored = loadJSON(BUZZ_AI_KEY, {});
+  const out = {};
+  Object.keys(stored || {}).forEach(function (key) {
+    const entry = stored[key];
+    if (entry && typeof entry.text === 'string' && entry.at) out[key] = entry;
+  });
+  return out;
+})();
+
+function buzzAiKey(symbol) { return symbol + '|' + pfToday(); }
+
+function buzzAiCached(symbol) {
+  const hit = buzzAiCache[buzzAiKey(symbol)];
+  return hit ? hit.text : '';
+}
+
+function buzzAiSave() {
+  const keys = Object.keys(buzzAiCache);
+  if (keys.length > BUZZ_AI_LIMIT) {
+    keys.sort(function (a, b) { return (buzzAiCache[b].at || 0) - (buzzAiCache[a].at || 0); });
+    keys.slice(BUZZ_AI_LIMIT).forEach(function (key) { delete buzzAiCache[key]; });
+  }
+  saveJSON(BUZZ_AI_KEY, buzzAiCache);
+}
+
+/* The same seven days of stories the row is counting, as plain lines the model
+   can read: title first, publisher in brackets. */
+function pfBuzzNews(symbol, limit) {
+  const unit = buzzCandidates().filter(function (u) { return u.symbol === symbol; })[0];
+  if (!unit) return [];
+  const since = Date.now() - PF_BUZZ_DAYS * 864e5;
+  const seen = Object.create(null);
+  return state.articles.filter(function (a) {
+    if (!a || !a.ts || a.ts < since) return false;
+    const key = String(a.title || '').toLowerCase();
+    if (!key || seen[key]) return false;
+    seen[key] = 1;
+    const raw = String(a.title || '') + ' ' + String(a.summary || '');
+    return pfBuzzHit(unit, raw.toLowerCase(), raw);
+  }).sort(function (a, b) { return b.ts - a.ts; }).slice(0, limit || 8)
+    .map(function (a) { return '- ' + String(a.title || '') + ' [' + (a.sourceLabel || 'FINWIRE') + ']'; });
+}
+
+/* The verdict word decides the colour; the rest of the answer is shown as the
+   model wrote it. Models decorate the first word ("**GOOD**", "“Bad.”", "- GOOD -"),
+   so markdown, quotes and stray punctuation are stripped before the word is
+   read. Only the first word is looked at, never one later in a sentence. */
+function pfBuzzTone(text) {
+  const clean = String(text || '')
+    .replace(/[*_`#>{}\[\]()]/g, ' ')
+    .replace(/["'\u2018\u2019\u201c\u201d\u00ab\u00bb]/g, ' ')
+    .replace(/[\u2013\u2014\u2022\u00b7]/g, ' ')
+    .trim()
+    .toLowerCase();
+  const word = clean.replace(/^[^a-z]+/, '').match(/^[a-z]+/);
+  if (!word) return '';
+  const verdict = word[0];
+  return (verdict === 'good' || verdict === 'bad' || verdict === 'mixed' || verdict === 'unclear') ? verdict : '';
+}
+
+function paintBuzzRead(el, text) {
+  if (!el) return;
+  const tone = pfBuzzTone(text);
+  el.textContent = text;
+  el.className = 'pf-buzz-read' + (tone ? ' is-' + tone : '');
+  el.hidden = false;
+}
+
+async function runBuzzAi(btn) {
+  const symbol = btn.getAttribute('data-buzz-ai');
+  const body = btn.closest('.pf-buzz-body');
+  const slot = body ? body.querySelector('.pf-buzz-read') : null;
+  if (!symbol || !slot) return;
+  const t = I18N[state.lang].mkt;
+  const cached = buzzAiCached(symbol);
+  if (cached) { paintBuzzRead(slot, cached); return; }
+  if (!slot.hidden && slot.textContent) return;
+
+  const news = pfBuzzNews(symbol);
+  if (!news.length) { paintBuzzRead(slot, t.buzzAiNoNews); return; }
+  if (!aiSpend()) { paintBuzzRead(slot, aiBlockText()); return; }
+
+  const stop = startClock(slot, '✨ ' + t.buzzAi + '…');
+  try {
+    const data = await aiRequest('/ai-sentiment', {
+      symbol: symbol, name: buzzNames[symbol] || '', newsText: news.join('\n'), lang: state.lang
+    });
+    const text = (data && data.summary ? String(data.summary) : '').trim();
+    if (!text) throw new Error('Empty AI read');
+    buzzAiCache[buzzAiKey(symbol)] = { text: text, at: Date.now() };
+    buzzAiSave();
+    stop();
+    paintBuzzRead(slot, text);
+  } catch (err) {
+    stop();
+    if (aiMissingEndpoint(err)) aiRefund();
+    paintBuzzRead(slot, aiErrorText(err));
+  }
 }
 
 function buzzBoardHtml() {
@@ -3576,7 +3695,7 @@ function renderBuzzBoard() {
   const slot = document.getElementById('buzzBoard');
   if (!slot) return;
   const key = [state.lang, state.articles.length, (state.articles[0] && state.articles[0].ts) || 0,
-    Object.keys(buzzNames).length].join('|');
+    Object.keys(buzzNames).length, Object.keys(buzzAiCache).length].join('|');
   if (pfBuzzCache.key !== key) {
     pfBuzzCache.key = key;
     pfBuzzCache.html = buzzBoardHtml();
@@ -4657,6 +4776,14 @@ function aiSpend() {
   return true;
 }
 
+/* A route that is not deployed never reaches Gemini, so refusing it must not
+   consume one of the tab's calls: give the slot back and leave the cooldown
+   alone, which still stops a visitor hammering an endpoint that is not there. */
+function aiRefund() {
+  if (aiSessionCalls > 0) aiSessionCalls -= 1;
+  try { sessionStorage.setItem(AI_SESSION_KEY, String(aiSessionCalls)); } catch (e) {}
+}
+
 function aiBlockText() {
   const t = I18N[state.lang] || I18N.en;
   return aiBlockReason === 'slow' ? t.aiSlow : t.aiCap;
@@ -4760,6 +4887,13 @@ function startClock(el, label) {
 }
 
 function bindUI() {
+  /* Delegated, so it survives every repaint of the board. */
+  document.addEventListener('click', function (ev) {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('[data-buzz-ai]') : null;
+    if (!btn) return;
+    ev.preventDefault();
+    runBuzzAi(btn);
+  });
   if ($('#navNews')) $('#navNews').addEventListener('click', () => switchView('news'));
   if ($('#navStocks')) $('#navStocks').addEventListener('click', () => switchView('stocks'));
 
