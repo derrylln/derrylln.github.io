@@ -85,6 +85,42 @@ const US_POOL = [
   'PFE', 'MRNA', 'JNJ', 'UNH', 'CRM', 'ORCL', 'ADBE', 'INTC', 'CSCO', 'QCOM'
 ].map(sym => ({ symbol: sym, name: sym }));
 
+/* Beyond the names the board prices, the mention ranking also carries the
+   liquid IDX mid and small caps that retail copy actually writes about, with
+   the name each one goes by in Indonesian coverage. */
+const IDX_BUZZ_EXTRA = [
+  ['ARTO', 'Bank Jago'], ['BBHI', 'Allo Bank'], ['BRIS', 'Bank Syariah Indonesia'],
+  ['BJBR', 'Bank Jabar Banten'], ['BNGA', 'Bank Cimb Niaga'], ['NISP', 'Bank OCBC NISP'],
+  ['MEGA', 'Bank Mega'], ['BTPS', 'Bank BTPN Syariah'], ['PNBN', 'Bank Pan Indonesia'],
+  ['BDMN', 'Bank Danamon'], ['AGRO', 'Bank Raya'], ['BFIN', 'BFI Finance'], ['ADMF', 'Adira Finance'],
+  ['GOTO', 'GoTo Gojek Tokopedia'], ['BUKA', 'Bukalapak'], ['EMTK', 'Elang Mahkota'],
+  ['MTEL', 'Dayamitra Telekomunikasi'], ['TBIG', 'Tower Bersama'], ['WIFI', 'Solusi Sinergi Digital'],
+  ['MTDL', 'Metrodata Electronics'], ['DCII', 'DCI Indonesia'], ['MLPT', 'Multipolar Technology'],
+  ['DMMX', 'Digital Mediatama'], ['MYOR', 'Mayora Indah'], ['MIDI', 'Midi Utama'],
+  ['ERAA', 'Erajaya Swasembada'], ['LPPF', 'Matahari Department Store'], ['MAPI', 'Mitra Adiperkasa'],
+  ['RALS', 'Ramayana Lestari'], ['ULTJ', 'Ultrajaya Milk'], ['MAIN', 'Main Squeeze Indonesia'],
+  ['KAEF', 'Kimia Farma'], ['INAF', 'Indofarma'], ['HEAL', 'Medikaloka Hermina'],
+  ['SILO', 'Siloam International'], ['PRDA', 'Prodia Widyahusada'],
+  ['SMRA', 'Summarecon Agung'], ['ASRI', 'Alam Sutera'], ['LPKR', 'Lippo Karawaci'],
+  ['DMAS', 'Puradelta Lestari'], ['SSIA', 'Surya Semesta'], ['KIJA', 'Kawasan Jababeka'],
+  ['PTPP', 'PP Persero'], ['WIKA', 'Wijaya Karya'], ['WSKT', 'Waskita Karya'], ['ADHI', 'Adhi Karya'],
+  ['HRUM', 'Harum Energy'], ['BYAN', 'Bayan Resources'], ['INDY', 'Indika Energy'],
+  ['GEMS', 'Golden Energy Mines'], ['BUMI', 'Bumi Resources'], ['TOBA', 'TBS Energi Utama'],
+  ['MEDC', 'Medco Energi'], ['ELSA', 'Elnusa'], ['AKRA', 'AKR Corporindo'],
+  ['ESSA', 'ESSA Industries'], ['BRPT', 'Barito Pacific'], ['TPIA', 'Chandra Asri Pacific'],
+  ['MBMA', 'Merdeka Battery'], ['NCKL', 'Trimegah Bangun Persada'], ['BRMS', 'Bumi Resources Minerals'],
+  ['PSAB', 'J Resources'], ['AMMN', 'Amman Mineral'], ['SGER', 'Sumber Global Energy'],
+  ['PANI', 'Pantai Indah Kapuk Dua'], ['CUAN', 'Petrindo Jaya Kreasi'],
+  ['AALI', 'Astra Agro Lestari'], ['LSIP', 'London Sumatra'], ['SGRO', 'Sampoerna Agro'],
+  ['DSNG', 'Dharma Satya'], ['TBLA', 'Tunas Baru Lampung'], ['SIMP', 'Salim Ivomas'],
+  ['ANJT', 'Austindo Nusantara'], ['TAPG', 'Triputra Agro Persada'],
+  ['AUTO', 'Astra Otoparts'], ['GJTL', 'Gajah Tunggal'], ['SMSM', 'Selamat Sempurna'],
+  ['KRAS', 'Krakatau Steel'], ['BIRD', 'Blue Bird'], ['ASSA', 'Adi Sarana Armada'],
+  ['TMAS', 'Tempuran Emas'], ['SMDR', 'Samudera Indonesia'], ['GIAA', 'Garuda Indonesia'],
+  ['JSMR', 'Jasa Marga'], ['BMTR', 'Global Mediacom'], ['MNCN', 'Media Nusantara Citra'],
+  ['SCMA', 'Surya Citra Media']
+].map(function (pair) { return { symbol: pair[0] + '.JK', name: pair[1] }; });
+
 const ETFS = [
   { symbol: 'SPY', name: 'SPDR S&P 500 ETF' }, { symbol: 'QQQ', name: 'Invesco QQQ Trust' },
   { symbol: 'VOO', name: 'Vanguard S&P 500' }, { symbol: 'EIDO', name: 'iShares MSCI Indonesia' },
@@ -3327,11 +3363,15 @@ function pfBuzzNameTerms(name) {
 /* Company names that are also ordinary words score the word, not the
    company: Indonesian copy says "target" of any goal, and "visa" of travel.
    Those names are matched by ticker instead. */
-const PF_BUZZ_GENERIC = { target: 1, visa: 1 };
+const PF_BUZZ_GENERIC = { target: 1, visa: 1, timah: 1 };
 
-/* The candidates are the same thirty names a market the board already
-   fetches, so a row here can never be a company the rest of the page
-   cannot price. */
+/* Codes that spell an everyday word, so the ticker only counts when it is
+   printed in capitals. The company name still matches in either case. */
+const PF_BUZZ_TICKER_ONLY = {
+  MAIN: 1, BUKA: 1, CUAN: 1, DEWA: 1, BUMI: 1, BIRD: 1, AUTO: 1, FOOD: 1, WIFI: 1,
+  GEMS: 1, HEAL: 1, SILO: 1, MEGA: 1, PANI: 1
+};
+
 function buzzRememberNames(map) {
   Object.keys(map || {}).forEach(function (sym) {
     const name = map[sym] && map[sym].name;
@@ -3339,32 +3379,63 @@ function buzzRememberNames(map) {
   });
 }
 
-function buzzCandidates() {
-  return IDX_POOL.map(function (s) { return { symbol: s.symbol, region: 'idx' }; })
-    .concat(US_POOL.map(function (s) { return { symbol: s.symbol, region: 'us' }; }))
-    .map(function (c) {
-      const code = c.symbol.replace(/\.JK$/i, '');
-      const unit = { symbol: c.symbol, region: c.region, code: code, terms: [], res: Object.create(null) };
-      /* A two-letter ticker is indistinguishable from a word ("A", "IT", "ON"),
-         so short codes are only matched through the company name. */
-      if (code.length >= 3) unit.terms.push(code.toLowerCase());
-      pfBuzzNameTerms(buzzNames[c.symbol]).forEach(function (term) {
-        if (term.indexOf(' ') === -1 && PF_BUZZ_GENERIC[term]) return;
-        if (unit.terms.indexOf(term) === -1) unit.terms.push(term);
-      });
-      if (!unit.terms.length) unit.terms.push(code.toLowerCase());
-      return unit;
-    });
+/* Every IDX code the site already knows about: the names it prices, the
+   dividend pool, and the mid and small caps copy writes about. */
+function buzzIdxCandidates() {
+  const seen = Object.create(null);
+  const out = [];
+  const push = function (symbol, name) {
+    const up = String(symbol).toUpperCase();
+    const code = up.replace(/\.JK$/i, '');
+    if (!code || seen[code]) return;
+    seen[code] = 1;
+    out.push({ symbol: up, code: code, region: 'idx', name: name || buzzNames[up] || '' });
+  };
+  IDX_POOL.forEach(function (s) { push(s.symbol); });
+  DIVIDEND_POOL.forEach(function (s) { push(s.symbol, s.name); });
+  IDX_BUZZ_EXTRA.forEach(function (s) { push(s.symbol, s.name); });
+  return out;
 }
 
-function pfBuzzHit(unit, text) {
-  for (let i = 0; i < unit.terms.length; i++) {
-    const term = unit.terms[i];
-    if (!unit.res[term]) {
-      const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      unit.res[term] = new RegExp('(^|[^a-z0-9])' + escaped + '($|[^a-z0-9])');
-    }
-    if (unit.res[term].test(text)) return true;
+function buzzUsCandidates() {
+  return US_POOL.map(function (s) {
+    return { symbol: s.symbol, code: s.symbol.replace(/\.JK$/i, ''), region: 'us', name: buzzNames[s.symbol] || '' };
+  });
+}
+
+/* Each candidate becomes a match unit: its ticker, and the company names copy
+   is likely to use instead of the ticker. */
+function buzzCandidates() {
+  return buzzIdxCandidates().concat(buzzUsCandidates()).map(function (c) {
+    const unit = { symbol: c.symbol, region: c.region, code: c.code, names: [], res: Object.create(null) };
+    pfBuzzNameTerms(c.name).forEach(function (term) {
+      if (term.indexOf(' ') === -1 && PF_BUZZ_GENERIC[term]) return;
+      if (unit.names.indexOf(term) === -1) unit.names.push(term);
+    });
+    return unit;
+  });
+}
+
+function pfBuzzTerm(unit, term, flags) {
+  const key = flags ? term + '/' + flags : term;
+  if (!unit.res[key]) {
+    const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    unit.res[key] = new RegExp('(^|[^A-Za-z0-9])' + escaped + '($|[^A-Za-z0-9])', flags || '');
+  }
+  return unit.res[key];
+}
+
+/* `raw` keeps its capitals. A handful of IDX codes are everyday words too
+   ("buka" opens, "bumi" is the earth), so those count only when the story
+   prints them as a ticker; the company name matches in either case. */
+function pfBuzzHit(unit, text, raw) {
+  if (unit.code.length >= 3) {
+    const strict = PF_BUZZ_TICKER_ONLY[unit.code];
+    const hit = strict ? pfBuzzTerm(unit, unit.code, '').test(raw) : pfBuzzTerm(unit, unit.code.toLowerCase(), 'i').test(text);
+    if (hit) return true;
+  }
+  for (let i = 0; i < unit.names.length; i++) {
+    if (pfBuzzTerm(unit, unit.names[i], '').test(text)) return true;
   }
   return false;
 }
@@ -3389,9 +3460,10 @@ function pfBuzzRank() {
     const key = String(a.title || '').toLowerCase();
     if (!key || seen[key]) return;
     seen[key] = 1;
-    const text = (String(a.title || '') + ' ' + String(a.summary || '')).toLowerCase();
+    const raw = String(a.title || '') + ' ' + String(a.summary || '');
+    const text = raw.toLowerCase();
     units.forEach(function (u) {
-      if (!pfBuzzHit(u, text)) return;
+      if (!pfBuzzHit(u, text, raw)) return;
       const row = bySymbol[u.symbol];
       const bucket = Math.floor((a.ts - from) / dayMs);
       if (bucket >= 0 && bucket < PF_BUZZ_DAYS) row.days[bucket] += 1;
@@ -3442,10 +3514,13 @@ function pfBuzzMentions(count) {
 function buzzBoardHtml() {
   const t = I18N[state.lang].mkt;
   const rows = pfBuzzRank();
+  /* The header says how many names the top ten was picked from, so a short
+     list reads as a quiet week rather than a narrow board. */
+  const counts = { us: buzzUsCandidates().length, idx: buzzIdxCandidates().length };
   const column = function (region, label) {
     const list = rows.filter(function (r) { return r.region === region; }).slice(0, PF_BUZZ_ROWS);
     return `<div class="buzz-col">
-        <div class="buzz-col-head"><span>${esc(label)}</span><i>${esc(t.buzzTop)}</i></div>
+        <div class="buzz-col-head"><span>${esc(label)}</span><i>${esc(t.buzzTop)} · ${counts[region]}</i></div>
         ${list.length
           ? `<ol class="pf-buzz">${list.map(pfBuzzRowHtml).join('')}</ol>`
           : `<div class="pf-empty-sm">${esc(t.buzzEmpty)}</div>`}
