@@ -4042,6 +4042,7 @@ function renderPortfolio() {
         <div class="mkt-card-head">
           <div>
             <h2 class="mkt-title">${esc(p.perfTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
+            <p class="mkt-sub">${esc(p.perfSub)}</p>
             <div class="pf-hero-value">${book.priced ? pfMoney(book.value, primaryCur) : '—'}</div>
             ${heroDelta}
           </div>
@@ -4051,7 +4052,6 @@ function renderPortfolio() {
         <div class="mkt-legend" id="pfTrendLegend">
           <span class="mkt-legend-item"><i class="mkt-dot pf"></i>${esc(p.portfolio)} <b id="pfTrendPort">—</b></span>
           ${benchChipsHtml}
-          <span class="pf-legend-note">${esc(p.perfSub)}</span>
         </div>
         <div id="pfTrendChart"><div class="pf-empty-sm">${esc(p.loadingTrend)}</div></div>
         <p class="pf-chart-note">${chartNote}</p>

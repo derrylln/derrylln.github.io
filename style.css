@@ -3514,7 +3514,6 @@ body, html {
 }
 .pf-hero-stats strong { display: block; font-size: 13.5px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pf-hero-stats strong i { font-style: normal; font-size: 10.5px; margin-left: 4px; opacity: .85; }
-.pf-legend-note { margin-left: auto; font-size: 10.5px; color: var(--muted); }
 
 @media (max-width: 1024px) {
   .pf-row-a, .pf-row-b { grid-template-columns: 1fr; }
@@ -3524,6 +3523,5 @@ body, html {
   .pf-hero-value { font-size: 26px; }
   .pf-hero-stats { flex-wrap: wrap; }
   .pf-hero-stats > span { flex: 1 1 33%; }
-  .pf-legend-note { display: none; }
   .mkt-tiles { gap: 8px; }
 }
