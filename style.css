@@ -2418,10 +2418,22 @@ body, html {
 .pf-ledger-sym { font-weight: 800; }
 .pf-xirr-note { margin: 6px 0 0; font-size: 10px; color: var(--muted); line-height: 1.45; }
 
-/* --- news buzz: mention ranking over the cached stories --- */
-.pf-buzz { list-style: none; margin: 0; padding: 0; max-width: 760px; }
-.pf-buzz-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--rule-2); }
-.pf-buzz-row:first-child { border-top: none; padding-top: 2px; }
+/* --- news buzz: the mention ranking on the explore board --- */
+.buzz-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; }
+.buzz-col { min-width: 0; }
+.buzz-col-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding-bottom: 7px; border-bottom: 1px solid var(--rule-2);
+}
+.buzz-col-head span {
+  font-size: 10.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--ink);
+}
+.buzz-col-head i { font-style: normal; font-size: 10px; color: var(--muted); }
+@media (max-width: 760px) { .buzz-cols { grid-template-columns: 1fr; gap: 22px; } }
+
+.pf-buzz { list-style: none; margin: 0; padding: 0; }
+.pf-buzz-row { display: flex; gap: 10px; align-items: flex-start; padding: 9px 0; border-top: 1px solid var(--rule-2); }
+.pf-buzz-row:first-child { border-top: none; padding-top: 8px; }
 .pf-buzz-rank {
   flex: none; width: 16px; padding-top: 1px; font-size: 11px; font-weight: 800;
   color: var(--muted); font-variant-numeric: tabular-nums;
@@ -2438,6 +2450,9 @@ body, html {
   color: var(--ink); text-decoration: none;
 }
 .pf-buzz-head:hover { text-decoration: underline; }
+/* Rows stay compact in a two-column board, so a long headline is cut once
+   and the full text stays in the link's title. */
+.buzz-cols .pf-buzz-head { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pf-buzz-meta { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); }
 
 .pf-msg { font-size: 12px; font-weight: 600; color: var(--red); margin: 0 0 12px; }
