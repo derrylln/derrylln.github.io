@@ -8,6 +8,7 @@ The static site in the repo root calls this Worker for three things:
 | `POST /ai-summarize` | Gemini summary of one article, or the morning briefing |
 | `POST /ai-explain-move` | Gemini explanation of a single stock move |
 | `POST /ai-fundamentals` | Gemini read of a company's reported figures (growth, margins, cash, one strength and one weakness) |
+| `POST /ai-sentiment` | Gemini read of whether the cached headlines look good or bad for one share (good / bad / mixed / unclear) |
 
 `GET /health` returns `{"ok":true}` and is only used to verify a deploy.
 
@@ -52,7 +53,7 @@ KV or a Durable Object, keyed the same way.
 
 ### Error codes
 
-`POST /ai-summarize`, `/ai-explain-move` and `/ai-fundamentals` return
+`POST /ai-summarize`, `/ai-explain-move`, `/ai-fundamentals` and `/ai-sentiment` return
 `{ error, code, detail? }`. The client translates `code`; only `detail` (when
 present) carries the raw upstream message.
 
