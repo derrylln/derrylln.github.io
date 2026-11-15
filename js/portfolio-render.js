@@ -322,6 +322,16 @@ function renderPortfolio() {
     <section class="mkt-card">
       <div class="mkt-card-head">
         <div>
+          <h2 class="mkt-title">${esc(p.goalTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
+          <p class="mkt-sub">${esc(p.goalSub)}</p>
+        </div>
+      </div>
+      <div id="pfGoalSlot">${pfGoalHtml(primaryCur)}</div>
+    </section>
+
+    <section class="mkt-card">
+      <div class="mkt-card-head">
+        <div>
           <h2 class="mkt-title">${esc(p.holdingsTitle)}</h2>
           <p class="mkt-sub">${esc(p.holdingsSub)}</p>
         </div>

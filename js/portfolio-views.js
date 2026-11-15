@@ -400,10 +400,116 @@ function pfRiskConcentration(target) {
   return { top3: total > 0 ? (top3 / total) * 100 : null, count: values.length, largest: total > 0 ? (values[0] / total) * 100 : null };
 }
 
+/* Historical, not parametric: the fifth percentile of the days actually
+   observed, so a fat tail shows as a bigger number instead of being smoothed
+   away by a normal curve the returns never promised to follow. */
+function pfRiskVaR(returns) {
+  if (returns.length < 20) return null;
+  const sorted = returns.map(function (r) { return r.r; })
+    .sort(function (a, b) { return a - b; });
+  const cut = sorted[Math.floor(sorted.length * 0.05)];
+  return cut == null ? null : -cut * 100;
+}
+
+/* The book in one number, for turning a percentage risk into money. */
+function pfBookValue(target) {
+  return portfolio.reduce(function (sum, h) {
+    const v = pfValueIn(pfHoldingView(h), target);
+    return (v != null && isFinite(v) && v > 0) ? sum + v : sum;
+  }, 0);
+}
+
+/* ---- exposure vs target ------------------------------------------
+   Classes come from the symbols already on the page, so this needs no input
+   beyond the targets themselves, which are the reader's own numbers and are
+   kept locally. Drift is measured in percentage points of the book, not in
+   rupiah, because a target is a share, not an amount. */
+const PF_TARGET_KEY = 'finwire.portfolio.targets.v1';
+const PF_DRIFT_BAND = 5;
+const PF_TARGET_DEFAULT = { idx: 50, us: 30, etf: 15, crypto: 5 };
+
+let pfTargets = (function () {
+  const out = Object.assign({}, PF_TARGET_DEFAULT);
+  const saved = loadJSON(PF_TARGET_KEY, null);
+  if (saved && typeof saved === 'object') {
+    PF_CLASSES.forEach(function (cls) {
+      const v = Number(saved[cls]);
+      if (isFinite(v) && v >= 0 && v <= 100) out[cls] = v;
+    });
+  }
+  return out;
+})();
+
+function pfClassWeights(target) {
+  const by = Object.create(null);
+  let total = 0;
+  portfolio.forEach(function (h) {
+    const v = pfValueIn(pfHoldingView(h), target);
+    if (v == null || !isFinite(v) || v <= 0) return;
+    const cls = pfClassOf(h.symbol);
+    by[cls] = (by[cls] || 0) + v;
+    total += v;
+  });
+  return PF_CLASSES.map(function (cls) {
+    const value = by[cls] || 0;
+    return { cls: cls, value: value, pct: total > 0 ? (value / total) * 100 : 0 };
+  }).filter(function (g) { return g.value > 0 || pfTargets[g.cls] > 0; });
+}
+
+function pfDriftHtml(target) {
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const rows = pfClassWeights(target);
+  const total = rows.reduce(function (a, g) { return a + g.value; }, 0);
+  if (!total) return '';
+  const sum = PF_CLASSES.reduce(function (a, c) { return a + (pfTargets[c] || 0); }, 0);
+  const body = rows.map(function (g) {
+    const want = pfTargets[g.cls] || 0;
+    const drift = g.pct - want;
+    const over = drift > PF_DRIFT_BAND, under = drift < -PF_DRIFT_BAND;
+    const flag = over ? p.driftOver : under ? p.driftUnder : p.driftOk;
+    return `<tr>
+        <td>${esc(pfClassLabel(g.cls))}</td>
+        <td class="num">${g.pct.toFixed(1)}%</td>
+        <td class="num"><input type="number" min="0" max="100" step="1" value="${want}" data-pf-target="${g.cls}" aria-label="${esc(pfClassLabel(g.cls))}"></td>
+        <td class="num ${over ? 'down' : under ? 'up' : ''}">${drift > 0 ? '+' : ''}${drift.toFixed(1)}</td>
+        <td class="num"><span class="pf-drift-flag ${over ? 'over' : under ? 'under' : 'ok'}">${esc(flag)}</span></td>
+      </tr>`;
+  }).join('');
+  const off = Math.abs(sum - 100) > 0.5;
+  return `<div class="pf-drift">
+      <div class="pf-risk-head"><span>${esc(p.driftTitle)}</span><i>${esc(p.driftBand.replace('{pp}', String(PF_DRIFT_BAND)))}</i></div>
+      <table class="pf-drift-table">
+        <thead><tr>
+          <th>${esc(p.driftColClass)}</th><th class="num">${esc(p.driftColNow)}</th>
+          <th class="num">${esc(p.driftColTarget)}</th><th class="num">${esc(p.driftColDrift)}</th>
+          <th class="num">${esc(p.driftColFlag)}</th>
+        </tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+      ${off ? `<p class="pf-drift-note">${esc(p.driftSum.replace('{sum}', sum.toFixed(0)))}</p>` : ''}
+    </div>`;
+}
+
+/* Repainting after a target edit re-runs the whole block, because the flag,
+   the total and the row colour all depend on every target at once. */
+let pfRiskTarget = 'IDR';
+document.addEventListener('change', function (e) {
+  const input = e.target && e.target.closest ? e.target.closest('[data-pf-target]') : null;
+  if (!input) return;
+  const cls = input.getAttribute('data-pf-target');
+  const raw = Number(input.value);
+  if (!PF_CLASSES.includes(cls) || !isFinite(raw)) return;
+  pfTargets[cls] = Math.max(0, Math.min(100, raw));
+  saveJSON(PF_TARGET_KEY, pfTargets);
+  const slot = document.getElementById('pfRiskBlock');
+  if (slot) slot.innerHTML = pfRiskHtml(pfTrendState.data, pfRiskTarget);
+});
+
 const PF_RANGE_LABEL = { '3mo': '3M', '6mo': '6M', '1y': '1Y' };
 
 function pfRiskHtml(data, target) {
   const p = (I18N[state.lang] || I18N.en).portfolio;
+  pfRiskTarget = target;
   const range = PF_RANGE_LABEL[pfTrendState.range] || '';
   const port = (data && data.portIdx) || [];
   const returns = pfRiskReturns(port);
@@ -412,6 +518,8 @@ function pfRiskHtml(data, target) {
   const ihsg = (data && (data.benches || []).filter(function (b) { return b.id === 'ihsg'; })[0]) || null;
   const beta = ihsg ? pfRiskBeta(returns, pfRiskReturns(ihsg.idx)) : null;
   const conc = pfRiskConcentration(target);
+  const book = pfBookValue(target);
+  const varPct = pfRiskVaR(returns);
   if (vol == null && dd == null && conc == null) return '';
 
   const cell = function (label, value, trend, sub) {
@@ -426,7 +534,9 @@ function pfRiskHtml(data, target) {
       ${cell(p.riskDd, dd == null ? '—' : pct(dd), dd == null ? '' : (dd < 0 ? 'down' : 'up'), (p.riskDdSub || '').replace('{range}', range))}
       ${cell(p.riskBeta, beta == null ? '—' : beta.toFixed(2), '', beta == null && !ihsg ? p.riskBetaOff : p.riskBetaSub)}
       ${cell(p.riskTop3, conc && conc.top3 != null ? conc.top3.toFixed(0) + '%' : '—', '', (p.riskTop3Sub || '').replace('{n}', conc ? String(conc.count) : '0'))}
-    </div>`;
+      ${cell(p.riskVar, varPct == null ? '—' : '−' + varPct.toFixed(1) + '%', varPct == null ? '' : 'down', varPct == null ? (p.riskVarOff || '') : pfMoney(book * varPct / 100, target) + ' · ' + (p.riskVarSub || '').replace('{range}', range))}
+    </div>
+    ${pfDriftHtml(target)}`;
 }
 
 /* ---- dividend income --------------------------------------------

@@ -124,7 +124,7 @@
 }
 .pf-chart-note { margin: 10px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--muted); }
 
-/* --- risk: four numbers under the performance chart --- */
+/* --- risk: five numbers under the performance chart --- */
 .pf-risk-block { margin: 14px 0 0; }
 .pf-risk-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; }
 .pf-risk-head span {
@@ -132,7 +132,7 @@
 }
 .pf-risk-head i { font-style: normal; font-size: 9.5px; font-weight: 800; letter-spacing: .06em; color: var(--muted); }
 .pf-risk {
-  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
   border: 1px solid var(--rule-2); border-radius: 12px; overflow: hidden;
 }
 .pf-risk-cell { min-width: 0; padding: 11px 13px; border-left: 1px solid var(--rule-2); }
@@ -158,6 +158,71 @@
   .pf-risk-cell:nth-child(-n+2) { border-top: none; }
   .pf-risk-cell:nth-child(even) { border-left: 1px solid var(--rule-2); }
 }
+
+/* --- drift: the same weights, measured against what you meant --- */
+.pf-drift { margin-top: 12px; }
+.pf-drift-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.pf-drift-table th {
+  padding: 0 0 6px; font-size: 9px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted); text-align: left;
+}
+.pf-drift-table th.num, .pf-drift-table td.num { text-align: right; }
+.pf-drift-table td { padding: 7px 0; border-top: 1px solid var(--rule-2); vertical-align: middle; }
+.pf-drift-table td:first-child { font-weight: 700; color: var(--ink); }
+.pf-drift-table td.num { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--ink); }
+.pf-drift-table td.num.down { color: var(--red); }
+.pf-drift-table td.num.up { color: var(--green); }
+.pf-drift-table input {
+  width: 52px; padding: 3px 6px; text-align: right;
+  font: inherit; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--ink); background: transparent;
+  border: 1px solid var(--rule); border-radius: 7px;
+}
+.pf-drift-table input:focus { outline: none; border-color: var(--ink); }
+.pf-drift-flag {
+  display: inline-block; padding: 2px 7px; border-radius: 999px;
+  font-size: 9px; font-weight: 800; letter-spacing: .04em;
+}
+.pf-drift-flag.ok { color: var(--muted); background: var(--rule-2); }
+.pf-drift-flag.over { color: var(--red); background: color-mix(in srgb, var(--red) 10%, transparent); }
+.pf-drift-flag.under { color: var(--green); background: color-mix(in srgb, var(--green) 10%, transparent); }
+.pf-drift-note { margin: 7px 0 0; font-size: 10px; color: var(--muted); }
+
+/* --- goal: the only forward-looking block on the page --- */
+.pf-goal-form {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
+  max-width: 760px; margin-bottom: 12px;
+}
+.pf-goal-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.pf-goal-field span {
+  font-size: 9px; font-weight: 800; letter-spacing: .08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.pf-goal-field input {
+  width: 100%; padding: 8px 10px;
+  font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--ink); background: transparent;
+  border: 1px solid var(--rule); border-radius: 9px;
+}
+.pf-goal-field input:focus { outline: none; border-color: var(--ink); }
+.pf-goal-stats {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--rule-2); border-radius: 12px; overflow: hidden;
+}
+.pf-goal-bar {
+  margin-top: 12px; height: 8px; border-radius: 999px;
+  background: var(--rule-2); overflow: hidden;
+}
+.pf-goal-bar i { display: block; height: 100%; border-radius: 999px; background: var(--ink); }
+.pf-goal-note { margin: 9px 0 0; font-size: 10px; line-height: 1.5; color: var(--muted); }
+@media (max-width: 720px) {
+  .pf-goal-form, .pf-goal-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pf-goal-stats .pf-risk-cell { border-left: none; border-top: 1px solid var(--rule-2); }
+  .pf-goal-stats .pf-risk-cell:nth-child(-n+2) { border-top: none; }
+  .pf-goal-stats .pf-risk-cell:nth-child(even) { border-left: 1px solid var(--rule-2); }
+}
+[data-theme="dark"] .pf-goal-bar { background: rgba(148, 163, 184, .18); }
+[data-theme="dark"] .pf-goal-bar i { background: #f8fafc; }
 
 /* --- dividend income: the same strip shape, three cells, plus its own table --- */
 .pf-div-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 14px; }
