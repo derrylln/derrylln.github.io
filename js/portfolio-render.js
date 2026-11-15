@@ -266,7 +266,7 @@ function renderPortfolio() {
 
   body.innerHTML = `
     <div class="pf-dash-row pf-row-a">
-      <section class="mkt-card">
+<section class="mkt-card">
         <div class="mkt-card-head">
           <div>
             <h2 class="mkt-title">${esc(p.perfTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
@@ -282,11 +282,11 @@ function renderPortfolio() {
           ${benchChipsHtml}
         </div>
         <div id="pfTrendChart"><div class="pf-empty-sm">${esc(p.loadingTrend)}</div></div>
-        <div id="pfRiskBlock" class="pf-risk-block"></div>
         <p class="pf-chart-note">${chartNote}</p>
       </section>
 
-      <section class="mkt-card">
+      <div class="pf-side">
+<section class="mkt-card">
         <div class="mkt-card-head">
           <div>
             <h2 class="mkt-title">${esc(p.allocTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
@@ -295,10 +295,8 @@ function renderPortfolio() {
         </div>
         ${pfAllocationHtml(views, primaryCur)}
       </section>
-    </div>
 
-    <div class="pf-dash-row pf-row-b">
-      <section class="mkt-card">
+<section class="mkt-card">
         <div class="mkt-card-head">
           <div>
             <h2 class="mkt-title">${esc(p.moveTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
@@ -307,8 +305,21 @@ function renderPortfolio() {
         </div>
         ${pfMoveHtml(views, primaryCur)}
       </section>
+      </div>
+    </div>
 
-      <section class="mkt-card">
+    <div class="pf-dash-row pf-row-b">
+<section class="mkt-card">
+      <div class="mkt-card-head">
+        <div>
+          <h2 class="mkt-title">${esc(p.goalTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
+          <p class="mkt-sub">${esc(p.goalSub)}</p>
+        </div>
+      </div>
+      <div id="pfGoalSlot">${pfGoalHtml(primaryCur)}</div>
+    </section>
+
+<section class="mkt-card">
         <div class="mkt-card-head">
           <div>
             <h2 class="mkt-title">${esc(p.activityTitle)}</h2>
@@ -319,15 +330,16 @@ function renderPortfolio() {
       </section>
     </div>
 
-    <section class="mkt-card">
+<section class="mkt-card">
       <div class="mkt-card-head">
         <div>
-          <h2 class="mkt-title">${esc(p.goalTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
-          <p class="mkt-sub">${esc(p.goalSub)}</p>
+          <h2 class="mkt-title">${esc(p.riskCardTitle)}</h2>
+          <p class="mkt-sub">${esc(p.riskCardSub)}</p>
         </div>
       </div>
-      <div id="pfGoalSlot">${pfGoalHtml(primaryCur)}</div>
+      <div id="pfRiskBlock" class="pf-risk-block"></div>
     </section>
+
 
     <section class="mkt-card">
       <div class="mkt-card-head">

@@ -528,7 +528,7 @@ function pfRiskHtml(data, target) {
   };
   const pct = function (v) { return v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1) + '%'; };
 
-  return `<div class="pf-risk-head"><span>${esc(p.riskTitle)}</span><i>${esc(range)}</i></div>
+  return `<div class="pf-risk-split">
     <div class="pf-risk">
       ${cell(p.riskVol, vol == null ? '—' : vol.toFixed(1) + '%', '', (p.riskVolSub || '').replace('{range}', range))}
       ${cell(p.riskDd, dd == null ? '—' : pct(dd), dd == null ? '' : (dd < 0 ? 'down' : 'up'), (p.riskDdSub || '').replace('{range}', range))}
@@ -536,7 +536,8 @@ function pfRiskHtml(data, target) {
       ${cell(p.riskTop3, conc && conc.top3 != null ? conc.top3.toFixed(0) + '%' : '—', '', (p.riskTop3Sub || '').replace('{n}', conc ? String(conc.count) : '0'))}
       ${cell(p.riskVar, varPct == null ? '—' : '−' + varPct.toFixed(1) + '%', varPct == null ? '' : 'down', varPct == null ? (p.riskVarOff || '') : pfMoney(book * varPct / 100, target) + ' · ' + (p.riskVarSub || '').replace('{range}', range))}
     </div>
-    ${pfDriftHtml(target)}`;
+    ${pfDriftHtml(target)}
+  </div>`;
 }
 
 /* ---- dividend income --------------------------------------------

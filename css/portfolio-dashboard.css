@@ -64,7 +64,7 @@
 }
 .pa-row:last-child { border-bottom: none; }
 .pa-legend { display: flex; flex-direction: column; }
-.pa-body { display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: center; }
+.pa-body { display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: flex-start; }
 .pa-ring-wrap { position: relative; width: 168px; height: 168px; margin: 2px auto; flex: none; }
 .pa-ring { position: absolute; inset: 0; border-radius: 50%; background: var(--ring);
   -webkit-mask: radial-gradient(circle, transparent 0 41%, #000 42%);
@@ -124,8 +124,19 @@
 }
 .pf-chart-note { margin: 10px 0 0; font-size: 10.5px; line-height: 1.5; color: var(--muted); }
 
-/* --- risk: five numbers under the performance chart --- */
-.pf-risk-block { margin: 14px 0 0; }
+/* --- risk: its own card, split between the numbers and the drift --- */
+.pf-risk-block { margin: 2px 0 0; }
+.pf-risk-split {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 22px; align-items: start;
+}
+.pf-risk-split .pf-risk { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pf-risk-split .pf-risk-cell { border-left: 1px solid var(--rule-2); border-top: 1px solid var(--rule-2); }
+.pf-risk-split .pf-risk-cell:nth-child(-n+2) { border-top: none; }
+.pf-risk-split .pf-risk-cell:nth-child(odd) { border-left: none; }
+@media (max-width: 900px) {
+  .pf-risk-split { grid-template-columns: 1fr; gap: 18px; }
+}
 .pf-risk-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 7px; }
 .pf-risk-head span {
   font-size: 9.5px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
@@ -135,6 +146,7 @@
   display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
   border: 1px solid var(--rule-2); border-radius: 12px; overflow: hidden;
 }
+.pf-risk-split .pf-risk { border-radius: 12px; }
 .pf-risk-cell { min-width: 0; padding: 11px 13px; border-left: 1px solid var(--rule-2); }
 .pf-risk-cell:first-child { border-left: none; }
 .pf-risk-cell span {
@@ -160,7 +172,7 @@
 }
 
 /* --- drift: the same weights, measured against what you meant --- */
-.pf-drift { margin-top: 12px; }
+.pf-drift { margin-top: 0; }
 .pf-drift-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 .pf-drift-table th {
   padding: 0 0 6px; font-size: 9px; font-weight: 800; letter-spacing: .08em;
@@ -217,6 +229,8 @@
 .pf-goal-note { margin: 9px 0 0; font-size: 10px; line-height: 1.5; color: var(--muted); }
 @media (max-width: 720px) {
   .pf-goal-form, .pf-goal-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* a rupiah figure this long wraps "Rp" onto its own line at full size */
+  .pf-goal-stats .pf-risk-cell strong { font-size: 16px; }
   .pf-goal-stats .pf-risk-cell { border-left: none; border-top: 1px solid var(--rule-2); }
   .pf-goal-stats .pf-risk-cell:nth-child(-n+2) { border-top: none; }
   .pf-goal-stats .pf-risk-cell:nth-child(even) { border-left: 1px solid var(--rule-2); }
@@ -378,10 +392,13 @@
    Same proportions as the reference the layout was asked to follow: tight
    12px gutters, cards that fill their row instead of trailing off early. */
 .pf-dash-row { display: grid; gap: 12px; align-items: stretch; }
-.pf-row-a { grid-template-columns: minmax(0, 2.05fr) minmax(0, 1fr); }
+/* The chart column is tall and the two smaller cards are not, so they stack
+   beside it instead of stretching to a height they have nothing to fill. */
+.pf-row-a { grid-template-columns: minmax(0, 2.05fr) minmax(0, 1fr); align-items: start; }
+.pf-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 /* Contributors and activity hold different amounts, so neither is stretched
    into empty space; each card ends where its content does. */
-.pf-row-b { grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); align-items: start; }
+.pf-row-b { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); align-items: start; }
 .pf-dash-row > .mkt-card { display: flex; flex-direction: column; }
 .pf-row-a #pfTrendChart { flex: 1; min-height: 0; }
 .pf-hero-value {
