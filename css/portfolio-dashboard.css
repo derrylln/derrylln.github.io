@@ -408,7 +408,7 @@
 .pf-sub-head span { font-size: 11px; font-weight: 800; letter-spacing: .01em; color: var(--ink); }
 .pf-sub-head em { font-style: normal; font-size: 10px; color: var(--muted); }
 .pf-dash-row > .mkt-card { display: flex; flex-direction: column; }
-.pf-row-a #pfTrendChart { flex: 1; min-height: 0; }
+.pf-row-a #pfTrendChart { flex: 1; min-height: 220px; }
 .pf-hero-value {
   /* Sans, not the serif: at this size Playfair's hairline strokes rasterise into
      a smear on 1x screens, and the reference headline is a heavy sans anyway. */

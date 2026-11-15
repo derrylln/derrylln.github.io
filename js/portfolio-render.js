@@ -42,12 +42,16 @@ function pfRenderTrend(target) {
     if (pfTrendChart) { try { pfTrendChart.destroy(); } catch (e) {} pfTrendChart = null; }
     node.innerHTML = '';
     const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    /* The chart sits in a column that is as tall as the card beside it, so it
+       is drawn at whatever height that column actually has. Drawn at a fixed
+       196 inside a 600px card, the difference is a blank band under the line. */
+    const chartH = Math.max(200, Math.round(node.clientHeight) || 200);
     const series = [{ name: p.portfolio, data: data.portIdx }].concat(data.benches.map(function (b) {
       return { name: b.label, data: b.idx };
     }));
     pfTrendChart = new ApexCharts(node, {
       series: series,
-      chart: { type: 'line', height: 196, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
+      chart: { type: 'line', height: chartH, toolbar: { show: false }, fontFamily: 'Inter', zoom: { enabled: false }, background: 'transparent' },
       theme: { mode: isDark ? 'dark' : 'light' },
       colors: [isDark ? '#f8fafc' : '#111418'].concat(data.benches.map(function (b) { return b.color; })),
       stroke: {
@@ -64,6 +68,15 @@ function pfRenderTrend(target) {
       legend: { show: false }
     });
     pfTrendChart.render();
+    if (!window.__pfTrendResize) {
+      window.__pfTrendResize = true;
+      window.addEventListener('resize', function () {
+        const host = document.getElementById('pfTrendChart');
+        if (!pfTrendChart || !host) return;
+        const h = Math.max(200, Math.round(host.clientHeight) || 200);
+        try { pfTrendChart.updateOptions({ chart: { height: h } }, false, false); } catch (e) {}
+      });
+    }
   }).catch(function () {
     const node = document.getElementById('pfTrendChart');
     if (node) node.innerHTML = `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
