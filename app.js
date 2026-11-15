@@ -2729,18 +2729,26 @@ function worldSpark(vals, up) {
   if (!vals || vals.length < 2) return '';
   const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
   const span = (max - min) || 1;
-  const w = 74, h = 22;
-  const points = vals.map(function (v, i) {
-    return (i / (vals.length - 1) * w).toFixed(1) + ',' + (h - ((v - min) / span) * h).toFixed(1);
-  }).join(' ');
-  return `<svg class="world-spark ${up ? 'up' : 'down'}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.3"></polyline></svg>`;
+  const w = 120, h = 34, pad = 3;
+  const pts = vals.map(function (v, i) {
+    return [(i / (vals.length - 1) * w).toFixed(1), (h - pad - ((v - min) / span) * (h - pad * 2)).toFixed(1)];
+  });
+  const line = pts.map(function (p) { return p[0] + ',' + p[1]; }).join(' ');
+  const line2 = pts.map(function (p) { return 'L' + p[0] + ',' + p[1]; }).join(' ');
+  /* non-scaling-stroke keeps the line one hairline wide even though the shape
+     stretches to whatever width the card ends up with */
+  return `<svg class="world-spark ${up ? 'up' : 'down'}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">`
+    + `<path class="world-area" d="M0,${h} ${line2} L${w},${h} Z"></path>`
+    + `<polyline points="${line}" fill="none" stroke="currentColor" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"></polyline>`
+    + `</svg>`;
 }
 
 function worldTileHtml(entry, row) {
   const up = row.pct >= 0;
-  return `<div class="world-tile" title="${esc(worldPlace(entry) + ' · ' + entry.symbol)}">
-      <div class="world-tile-top"><b>${esc(entry.name)}</b><span>${esc(worldPlace(entry))}</span></div>
-      <div class="world-level">${esc(mktFmt(row.level, 2))}</div>
+  return `<div class="world-tile ${up ? 'up' : 'down'}" title="${esc(worldPlace(entry) + ' · ' + entry.symbol)}">
+      <span class="world-where">${esc(worldPlace(entry))}</span>
+      <b class="world-name">${esc(entry.name)}</b>
+      <span class="world-level">${esc(mktFmt(row.level, 2))}</span>
       <div class="world-foot">
         <span class="world-pct ${up ? 'up' : 'down'}">${up ? '+' : ''}${row.pct.toFixed(2)}%</span>
         ${worldSpark(row.spark, up)}
