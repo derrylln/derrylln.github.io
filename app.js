@@ -207,6 +207,10 @@ const I18N = {
       holdingsTitle: 'Holdings', holdingsSub: 'Open a row for fundamentals and the AI read',
       filterLabel: 'Filter holdings', filterAll: 'All',
       trendEmpty: 'Add a holding to chart performance.', loadingTrend: 'Rebuilding your trend…',
+      riskTitle: 'Risk', riskVol: 'Volatility', riskVolSub: 'annualised, {range}',
+      riskDd: 'Max drawdown', riskDdSub: 'peak to trough, {range}',
+      riskBeta: 'Beta vs IHSG', riskBetaSub: '1.00 tracks the index', riskBetaOff: 'add IHSG under the chart',
+      riskTop3: 'Top 3 weight', riskTop3Sub: 'of the priced book, {n} positions',
       chartNote: 'Rebuilt from your holdings as they stand today — not a recorded portfolio history. Index lines are converted at each day’s rate.',
       chartNoteFx: 'Converted at 1 USD = {rate}.'
     },
@@ -355,6 +359,10 @@ const I18N = {
       holdingsTitle: 'Kepemilikan', holdingsSub: 'Buka baris untuk fundamental dan analisis AI',
       filterLabel: 'Saring kepemilikan', filterAll: 'Semua',
       trendEmpty: 'Tambahkan posisi untuk melihat grafik kinerja.', loadingTrend: 'Menyusun tren Anda…',
+      riskTitle: 'Risiko', riskVol: 'Volatilitas', riskVolSub: 'disetahunkan, {range}',
+      riskDd: 'Penurunan terdalam', riskDdSub: 'puncak ke lembah, {range}',
+      riskBeta: 'Beta vs IHSG', riskBetaSub: '1,00 mengikuti indeks', riskBetaOff: 'tambahkan IHSG di grafik',
+      riskTop3: 'Bobot 3 teratas', riskTop3Sub: 'dari posisi berharga, {n} posisi',
       chartNote: 'Disusun ulang dari posisi Anda hari ini — bukan riwayat portofolio yang tercatat. Garis indeks dikonversi pada kurs harian.',
       chartNoteFx: 'Dikonversi pada 1 USD = {rate}.'
     },
@@ -4226,18 +4234,27 @@ async function pfLoadTrend(range, target) {
     (list || []).forEach(function (p) { if (p && isFinite(p.y)) map[pfDayKey(p.x)] = p.y; });
     return map;
   });
-  /* The base is the first day every holding has a close, not the first day
-     any of them does: one early listing would otherwise set the index at 100
-     on a fraction of the book and the next point would jump a hundredfold.
-     Prices are carried forward from that base, never valued before it. */
-  let baseKey = null;
+  /* The base is the first day every holding actually has a close. Taking the
+     latest of each holding's first day is not the same thing: a market holiday
+     leaves one holding with no price that day, and the next point — when it
+     finally appears — jumps the index by the weight of the whole position.
+     Prices are carried forward from the base, never valued before it. */
   const live = [];
   holdings.forEach(function (h, i) {
     const firstDay = calendar.filter(function (day) { return byDay[i][day.k] != null; })[0];
-    if (!firstDay) return;
-    live.push(i);
-    if (!baseKey || firstDay.k > baseKey) baseKey = firstDay.k;
+    if (firstDay) live.push(i);
   });
+  if (!live.length) return null;
+  const common = calendar.filter(function (day) {
+    return live.every(function (i) { return byDay[i][day.k] != null; });
+  })[0];
+  let baseKey = common ? common.k : null;
+  if (!baseKey) {
+    live.forEach(function (i) {
+      const firstDay = calendar.filter(function (day) { return byDay[i][day.k] != null; })[0];
+      if (!baseKey || firstDay.k > baseKey) baseKey = firstDay.k;
+    });
+  }
   if (!baseKey) return null;
 
   const last = holdings.map(function () { return null; });
@@ -4291,6 +4308,100 @@ async function pfLoadTrend(range, target) {
   return data;
 }
 
+/* ---- risk ---------------------------------------------------------
+   Four numbers read off the same daily series the chart above just built, so
+   the block costs no request of its own: volatility and drawdown from the
+   portfolio line, beta from the IHSG line beside it, concentration from the
+   position values already on the page. */
+
+function pfRiskReturns(series) {
+  const pts = (series || []).filter(function (p) { return p && isFinite(p.y) && p.y > 0; });
+  const out = [];
+  for (let i = 1; i < pts.length; i++) {
+    const day = pfDayKey(pts[i].x);
+    if (day === pfDayKey(pts[i - 1].x)) continue;
+    out.push({ k: day, r: pts[i].y / pts[i - 1].y - 1 });
+  }
+  return out;
+}
+
+function pfRiskVolatility(returns) {
+  if (returns.length < 5) return null;
+  const mean = returns.reduce(function (a, r) { return a + r.r; }, 0) / returns.length;
+  const variance = returns.reduce(function (a, r) { return a + (r.r - mean) * (r.r - mean); }, 0) / (returns.length - 1);
+  return Math.sqrt(variance) * Math.sqrt(252) * 100;
+}
+
+/* Deepest fall from a running peak, as a negative percentage. */
+function pfRiskDrawdown(series) {
+  let peak = 0, worst = 0;
+  (series || []).forEach(function (p) {
+    if (!p || !isFinite(p.y) || p.y <= 0) return;
+    if (p.y > peak) peak = p.y;
+    if (peak > 0) worst = Math.min(worst, p.y / peak - 1);
+  });
+  return worst * 100;
+}
+
+/* Covariance over variance, on the days both series have a return. */
+function pfRiskBeta(portReturns, benchReturns) {
+  const byDay = Object.create(null);
+  benchReturns.forEach(function (r) { byDay[r.k] = r.r; });
+  const pairs = portReturns.filter(function (r) { return byDay[r.k] != null; })
+    .map(function (r) { return [r.r, byDay[r.k]]; });
+  if (pairs.length < 10) return null;
+  const meanX = pairs.reduce(function (a, p) { return a + p[1]; }, 0) / pairs.length;
+  const meanY = pairs.reduce(function (a, p) { return a + p[0]; }, 0) / pairs.length;
+  let cov = 0, varX = 0;
+  pairs.forEach(function (p) {
+    cov += (p[1] - meanX) * (p[0] - meanY);
+    varX += (p[1] - meanX) * (p[1] - meanX);
+  });
+  return varX > 0 ? cov / varX : null;
+}
+
+/* Weight is taken over the positions that have a price; an unpriced holding
+   would otherwise invent room for the ones that do. */
+function pfRiskConcentration(target) {
+  const values = portfolio.map(function (h) {
+    return pfValueIn(pfHoldingView(h), target);
+  }).filter(function (v) { return v != null && isFinite(v) && v > 0; })
+    .sort(function (a, b) { return b - a; });
+  if (!values.length) return null;
+  const total = values.reduce(function (a, v) { return a + v; }, 0);
+  const top3 = values.slice(0, 3).reduce(function (a, v) { return a + v; }, 0);
+  return { top3: total > 0 ? (top3 / total) * 100 : null, count: values.length, largest: total > 0 ? (values[0] / total) * 100 : null };
+}
+
+const PF_RANGE_LABEL = { '3mo': '3M', '6mo': '6M', '1y': '1Y' };
+
+function pfRiskHtml(data, target) {
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const range = PF_RANGE_LABEL[pfTrendState.range] || '';
+  const port = (data && data.portIdx) || [];
+  const returns = pfRiskReturns(port);
+  const vol = pfRiskVolatility(returns);
+  const dd = port.length > 1 ? pfRiskDrawdown(port) : null;
+  const ihsg = (data && (data.benches || []).filter(function (b) { return b.id === 'ihsg'; })[0]) || null;
+  const beta = ihsg ? pfRiskBeta(returns, pfRiskReturns(ihsg.idx)) : null;
+  const conc = pfRiskConcentration(target);
+  if (vol == null && dd == null && conc == null) return '';
+
+  const cell = function (label, value, trend, sub) {
+    return `<div class="pf-risk-cell"><span>${esc(label)}</span>` +
+      `<strong${trend ? ` class="${trend}"` : ''}>${value}</strong><em>${esc(sub)}</em></div>`;
+  };
+  const pct = function (v) { return v == null ? '—' : (v > 0 ? '+' : '') + v.toFixed(1) + '%'; };
+
+  return `<div class="pf-risk-head"><span>${esc(p.riskTitle)}</span><i>${esc(range)}</i></div>
+    <div class="pf-risk">
+      ${cell(p.riskVol, vol == null ? '—' : vol.toFixed(1) + '%', '', (p.riskVolSub || '').replace('{range}', range))}
+      ${cell(p.riskDd, dd == null ? '—' : pct(dd), dd == null ? '' : (dd < 0 ? 'down' : 'up'), (p.riskDdSub || '').replace('{range}', range))}
+      ${cell(p.riskBeta, beta == null ? '—' : beta.toFixed(2), '', beta == null && !ihsg ? p.riskBetaOff : p.riskBetaSub)}
+      ${cell(p.riskTop3, conc && conc.top3 != null ? conc.top3.toFixed(0) + '%' : '—', '', (p.riskTop3Sub || '').replace('{n}', conc ? String(conc.count) : '0'))}
+    </div>`;
+}
+
 function pfRenderTrend(target) {
   const host = document.getElementById('pfTrendChart');
   if (!host) return;
@@ -4322,6 +4433,8 @@ function pfRenderTrend(target) {
       const hit = data && data.benches.filter(function (x) { return x.id === b.id; })[0];
       paint(chip.querySelector('b'), hit ? hit.pct : null);
     });
+    const riskSlot = document.getElementById('pfRiskBlock');
+    if (riskSlot) riskSlot.innerHTML = data ? pfRiskHtml(data, target) : '';
     if (!data) {
       node.innerHTML = `<div class="pf-empty-sm">${esc(p.trendEmpty)}</div>`;
       return;
@@ -4570,6 +4683,7 @@ function renderPortfolio() {
           ${benchChipsHtml}
         </div>
         <div id="pfTrendChart"><div class="pf-empty-sm">${esc(p.loadingTrend)}</div></div>
+        <div id="pfRiskBlock" class="pf-risk-block"></div>
         <p class="pf-chart-note">${chartNote}</p>
       </section>
 
