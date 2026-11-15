@@ -166,6 +166,7 @@ const I18N = {
       worldTitle: 'World indices', worldSub: 'Level, today’s move and a month of closes, loaded when this board opens',
       world_americas: 'Americas', world_europe: 'Europe', world_apac: 'Asia-Pacific', world_emea: 'Middle East & Africa',
       worldLoading: 'Loading world indices…', worldEmpty: 'No index data came back. Try reopening this board.',
+      worldSortRegion: 'By region', worldSortMove: 'By move',
       buzzTitle: 'Most talked about', buzzSub: 'News mentions in the last 7 days, across the stories this page has cached',
       bluechips: 'IDX bluechips', usTech: 'US tech', etfs: 'ETFs',
       staticLabel: 'Static'
@@ -328,6 +329,7 @@ const I18N = {
       worldTitle: 'Indeks dunia', worldSub: 'Level, pergerakan hari ini, dan sebulan penutupan, dimuat saat papan ini dibuka',
       world_americas: 'Amerika', world_europe: 'Eropa', world_apac: 'Asia-Pasifik', world_emea: 'Timur Tengah & Afrika',
       worldLoading: 'Memuat indeks dunia…', worldEmpty: 'Data indeks tidak tersedia. Coba buka papan ini lagi.',
+      worldSortRegion: 'Per kawasan', worldSortMove: 'Per gerakan',
       buzzTitle: 'Paling diperbincangkan', buzzSub: 'Jumlah sebutan berita 7 hari terakhir, dari berita yang tersimpan di halaman ini',
       bluechips: 'Bluechip IDX', usTech: 'Teknologi AS', etfs: 'ETF',
       staticLabel: 'Statis'
@@ -2679,6 +2681,29 @@ const WORLD_INDICES = [
   { region: 'emea', name: 'TA-125', where: 'Israel', symbol: '^TA125.TA' }
 ];
 
+/* Country names are the one thing on a tile that is not a proper name, so they
+   follow the page language rather than the exchange's. */
+const WORLD_PLACES_ID = {
+  'United States': 'Amerika Serikat', 'Canada': 'Kanada', 'Mexico': 'Meksiko', 'Brazil': 'Brasil',
+  'Argentina': 'Argentina', 'United Kingdom': 'Inggris', 'Germany': 'Jerman', 'France': 'Prancis',
+  'Eurozone': 'Zona Euro', 'Spain': 'Spanyol', 'Italy': 'Italia', 'Netherlands': 'Belanda',
+  'Switzerland': 'Swiss', 'Indonesia': 'Indonesia', 'Japan': 'Jepang', 'Hong Kong': 'Hong Kong',
+  'China': 'Tiongkok', 'South Korea': 'Korea Selatan', 'Taiwan': 'Taiwan', 'India': 'India',
+  'Australia': 'Australia', 'Singapore': 'Singapura', 'Malaysia': 'Malaysia', 'Turkey': 'Turki',
+  'South Africa': 'Afrika Selatan', 'Israel': 'Israel'
+};
+
+const WORLD_SORT_KEY = 'fw.worldidx.sort';
+let worldSort = (function () {
+  let v = 'region';
+  try { v = localStorage.getItem(WORLD_SORT_KEY) || 'region'; } catch (e) {}
+  return v === 'move' ? 'move' : 'region';
+})();
+
+function worldPlace(entry) {
+  return (state.lang === 'id' && WORLD_PLACES_ID[entry.where]) || entry.where;
+}
+
 const WORLD_CACHE_KEY = 'fw.worldidx.v1';
 const WORLD_CACHE_TTL = 10 * 60 * 1000;
 let worldCache = loadJSON(WORLD_CACHE_KEY, null);
@@ -2713,8 +2738,8 @@ function worldSpark(vals, up) {
 
 function worldTileHtml(entry, row) {
   const up = row.pct >= 0;
-  return `<div class="world-tile" title="${esc(entry.where + ' · ' + entry.symbol)}">
-      <div class="world-tile-top"><b>${esc(entry.name)}</b><span>${esc(entry.where)}</span></div>
+  return `<div class="world-tile" title="${esc(worldPlace(entry) + ' · ' + entry.symbol)}">
+      <div class="world-tile-top"><b>${esc(entry.name)}</b><span>${esc(worldPlace(entry))}</span></div>
       <div class="world-level">${esc(mktFmt(row.level, 2))}</div>
       <div class="world-foot">
         <span class="world-pct ${up ? 'up' : 'down'}">${up ? '+' : ''}${row.pct.toFixed(2)}%</span>
@@ -2727,6 +2752,15 @@ const WORLD_REGIONS = ['americas', 'europe', 'apac', 'emea'];
 
 function worldBoardHtml() {
   const m = I18N[state.lang].market;
+  if (worldSort === 'move') {
+    /* Strongest first, so the top-left tile answers "where is money going
+       today" without reading a single number. */
+    const ranked = WORLD_INDICES.filter(function (e) { return worldCache.rows[e.symbol]; })
+      .sort(function (a, b) { return worldCache.rows[b.symbol].pct - worldCache.rows[a.symbol].pct; })
+      .map(function (e) { return worldTileHtml(e, worldCache.rows[e.symbol]); });
+    return ranked.length ? `<div class="world-grid">${ranked.join('')}</div>`
+      : `<div class="pf-empty-sm">${esc(m.worldEmpty)}</div>`;
+  }
   const built = WORLD_REGIONS.map(function (region) {
     const tiles = WORLD_INDICES.filter(function (e) { return e.region === region; })
       .filter(function (e) { return worldCache.rows[e.symbol]; })
@@ -2980,6 +3014,10 @@ async function loadMarketDashboard() {
             <h2 class="mkt-title">${esc(m.worldTitle)}</h2>
             <p class="mkt-sub">${esc(m.worldSub)}</p>
           </div>
+          <div class="mkt-seg" id="worldSeg" role="group">
+            <button type="button" data-set="region"${worldSort === 'region' ? ' class="active"' : ''}>${esc(m.worldSortRegion)}</button>
+            <button type="button" data-set="move"${worldSort === 'move' ? ' class="active"' : ''}>${esc(m.worldSortMove)}</button>
+          </div>
         </div>
         <div id="worldBoard"><div class="pf-empty-sm">${esc(m.worldLoading)}</div></div>
       </section>
@@ -3049,6 +3087,11 @@ async function loadMarketDashboard() {
   bindSeg('activeSeg', function (set) {
     const body = document.getElementById('activeBody'); if (!body) return;
     body.innerHTML = mktActiveRows(set === 'us' ? usMostActive : idxMostActive);
+  });
+  bindSeg('worldSeg', function (set) {
+    worldSort = set === 'move' ? 'move' : 'region';
+    try { localStorage.setItem(WORLD_SORT_KEY, worldSort); } catch (e) {}
+    paintWorldBoard();
   });
 
   const tabs = document.getElementById('coverageTabs');
