@@ -374,7 +374,7 @@ function renderPortfolio() {
       <p class="pf-note">${esc(p.note)}</p>
     </section>
 
-    <section class="mkt-card pf-soft">
+    <section class="mkt-card">
       <div class="mkt-card-head">
         <div>
           <h2 class="mkt-title">${esc(p.divTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>

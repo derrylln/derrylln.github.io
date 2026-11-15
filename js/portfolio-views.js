@@ -109,7 +109,7 @@ function pfActivityHtml(target) {
         <span class="pact-date">${esc(when(e.ts))}</span>
         <span class="pact-main"><strong class="${isOut ? 'down' : 'up'}">${esc(isOut ? p.actRemove : p.actAdd)}</strong> ${esc(e.symbol || '')}<em>${esc(qty)}${esc(price)}</em>${e.note ? `<span class="pact-note">${esc(e.note)}</span>` : ''}</span>
       </div>` };
-  }).concat(divs).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 4);
+  }).concat(divs).sort(function (a, b) { return b.ts - a.ts; });
   if (!events.length) return `<div class="pf-empty-sm">${esc(p.activityEmpty)}</div>`;
   return `<div class="pact-list">${events.map(function (x) { return x.html; }).join('')}</div>`;
 }

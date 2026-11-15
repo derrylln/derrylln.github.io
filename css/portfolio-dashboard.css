@@ -65,7 +65,7 @@
 .pa-row:last-child { border-bottom: none; }
 .pa-legend { display: flex; flex-direction: column; }
 .pa-body { display: flex; flex-direction: column; gap: 12px; flex: 1; justify-content: flex-start; }
-.pa-ring-wrap { position: relative; width: 168px; height: 168px; margin: 2px auto; flex: none; }
+.pa-ring-wrap { position: relative; width: 150px; height: 150px; margin: 0 auto; flex: none; }
 .pa-ring { position: absolute; inset: 0; border-radius: 50%; background: var(--ring);
   -webkit-mask: radial-gradient(circle, transparent 0 41%, #000 42%);
   mask: radial-gradient(circle, transparent 0 41%, #000 42%); }
@@ -98,7 +98,16 @@
 .pmm-val.down { color: var(--red); }
 
 /* activity */
-.pact-list { display: flex; flex-direction: column; }
+/* four entries fit; anything older is one scroll away, so the column keeps a
+   fixed height and the chart beside it is never stretched to fill a void */
+.pact-list {
+  display: flex; flex-direction: column;
+  max-height: 176px; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: var(--rule) transparent;
+}
+.pact-list::-webkit-scrollbar { width: 6px; }
+.pact-list::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
+.pact-list::-webkit-scrollbar-track { background: transparent; }
 .pact-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr); gap: 10px;
   padding: 9px 0; border-bottom: 1px solid var(--rule-2); font-size: 12px;
@@ -415,9 +424,7 @@
 .pf-news-slot { min-width: 0; display: flex; }
 .pf-news-slot > .mkt-card { flex: 1; }
 
-/* a second surface, so the income card is not one more white box */
-.pf-soft { background: #f7f8fa; border-color: #eceff3; }
-[data-theme="dark"] .pf-soft { background: rgba(148, 163, 184, .07); border-color: rgba(148, 163, 184, .12); }
+
 /* Rows stretch, so a row is never two cards of different heights with page
    showing underneath the shorter one. The side column carries two cards, and
    the last of them grows into whatever height is left over. */
