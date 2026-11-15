@@ -135,6 +135,12 @@ const I18N = {
       dcfNetDebt: 'Net debt', dcfNetCash: 'Net cash',
       dcfPerYear: 'a year', dcfYearsUnit: 'years', dcfAssumed: 'from revenue growth',
       dcfCapped: 'capped', dcfSpan: n => n + 'y',
+      dcfHints: {
+        growth: 'Yearly rise in the cash flow being projected.',
+        discount: 'Return you require each year; higher gives a lower value.',
+        terminal: 'Growth assumed to continue after the forecast ends.',
+        years: 'Years projected before the terminal value.'
+      },
       dcfNote: n => n + '-year discounted cash flow on reported free cash flow, Gordon terminal value. Assumption-based estimate, not a price target.',
       dcfNoteNi: n => n + '-year discounted cash flow on reported net income, Gordon terminal value. Assumption-based estimate, not a price target. Earnings are not cash, so read the result as a comparison rather than a valuation.',
       dcfNoFcf: 'No free cash flow is reported for this company, so there is nothing to discount.',
@@ -312,6 +318,12 @@ const I18N = {
       dcfNetDebt: 'Utang neto', dcfNetCash: 'Kas neto',
       dcfPerYear: 'per tahun', dcfYearsUnit: 'tahun', dcfAssumed: 'dari pertumbuhan pendapatan',
       dcfCapped: 'dibatasi', dcfSpan: n => n + 'th',
+      dcfHints: {
+        growth: 'Kenaikan arus kas per tahun yang diproyeksikan.',
+        discount: 'Imbal hasil yang Anda minta per tahun; makin tinggi, nilainya makin rendah.',
+        terminal: 'Pertumbuhan yang diasumsikan berlanjut setelah proyeksi berakhir.',
+        years: 'Jumlah tahun proyeksi sebelum nilai terminal.'
+      },
       dcfNote: n => 'DCF ' + n + ' tahun atas arus kas bebas yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga.',
       dcfNoteNi: n => 'DCF ' + n + ' tahun atas laba bersih yang dilaporkan, nilai terminal Gordon. Estimasi berbasis asumsi, bukan target harga. Laba bukan kas, jadi hasilnya lebih cocok jadi pembanding daripada nilai intrinsik.',
       dcfNoFcf: 'Arus kas bebas emiten ini tidak dilaporkan, jadi tidak ada yang bisa didiskontokan.',

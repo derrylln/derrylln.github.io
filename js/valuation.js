@@ -311,12 +311,16 @@ function finDcfHtml(dcf, t) {
     return '<div class="fin-dcf-row' + (cls ? ' ' + cls : '') + '"><span>' + esc(label) + '</span>' +
       '<b>' + esc(value) + '</b></div>';
   };
+  /* Each field carries its own one-line definition: "discount rate" and
+     "terminal growth" mean nothing to a reader who has not met them before.
+     The definition is keyed by the field, so callers pass nothing extra. */
   const inputRow = function (label, key, value, unit, max, extra) {
     return '<div class="fin-dcf-row is-input"><span>' + esc(label) + '</span>' +
       '<label class="fin-dcf-field"><input type="number" inputmode="decimal" data-dcf="' + key + '"' +
       ' step="' + (key === 'years' ? '1' : '0.1') + '" min="' + (key === 'terminal' ? '-5' : key === 'years' ? '1' : key === 'growth' ? '-50' : '0.1') + '"' +
       (max ? ' max="' + max + '"' : '') + ' value="' + esc(String(value)) + '" />' +
-      (unit ? '<i>' + unit + '</i>' : '') + '</label>' + (extra || '') + '</div>';
+      (unit ? '<i>' + unit + '</i>' : '') + '</label>' + (extra || '') +
+      '<em class="fin-dcf-hint">' + esc(t.dcfHints[key] || '') + '</em></div>';
   };
   const up = dcf.upside;
   const tone = up == null ? '' : up >= 0 ? 'up' : 'down';

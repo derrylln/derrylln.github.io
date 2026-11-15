@@ -297,9 +297,9 @@ async function paintFinBody() {
       tile(f.equity, val(newest.equity), per, null) +
       tile(f.roe, roeText(newest), newest.kind === 'Q' ? per + ' · ' + f.annualised : per, null) +
     '</div>' +
+    '<div id="finAiSlot"></div>' +
     '<div id="finDcfSlot">' + finDcfHtml(dcf, t) + '</div>' +
     '<div id="finVerdictSlot"></div>' +
-    '<div id="finAiSlot"></div>' +
     '<div class="fin-charts">' +
       '<div class="fin-chart"><h3>' + esc(t.chartRevenue) + '</h3><div class="fin-chart-meta">' +
         esc((newest.revenue && newest.revenue.currency) || fund.currency || '') + '</div><div id="finBar"></div></div>' +
