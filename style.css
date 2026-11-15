@@ -3528,6 +3528,30 @@ body, html {
   .pf-risk-cell:nth-child(-n+2) { border-top: none; }
   .pf-risk-cell:nth-child(even) { border-left: 1px solid var(--rule-2); }
 }
+
+/* --- dividend income: the same strip shape, three cells, plus its own table --- */
+.pf-div-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 14px; }
+.pf-div-table td:first-child { white-space: nowrap; }
+@media (max-width: 560px) {
+  .pf-risk.pf-div-stats { grid-template-columns: 1fr; }
+  .pf-risk.pf-div-stats .pf-risk-cell { border-left: none; border-top: 1px solid var(--rule-2); }
+  .pf-risk.pf-div-stats .pf-risk-cell:first-child { border-top: none; }
+}
+@media (max-width: 860px) {
+  .pf-div-table, .pf-div-table tbody { display: block; width: 100%; }
+  .pf-div-table thead { display: none; }
+  .pf-div-table tbody tr {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px;
+    padding: 12px 14px; margin-bottom: 8px;
+    border: 1px solid var(--rule-2); border-radius: 12px;
+  }
+  .pf-div-table tbody td { display: block; padding: 0; border: 0; white-space: normal; text-align: left; }
+  .pf-div-table tbody td:first-child { grid-column: 1 / -1; }
+  .pf-div-table tbody td.num::before {
+    content: attr(data-label); display: block; margin-bottom: 2px;
+    font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+  }
+}
 .pf-empty-sm { padding: 12px 0; font-size: 12px; color: var(--muted); }
 
 @media (max-width: 1024px) {

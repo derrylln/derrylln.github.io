@@ -182,6 +182,13 @@ const I18N = {
       colDate: 'Date', colSide: 'Side', colQty: 'Quantity', colPrice: 'Price',
       ledgerTitle: 'Trade ledger', ledgerSub: 'Every buy and sell, dated — the positions above are built from these',
       notePh: 'Why this trade? (optional)', exportHoldings: 'Holdings CSV', exportEvents: 'Events CSV',
+      divTitle: 'Dividend income', divSub: 'Trailing twelve months at your current share count, from the payout history this page has cached',
+      divAnnual: 'Annual income', divAnnualSub: 'at current share counts',
+      divYoc: 'Yield on cost', divYocSub: 'annual income ÷ what you paid',
+      divNext: 'Next ex-date', divNextSub: 'projected from each payout rhythm',
+      divColDps: 'DPS 12M', divColIncome: 'Income / year', divColNext: 'Next ex-date',
+      divExpected: 'expected', divEmpty: 'No dividend history cached for these holdings yet.',
+      divNote: '{paying} of {total} holdings pay a dividend. Ex-dates are projected from each company’s own spacing, so they are a guide, not a calendar.',
       ledgerEmpty: 'No trades yet. Add one above and the ledger starts here.',
       ledgerOpening: 'opening',
       xirr: 'Annual return (XIRR)', xirrNote: 'Money-weighted return, as a yearly rate: each trade is a dated cash flow, converted at the rate that held on its own day, and today\u2019s value closes the series. A book held for a few months annualises to a large figure, so read it beside the net gain above.',
@@ -334,6 +341,13 @@ const I18N = {
       colDate: 'Tanggal', colSide: 'Jenis', colQty: 'Jumlah', colPrice: 'Harga',
       ledgerTitle: 'Buku transaksi', ledgerSub: 'Setiap beli dan jual, bertanggal — posisi di atas dihitung dari sini',
       notePh: 'Alasan transaksi ini? (opsional)', exportHoldings: 'CSV kepemilikan', exportEvents: 'CSV transaksi',
+      divTitle: 'Pendapatan dividen', divSub: 'Dua belas bulan terakhir pada jumlah saham Anda sekarang, dari riwayat pembayaran yang tersimpan di halaman ini',
+      divAnnual: 'Pendapatan setahun', divAnnualSub: 'pada jumlah saham sekarang',
+      divYoc: 'Imbal hasil atas modal', divYocSub: 'pendapatan setahun ÷ modal Anda',
+      divNext: 'Ex-date berikutnya', divNextSub: 'perkiraan dari pola pembayaran',
+      divColDps: 'DPS 12 bulan', divColIncome: 'Pendapatan / tahun', divColNext: 'Ex-date berikutnya',
+      divExpected: 'perkiraan', divEmpty: 'Belum ada riwayat dividen tersimpan untuk posisi ini.',
+      divNote: '{paying} dari {total} posisi membayar dividen. Tanggal diperkirakan dari pola masing-masing emiten, jadi ini panduan, bukan kalender resmi.',
       ledgerEmpty: 'Belum ada transaksi. Catat di atas dan buku ini akan terisi.',
       ledgerOpening: 'saldo awal',
       xirr: 'Imbal hasil tahunan (XIRR)', xirrNote: 'Imbal hasil berbobot uang sebagai laju per tahun: tiap transaksi jadi arus kas bertanggal, dikonversi dengan kurs hari itu, dan nilai hari ini menutup rangkaiannya. Portofolio yang baru berjalan beberapa bulan akan tampil sangat besar saat disetahunkan, jadi bacalah bersama laba bersih di atas.',
@@ -4058,7 +4072,10 @@ function pfEnsureHoldingDividends() {
   portfolio.forEach(function (h) {
     if (divCache.rows[h.symbol] || pfDivTried.has(h.symbol)) return;
     pfDivTried.add(h.symbol);
-    fetchDividendInfo(h.symbol).then(paintPfActivity).catch(function () {});
+    fetchDividendInfo(h.symbol).then(function () {
+      paintPfActivity();
+      paintPfDividendIncome();
+    }).catch(function () {});
   });
 }
 
@@ -4402,6 +4419,118 @@ function pfRiskHtml(data, target) {
     </div>`;
 }
 
+/* ---- dividend income --------------------------------------------
+   Built from the payout history the dividend scan already caches for these
+   holdings, so the card costs no request of its own: trailing twelve-month
+   income at today's share count, that income against what was paid, and the
+   next payment if the company keeps to its own rhythm. */
+
+/* The median gap between payments, in days. A company that pays twice a year
+   gets ~182, one that pays quarterly ~91; payments closer than three weeks
+   apart are treated as part of the same distribution. */
+function pfDividendGap(row) {
+  const events = (row && row.events) || [];
+  if (events.length < 2) return null;
+  const gaps = [];
+  for (let i = 1; i < events.length; i++) {
+    const days = (events[i].ts - events[i - 1].ts) / 864e5;
+    if (days > 20 && days < 400) gaps.push(days);
+  }
+  if (!gaps.length) return null;
+  gaps.sort(function (a, b) { return a - b; });
+  return gaps[Math.floor(gaps.length / 2)];
+}
+
+/* Projected, never announced: the last payout plus the company's own spacing,
+   walked forward until it is in the future. */
+function pfDividendNext(row) {
+  const events = (row && row.events) || [];
+  const gap = pfDividendGap(row);
+  if (!gap || !events.length) return null;
+  const lastTs = events[events.length - 1].ts;
+  let ts = lastTs + gap * 864e5;
+  for (let i = 0; i < 24 && ts < Date.now(); i++) ts += gap * 864e5;
+  return ts > Date.now() ? ts : null;
+}
+
+function pfDividendRows(target) {
+  const out = [];
+  let income = 0, bookCost = 0;
+  portfolio.forEach(function (h) {
+    const cur = pfCurrency(h.symbol);
+    const cost = pfConvert((h.avgCost || 0) * h.shares, h.avgCur || cur, target);
+    if (cost != null) bookCost += cost;
+    const row = divCache.rows[h.symbol];
+    if (!row || !(row.dps > 0)) return;
+    const annual = pfConvert(row.dps * h.shares, cur, target);
+    if (annual == null) return;
+    income += annual;
+    out.push({
+      symbol: h.symbol, shares: h.shares, dps: row.dps, cur: cur,
+      annual: annual, cost: cost, next: pfDividendNext(row)
+    });
+  });
+  return { rows: out.sort(function (a, b) { return b.annual - a.annual; }), income: income, bookCost: bookCost };
+}
+
+function pfDividendIncomeHtml(target) {
+  const p = (I18N[state.lang] || I18N.en).portfolio;
+  const data = pfDividendRows(target);
+  if (!portfolio.length) return '';
+  if (!data.rows.length) return `<div class="pf-empty-sm">${esc(p.divEmpty)}</div>`;
+
+  const yoc = data.bookCost > 0 ? (data.income / data.bookCost) * 100 : null;
+  const next = data.rows.filter(function (r) { return r.next; })
+    .sort(function (a, b) { return a.next - b.next; })[0];
+  const locale = state.lang === 'id' ? 'id-ID' : 'en-GB';
+  /* An ex-date is a day, not an instant: the payout timestamps sit at UTC
+     midnight, so formatting them in local time lands on the day before for
+     anyone west of Greenwich. */
+  const dateText = function (ts) {
+    return new Date(ts).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  };
+
+  const cell = function (label, value, cls, sub) {
+    return `<div class="pf-risk-cell"><span>${esc(label)}</span>` +
+      `<strong${cls ? ` class="${cls}"` : ''}>${value}</strong><em>${esc(sub)}</em></div>`;
+  };
+
+  const rows = data.rows.map(function (r) {
+    return `<tr class="pf-div-row">
+        <td><div class="pf-sym">${esc(r.symbol)}</div></td>
+        <td class="num" data-label="${esc(p.colShares)}">${r.shares.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
+        <td class="num" data-label="${esc(p.divColDps)}">${esc(pfPrice(r.dps, r.cur))}</td>
+        <td class="num" data-label="${esc(p.divColIncome)}">${esc(pfMoney(r.annual, target))}</td>
+        <td class="num" data-label="${esc(p.divYoc)}">${r.cost > 0 ? (r.annual / r.cost * 100).toFixed(2) + '%' : '—'}</td>
+        <td class="num" data-label="${esc(p.divColNext)}">${r.next ? esc(dateText(r.next)) + ` <span class="pf-tag">${esc(p.divExpected)}</span>` : '—'}</td>
+      </tr>`;
+  }).join('');
+
+  return `<div class="pf-risk pf-div-stats">
+      ${cell(p.divAnnual, esc(pfMoney(data.income, target)), '', p.divAnnualSub)}
+      ${cell(p.divYoc, yoc == null ? '—' : yoc.toFixed(2) + '%', '', p.divYocSub)}
+      ${cell(p.divNext, next ? esc(dateText(next.next)) : '—', '', p.divNextSub)}
+    </div>
+    <div class="pf-table-wrap">
+      <table class="pf-table pf-div-table">
+        <thead><tr>
+          <th>${esc(p.colSym)}</th><th class="num">${esc(p.colShares)}</th><th class="num">${esc(p.divColDps)}</th>
+          <th class="num">${esc(p.divColIncome)}</th><th class="num">${esc(p.divYoc)}</th><th class="num">${esc(p.divColNext)}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+    <p class="pf-note">${esc((p.divNote || '').replace('{paying}', String(data.rows.length)).replace('{total}', String(portfolio.length)))}</p>`;
+}
+
+let pfDivTarget = 'USD';
+
+function paintPfDividendIncome() {
+  const slot = document.getElementById('pfDivSlot');
+  if (!slot) return;
+  slot.innerHTML = pfDividendIncomeHtml(pfDivTarget);
+}
+
 function pfRenderTrend(target) {
   const host = document.getElementById('pfTrendChart');
   if (!host) return;
@@ -4743,6 +4872,16 @@ function renderPortfolio() {
     <section class="mkt-card">
       <div class="mkt-card-head">
         <div>
+          <h2 class="mkt-title">${esc(p.divTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
+          <p class="mkt-sub">${esc(p.divSub)}</p>
+        </div>
+      </div>
+      <div id="pfDivSlot"></div>
+    </section>
+
+    <section class="mkt-card">
+      <div class="mkt-card-head">
+        <div>
           <h2 class="mkt-title">${esc(p.ledgerTitle)}</h2>
           <p class="mkt-sub">${esc(p.ledgerSub)}</p>
         </div>
@@ -4755,6 +4894,8 @@ function renderPortfolio() {
     </section>`;
 
   pfActTarget = primaryCur;
+  pfDivTarget = primaryCur;
+  paintPfDividendIncome();
   pfEnsureHoldingDividends();
   pfOpen.forEach(pfLoadFund);
   pfRenderTrend(primaryCur);
