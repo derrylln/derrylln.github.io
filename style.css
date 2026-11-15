@@ -3537,6 +3537,41 @@ body, html {
   .pf-risk.pf-div-stats .pf-risk-cell { border-left: none; border-top: 1px solid var(--rule-2); }
   .pf-risk.pf-div-stats .pf-risk-cell:first-child { border-top: none; }
 }
+/* --- world index board: one tile per exchange, grouped by region --- */
+.world-region + .world-region { margin-top: 18px; }
+.world-region-head {
+  margin: 0 0 8px; font-size: 9.5px; font-weight: 800; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted);
+}
+/* 148px so a 390px phone still fits two columns; the wider screens fill the
+   row anyway. */
+.world-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; }
+.world-tile {
+  min-width: 0; padding: 10px 12px;
+  border: 1px solid var(--rule-2); border-radius: 12px;
+}
+.world-tile-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.world-tile-top b {
+  min-width: 0; font-size: 11.5px; font-weight: 800; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.world-tile-top span { flex: none; font-size: 9px; color: var(--muted); white-space: nowrap; }
+.world-level {
+  margin-top: 5px; font-size: 16px; font-weight: 800; letter-spacing: -.01em;
+  color: var(--ink); font-variant-numeric: tabular-nums;
+}
+.world-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 3px; }
+.world-pct { font-size: 11px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.world-pct.up, .world-spark.up { color: var(--green); }
+.world-pct.down, .world-spark.down { color: var(--red); }
+.world-spark { flex: none; opacity: .9; }
+@media (max-width: 420px) {
+  .world-tile { padding: 9px 10px; }
+  .world-tile-top b { font-size: 10.5px; }
+  .world-level { font-size: 15px; }
+  .world-spark { width: 58px; }
+}
+
 @media (max-width: 860px) {
   .pf-div-table, .pf-div-table tbody { display: block; width: 100%; }
   .pf-div-table thead { display: none; }

@@ -163,6 +163,10 @@ const I18N = {
       movers: 'Top movers', gainers: 'Gainers', losers: 'Losers',
       mostActive: 'Most active', watch: 'Market watch', rates: 'Rates & volatility',
       coverage: 'Coverage', coverageSub: 'Open a card for its fundamentals and the AI read',
+      worldTitle: 'World indices', worldSub: 'Level, today’s move and a month of closes, loaded when this board opens',
+      world_americas: 'Americas', world_europe: 'Europe', world_apac: 'Asia-Pacific', world_emea: 'Middle East & Africa',
+      worldLoading: 'Loading world indices…', worldEmpty: 'No index data came back. Try reopening this board.',
+      buzzTitle: 'Most talked about', buzzSub: 'News mentions in the last 7 days, across the stories this page has cached',
       bluechips: 'IDX bluechips', usTech: 'US tech', etfs: 'ETFs',
       staticLabel: 'Static'
     },
@@ -288,7 +292,6 @@ const I18N = {
       snapshot: 'Jakarta snapshot', ihsgSub: 'IHSG · composite', today: 'today',
       dayHigh: 'Day high', dayLow: 'Day low', prevClose: 'Prev close', volume: 'Volume', dayRange: 'Day range',
       wkRange: '52-week range', leaders: 'Breadth & leaders', topLoser: 'Top IDX loser',
-      buzzTitle: 'Most talked about', buzzSub: 'News mentions in the last 7 days, across the stories this page has cached',
       buzzUs: 'United States', buzzIdx: 'Indonesia', buzzTop: 'Top 10',
       buzzEmpty: 'No name in this market appeared in the cached stories.',
       buzzMentions: n => n + (n === 1 ? ' mention' : ' mentions'),
@@ -322,6 +325,10 @@ const I18N = {
       movers: 'Penggerak teratas', gainers: 'Naik', losers: 'Turun',
       mostActive: 'Teraktif', watch: 'Pantauan pasar', rates: 'Suku bunga & volatilitas',
       coverage: 'Liputan', coverageSub: 'Buka kartu untuk fundamental dan analisis AI',
+      worldTitle: 'Indeks dunia', worldSub: 'Level, pergerakan hari ini, dan sebulan penutupan, dimuat saat papan ini dibuka',
+      world_americas: 'Amerika', world_europe: 'Eropa', world_apac: 'Asia-Pasifik', world_emea: 'Timur Tengah & Afrika',
+      worldLoading: 'Memuat indeks dunia…', worldEmpty: 'Data indeks tidak tersedia. Coba buka papan ini lagi.',
+      buzzTitle: 'Paling diperbincangkan', buzzSub: 'Jumlah sebutan berita 7 hari terakhir, dari berita yang tersimpan di halaman ini',
       bluechips: 'Bluechip IDX', usTech: 'Teknologi AS', etfs: 'ETF',
       staticLabel: 'Statis'
     },
@@ -447,7 +454,6 @@ const I18N = {
       snapshot: 'Ringkasan Jakarta', ihsgSub: 'IHSG · gabungan', today: 'hari ini',
       dayHigh: 'Tertinggi', dayLow: 'Terendah', prevClose: 'Penutupan lalu', volume: 'Volume', dayRange: 'Rentang hari',
       wkRange: 'Rentang 52 minggu', leaders: 'Breadth & pemimpin', topLoser: 'Loser IDX teratas',
-      buzzTitle: 'Paling diperbincangkan', buzzSub: 'Jumlah sebutan berita 7 hari terakhir, dari berita yang tersimpan di halaman ini',
       buzzUs: 'Amerika Serikat', buzzIdx: 'Indonesia', buzzTop: '10 teratas',
       buzzEmpty: 'Tidak ada nama di pasar ini yang muncul di berita tersimpan.',
       buzzMentions: n => n + ' sebutan',
@@ -2639,6 +2645,145 @@ document.addEventListener('click', function (e) {
   }
 });
 
+/* ---- world index board ------------------------------------------------
+   One tile per exchange, grouped by region: level, today's move and a month
+   of closes from the same Yahoo chart endpoint the rest of the page uses, so
+   one request per index and no second call for the sparkline. Only fetched
+   when the explore board is opened, and cached for ten minutes. */
+const WORLD_INDICES = [
+  { region: 'americas', name: 'S&P 500', where: 'United States', symbol: '^GSPC' },
+  { region: 'americas', name: 'TSX', where: 'Canada', symbol: '^GSPTSE' },
+  { region: 'americas', name: 'IPC', where: 'Mexico', symbol: '^MXX' },
+  { region: 'americas', name: 'Ibovespa', where: 'Brazil', symbol: '^BVSP' },
+  { region: 'americas', name: 'Merval', where: 'Argentina', symbol: '^MERV' },
+  { region: 'europe', name: 'FTSE 100', where: 'United Kingdom', symbol: '^FTSE' },
+  { region: 'europe', name: 'DAX', where: 'Germany', symbol: '^GDAXI' },
+  { region: 'europe', name: 'CAC 40', where: 'France', symbol: '^FCHI' },
+  { region: 'europe', name: 'Euro Stoxx 50', where: 'Eurozone', symbol: '^STOXX50E' },
+  { region: 'europe', name: 'IBEX 35', where: 'Spain', symbol: '^IBEX' },
+  { region: 'europe', name: 'FTSE MIB', where: 'Italy', symbol: 'FTSEMIB.MI' },
+  { region: 'europe', name: 'AEX', where: 'Netherlands', symbol: '^AEX' },
+  { region: 'europe', name: 'SMI', where: 'Switzerland', symbol: '^SSMI' },
+  { region: 'apac', name: 'IHSG', where: 'Indonesia', symbol: '^JKSE' },
+  { region: 'apac', name: 'Nikkei 225', where: 'Japan', symbol: '^N225' },
+  { region: 'apac', name: 'Hang Seng', where: 'Hong Kong', symbol: '^HSI' },
+  { region: 'apac', name: 'Shanghai', where: 'China', symbol: '000001.SS' },
+  { region: 'apac', name: 'KOSPI', where: 'South Korea', symbol: '^KS11' },
+  { region: 'apac', name: 'TAIEX', where: 'Taiwan', symbol: '^TWII' },
+  { region: 'apac', name: 'Sensex', where: 'India', symbol: '^BSESN' },
+  { region: 'apac', name: 'ASX 200', where: 'Australia', symbol: '^AXJO' },
+  { region: 'apac', name: 'STI', where: 'Singapore', symbol: '^STI' },
+  { region: 'apac', name: 'KLCI', where: 'Malaysia', symbol: '^KLSE' },
+  { region: 'emea', name: 'BIST 100', where: 'Turkey', symbol: 'XU100.IS' },
+  { region: 'emea', name: 'JSE Top 40', where: 'South Africa', symbol: '^JN0U.JO' },
+  { region: 'emea', name: 'TA-125', where: 'Israel', symbol: '^TA125.TA' }
+];
+
+const WORLD_CACHE_KEY = 'fw.worldidx.v1';
+const WORLD_CACHE_TTL = 10 * 60 * 1000;
+let worldCache = loadJSON(WORLD_CACHE_KEY, null);
+if (!worldCache || typeof worldCache !== 'object' || !worldCache.rows) worldCache = { ts: 0, rows: {} };
+let worldBusy = false;
+
+/* Level and the day's move both come out of the month of closes, so a tile
+   costs one request rather than a quote plus a history. */
+async function worldFetch(symbol) {
+  const hist = await fetchHistory(symbol, '1mo').catch(function () { return []; });
+  const pts = (hist || []).filter(function (p) { return p && isFinite(p.y) && p.y > 0; });
+  if (pts.length < 2) return null;
+  const level = pts[pts.length - 1].y;
+  const prev = pts[pts.length - 2].y;
+  return {
+    level: level,
+    pct: (level / prev - 1) * 100,
+    spark: pts.map(function (p) { return Math.round(p.y * 100) / 100; })
+  };
+}
+
+function worldSpark(vals, up) {
+  if (!vals || vals.length < 2) return '';
+  const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+  const span = (max - min) || 1;
+  const w = 74, h = 22;
+  const points = vals.map(function (v, i) {
+    return (i / (vals.length - 1) * w).toFixed(1) + ',' + (h - ((v - min) / span) * h).toFixed(1);
+  }).join(' ');
+  return `<svg class="world-spark ${up ? 'up' : 'down'}" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="1.3"></polyline></svg>`;
+}
+
+function worldTileHtml(entry, row) {
+  const up = row.pct >= 0;
+  return `<div class="world-tile" title="${esc(entry.where + ' · ' + entry.symbol)}">
+      <div class="world-tile-top"><b>${esc(entry.name)}</b><span>${esc(entry.where)}</span></div>
+      <div class="world-level">${esc(mktFmt(row.level, 2))}</div>
+      <div class="world-foot">
+        <span class="world-pct ${up ? 'up' : 'down'}">${up ? '+' : ''}${row.pct.toFixed(2)}%</span>
+        ${worldSpark(row.spark, up)}
+      </div>
+    </div>`;
+}
+
+const WORLD_REGIONS = ['americas', 'europe', 'apac', 'emea'];
+
+function worldBoardHtml() {
+  const m = I18N[state.lang].market;
+  const built = WORLD_REGIONS.map(function (region) {
+    const tiles = WORLD_INDICES.filter(function (e) { return e.region === region; })
+      .filter(function (e) { return worldCache.rows[e.symbol]; })
+      .map(function (e) { return worldTileHtml(e, worldCache.rows[e.symbol]); });
+    if (!tiles.length) return '';
+    return `<div class="world-region">
+        <h3 class="world-region-head">${esc(m['world_' + region] || region)}</h3>
+        <div class="world-grid">${tiles.join('')}</div>
+      </div>`;
+  }).filter(Boolean);
+  return built.length ? built.join('') : `<div class="pf-empty-sm">${esc(m.worldEmpty)}</div>`;
+}
+
+let worldPainted = 0;
+
+function paintWorldBoard() {
+  const slot = document.getElementById('worldBoard');
+  if (!slot) return;
+  slot.innerHTML = worldBoardHtml();
+}
+
+/* Four at a time, like the dividend scan, and the board repaints as answers
+   land so the first tiles are readable while the rest are still loading. */
+function loadWorldBoard(force) {
+  const slot = document.getElementById('worldBoard');
+  if (!slot) return;
+  const fresh = worldCache.ts && (Date.now() - worldCache.ts) < WORLD_CACHE_TTL;
+  if (Object.keys(worldCache.rows).length) paintWorldBoard();
+  if (fresh && !force) return;
+  if (worldBusy) return;
+  worldBusy = true;
+  const m = I18N[state.lang].market;
+  if (!Object.keys(worldCache.rows).length) slot.innerHTML = `<div class="pf-empty-sm">${esc(m.worldLoading)}</div>`;
+  const queue = WORLD_INDICES.filter(function (e) { return force || !worldCache.rows[e.symbol]; });
+  let index = 0, active = 0, done = 0;
+  const total = queue.length;
+  const step = function () {
+    if (index >= total && active === 0) {
+      worldCache.ts = Date.now();
+      saveJSON(WORLD_CACHE_KEY, worldCache);
+      worldBusy = false;
+      paintWorldBoard();
+      return;
+    }
+    while (active < 4 && index < total) {
+      const entry = queue[index++];
+      active++;
+      worldFetch(entry.symbol).then(function (row) {
+        if (row) worldCache.rows[entry.symbol] = row;
+        done++;
+        if (done % 4 === 0) paintWorldBoard();
+      }).catch(function () {}).finally(function () { active--; step(); });
+    }
+  };
+  step();
+}
+
 async function loadMarketDashboard() {
   const dash = $('#stockDashboard'); const t = I18N[state.lang]; const m = t.market;
   dash.dataset.loaded = '1';
@@ -2832,6 +2977,16 @@ async function loadMarketDashboard() {
       <section class="mkt-card">
         <div class="mkt-card-head">
           <div>
+            <h2 class="mkt-title">${esc(m.worldTitle)}</h2>
+            <p class="mkt-sub">${esc(m.worldSub)}</p>
+          </div>
+        </div>
+        <div id="worldBoard"><div class="pf-empty-sm">${esc(m.worldLoading)}</div></div>
+      </section>
+
+      <section class="mkt-card">
+        <div class="mkt-card-head">
+          <div>
             <h2 class="mkt-title">${esc(m.buzzTitle)}</h2>
             <p class="mkt-sub">${esc(m.buzzSub)}</p>
           </div>
@@ -2864,6 +3019,11 @@ async function loadMarketDashboard() {
      learns the company names it can then look for in the news. */
   buzzRememberNames(allData);
   renderBuzzBoard();
+
+  /* The world board is not part of the dashboard's own quote sweep: it has
+     its own cache and its own ten-minute life, and it only starts here
+     because this is the moment the view is actually on screen. */
+  loadWorldBoard();
 
   const divSlot = document.getElementById('dividendPanel');
   if (divSlot) divSlot.innerHTML = '<div class="modern-card"><div class="card-title">' +
