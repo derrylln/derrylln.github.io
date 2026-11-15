@@ -2403,6 +2403,8 @@ body, html {
 }
 .pf-form select:focus, .pf-form .pf-date:focus { border-color: var(--ink); }
 .pf-form .pf-date { flex: 0 0 160px; }
+/* Optional, and it takes whatever room the row has left before wrapping. */
+.pf-form .pf-note-input { flex: 1 1 220px; }
 /* --- trade ledger: the dated events the positions are built from --- */
 .pf-side-chip {
   display: inline-block; padding: 2px 8px; border-radius: 999px;
@@ -2416,6 +2418,20 @@ body, html {
 }
 .pf-ledger td:first-child { white-space: nowrap; }
 .pf-ledger-sym { font-weight: 800; }
+/* The reason a trade happened rides under its ticker: it belongs to the row
+   without needing a column of its own. */
+.pf-ledger-note {
+  margin-top: 3px; max-width: 260px;
+  font-size: 10.5px; font-weight: 500; line-height: 1.4; color: var(--muted);
+  letter-spacing: 0; text-transform: none;
+}
+.pf-export-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.pf-export {
+  padding: 5px 10px; border: 1px solid var(--rule); border-radius: 999px; background: transparent;
+  font-family: var(--sans); font-size: 10px; font-weight: 800; letter-spacing: .04em;
+  color: var(--muted); cursor: pointer; transition: color .15s, border-color .15s;
+}
+.pf-export:hover { color: var(--ink); border-color: var(--ink); }
 .pf-xirr-note { margin: 6px 0 0; font-size: 10px; color: var(--muted); line-height: 1.45; }
 
 /* --- news buzz: the mention ranking on the explore board --- */
@@ -2642,6 +2658,7 @@ body, html {
   .pf-form #pfSymbol { grid-column: 1 / -1; }
   .pf-form select { grid-column: 1 / -1; }
   .pf-form .pf-date { grid-column: 1 / -1; }
+  .pf-form .pf-note-input { grid-column: 1 / -1; }
   .pf-form .pf-cost { grid-column: 2; flex: none; }
   .pf-form button[type="submit"] { grid-column: 1 / -1; width: 100%; }
   .pf-form input { width: 100%; padding: 9px 10px; font-size: 13px; }
@@ -3448,6 +3465,10 @@ body, html {
 .pact-main strong.div { color: #2563eb; }
 [data-theme="dark"] .pact-main strong.div { color: #9db7ff; }
 .pact-main em { font-style: normal; color: var(--muted); margin-left: 6px; font-variant-numeric: tabular-nums; }
+.pact-note {
+  display: block; margin-top: 3px; font-size: 10.5px; line-height: 1.4;
+  color: var(--muted); font-style: italic;
+}
 
 .pf-cur-badge {
   display: inline-block; margin-left: 8px; padding: 2px 8px;

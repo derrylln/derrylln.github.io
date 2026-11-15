@@ -181,6 +181,7 @@ const I18N = {
       buy: 'Buy', sell: 'Sell', qtyPh: 'Quantity', pricePh: 'Price', addTrade: 'Add trade',
       colDate: 'Date', colSide: 'Side', colQty: 'Quantity', colPrice: 'Price',
       ledgerTitle: 'Trade ledger', ledgerSub: 'Every buy and sell, dated — the positions above are built from these',
+      notePh: 'Why this trade? (optional)', exportHoldings: 'Holdings CSV', exportEvents: 'Events CSV',
       ledgerEmpty: 'No trades yet. Add one above and the ledger starts here.',
       ledgerOpening: 'opening',
       xirr: 'Annual return', xirrNote: 'Money-weighted return: each trade is a dated cash flow, converted at the rate that held on its own day, and today\u2019s value closes the series.',
@@ -323,6 +324,7 @@ const I18N = {
       buy: 'Beli', sell: 'Jual', qtyPh: 'Jumlah', pricePh: 'Harga', addTrade: 'Catat transaksi',
       colDate: 'Tanggal', colSide: 'Jenis', colQty: 'Jumlah', colPrice: 'Harga',
       ledgerTitle: 'Buku transaksi', ledgerSub: 'Setiap beli dan jual, bertanggal — posisi di atas dihitung dari sini',
+      notePh: 'Alasan transaksi ini? (opsional)', exportHoldings: 'CSV kepemilikan', exportEvents: 'CSV transaksi',
       ledgerEmpty: 'Belum ada transaksi. Catat di atas dan buku ini akan terisi.',
       ledgerOpening: 'saldo awal',
       xirr: 'Imbal hasil tahunan', xirrNote: 'Imbal hasil berbobot uang: tiap transaksi jadi arus kas bertanggal, dikonversi dengan kurs hari itu, dan nilai hari ini menutup rangkaiannya.',
@@ -3072,12 +3074,15 @@ function pfEvent(raw) {
   if (!/^[A-Z0-9.^=-]{1,15}$/.test(symbol)) return null;
   if (!isFinite(qty) || qty <= 0 || !isFinite(price) || price < 0) return null;
   const date = /^\d{4}-\d{2}-\d{2}$/.test(String(raw.date)) ? String(raw.date) : pfToday();
+  /* The reason is free text and never required; it is kept short because it
+     rides along in the ledger row and the activity line. */
+  const note = String(raw.note == null ? '' : raw.note).replace(/\s+/g, ' ').trim().slice(0, 140);
   return {
     id: String(raw.id || ('ev' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36))),
     side: raw.side === 'sell' ? 'sell' : 'buy',
     symbol: symbol, qty: qty, price: price,
     cur: (raw.cur === 'IDR' || raw.cur === 'USD') ? raw.cur : pfCurrency(symbol),
-    date: date, opening: !!raw.opening
+    date: date, opening: !!raw.opening, note: note
   };
 }
 
@@ -3234,7 +3239,7 @@ function pfLedgerHtml(p) {
     return `<tr class="${e.side === 'sell' ? 'is-sell' : 'is-buy'}">
         <td>${esc(e.date)}${e.opening ? `<span class="pf-tag">${esc(p.ledgerOpening)}</span>` : ''}</td>
         <td><span class="pf-side-chip ${e.side}">${esc(e.side === 'sell' ? p.sell : p.buy)}</span></td>
-        <td class="pf-ledger-sym">${esc(e.symbol)}</td>
+        <td class="pf-ledger-sym">${esc(e.symbol)}${e.note ? `<div class="pf-ledger-note">${esc(e.note)}</div>` : ''}</td>
         <td class="num">${e.qty.toLocaleString('en-US', { maximumFractionDigits: 4 })}</td>
         <td class="num">${esc(pfPrice(e.price, e.cur))}</td>
         <td class="num">${esc(pfMoney(e.qty * e.price, e.cur))}</td>
@@ -3248,6 +3253,55 @@ function pfLedgerHtml(p) {
       </tr></thead><tbody>${rows}</tbody>
     </table></div>`;
 }
+/* CSV for a spreadsheet rather than for the screen: plain numbers, no currency
+   symbols, and a byte-order mark so Excel reads the Indonesian names right. */
+function pfCsvCell(value) {
+  if (value == null) return '';
+  if (typeof value === 'number' && !isFinite(value)) return '';
+  const text = String(value);
+  return /[",;\n\r]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+}
+
+function pfDownloadCsv(name, rows) {
+  const csv = rows.map(function (row) { return row.map(pfCsvCell).join(','); }).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
+}
+
+function pfExportHoldingsCsv() {
+  const rows = [['Symbol', 'Name', 'Shares', 'Avg cost', 'Cost currency', 'Last', 'Value', 'Value currency', 'P/L', 'P/L %', 'Class']];
+  portfolio.slice().sort(function (a, b) { return a.symbol.localeCompare(b.symbol); }).forEach(function (h) {
+    const v = pfHoldingView(h);
+    rows.push([
+      h.symbol, (v.q && v.q.name) || '', h.shares,
+      isFinite(h.avgCost) ? h.avgCost : '',
+      h.avgCur || pfCurrency(h.symbol),
+      isFinite(v.price) ? v.price : '',
+      isFinite(v.value) ? v.value : '',
+      v.target || '',
+      isFinite(v.pl) ? v.pl : '',
+      isFinite(v.plPct) ? v.plPct : '',
+      pfClassOf(h.symbol)
+    ]);
+  });
+  pfDownloadCsv('finwire-holdings-' + pfToday() + '.csv', rows);
+}
+
+function pfExportEventsCsv() {
+  const rows = [['Date', 'Side', 'Symbol', 'Quantity', 'Price', 'Currency', 'Amount', 'Note']];
+  pfLedger.slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; }).forEach(function (e) {
+    rows.push([e.date, e.side, e.symbol, e.qty, e.price, e.cur, e.qty * e.price, e.note || '']);
+  });
+  pfDownloadCsv('finwire-events-' + pfToday() + '.csv', rows);
+}
+
 function pfCurrency(symbol) { return /\.JK$/i.test(symbol) ? 'IDR' : 'USD'; }
 function pfMoney(value, currency) {
   if (value == null || !isFinite(value)) return '—';
@@ -3855,7 +3909,7 @@ function pfActivityHtml(target) {
     const isOut = e.action === 'remove';
     return { ts: e.ts, html: `<div class="pact-row">
         <span class="pact-date">${esc(when(e.ts))}</span>
-        <span class="pact-main"><strong class="${isOut ? 'down' : 'up'}">${esc(isOut ? p.actRemove : p.actAdd)}</strong> ${esc(e.symbol || '')}<em>${esc(qty)}${esc(price)}</em></span>
+        <span class="pact-main"><strong class="${isOut ? 'down' : 'up'}">${esc(isOut ? p.actRemove : p.actAdd)}</strong> ${esc(e.symbol || '')}<em>${esc(qty)}${esc(price)}</em>${e.note ? `<span class="pact-note">${esc(e.note)}</span>` : ''}</span>
       </div>` };
   }).concat(divs).sort(function (a, b) { return b.ts - a.ts; }).slice(0, 6);
   if (!events.length) return `<div class="pf-empty-sm">${esc(p.activityEmpty)}</div>`;
@@ -4167,6 +4221,7 @@ function renderPortfolio() {
               </div>
             </div>
             <input id="pfDate" type="date" class="pf-date" value="${pfToday()}" aria-label="${esc(p.colDate)}" />
+            <input id="pfNote" type="text" class="pf-note-input" maxlength="140" spellcheck="false" placeholder="${esc(p.notePh)}" aria-label="${esc(p.notePh)}" />
             <button type="submit">${esc(p.add)}</button>
           </form>
           <div id="pfMsg" class="pf-msg"></div>
@@ -4393,6 +4448,10 @@ function renderPortfolio() {
           <h2 class="mkt-title">${esc(p.ledgerTitle)}</h2>
           <p class="mkt-sub">${esc(p.ledgerSub)}</p>
         </div>
+        <div class="pf-export-group">
+          <button type="button" class="pf-export" data-pf-export="holdings">${esc(p.exportHoldings)}</button>
+          <button type="button" class="pf-export" data-pf-export="events">${esc(p.exportEvents)}</button>
+        </div>
       </div>
       ${pfLedgerHtml(p)}
     </section>`;
@@ -4440,7 +4499,7 @@ async function refreshPortfolio() {
   renderPortfolio();
 }
 
-async function addHolding(rawSymbol, rawQty, rawPrice, rawCur, rawSide, rawDate) {
+async function addHolding(rawSymbol, rawQty, rawPrice, rawCur, rawSide, rawDate, rawNote) {
   const p = (I18N[state.lang] || I18N.en).portfolio;
   const symbol = String(rawSymbol == null ? '' : rawSymbol).toUpperCase().replace(/\s+/g, '');
   const qty = Number(String(rawQty == null ? '' : rawQty).replace(/,/g, ''));
@@ -4476,11 +4535,12 @@ async function addHolding(rawSymbol, rawQty, rawPrice, rawCur, rawSide, rawDate)
     }
   }
 
-  pfLedger.push(pfEvent({ side: side, symbol: resolved, qty: qty, price: price, cur: tradeCur, date: date }));
-  pfLogActivity({ action: side === 'sell' ? 'sell' : 'add', symbol: resolved, shares: qty, price: price, currency: tradeCur, date: date });
+  const note = String(rawNote == null ? '' : rawNote);
+  pfLedger.push(pfEvent({ side: side, symbol: resolved, qty: qty, price: price, cur: tradeCur, date: date, note: note }));
+  pfLogActivity({ action: side === 'sell' ? 'sell' : 'add', symbol: resolved, shares: qty, price: price, currency: tradeCur, date: date, note: note });
 
   savePortfolio();
-  ['#pfSymbol', '#pfQty', '#pfPrice'].forEach(function (sel) { const el = $(sel); if (el) el.value = ''; });
+  ['#pfSymbol', '#pfQty', '#pfPrice', '#pfNote'].forEach(function (sel) { const el = $(sel); if (el) el.value = ''; });
   renderPortfolio();
 
   if (!hit) hit = await lookup();
@@ -4829,7 +4889,7 @@ function bindUI() {
       e.preventDefault();
       addHolding(
         $('#pfSymbol').value, $('#pfQty').value, $('#pfPrice').value, pfInCur,
-        ($('#pfSide') || {}).value, ($('#pfDate') || {}).value
+        ($('#pfSide') || {}).value, ($('#pfDate') || {}).value, ($('#pfNote') || {}).value
       );
     });
     pfHost.addEventListener('input', (e) => {
@@ -4842,6 +4902,12 @@ function bindUI() {
       if (inBtn) { setPfInputCurrency(inBtn.getAttribute('data-pf-in')); return; }
       const rangeBtn2 = e.target.closest('[data-pf-range]');
       if (rangeBtn2) { pfTrendState.range = rangeBtn2.getAttribute('data-pf-range'); renderPortfolio(); return; }
+      const exportBtn = e.target.closest('[data-pf-export]');
+      if (exportBtn) {
+        if (exportBtn.getAttribute('data-pf-export') === 'events') pfExportEventsCsv();
+        else pfExportHoldingsCsv();
+        return;
+      }
       const benchBtn = e.target.closest('[data-pf-bench]');
       if (benchBtn) {
         pfToggleBench(benchBtn.getAttribute('data-pf-bench'));
