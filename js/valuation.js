@@ -315,12 +315,14 @@ function finDcfHtml(dcf, t) {
      "terminal growth" mean nothing to a reader who has not met them before.
      The definition is keyed by the field, so callers pass nothing extra. */
   const inputRow = function (label, key, value, unit, max, extra) {
+    /* On the net income basis the growth field projects earnings, not cash. */
+    const hintKey = key === 'growth' && dcf.basis === 'ni' ? 'niGrowth' : key;
     return '<div class="fin-dcf-row is-input"><span>' + esc(label) + '</span>' +
       '<label class="fin-dcf-field"><input type="number" inputmode="decimal" data-dcf="' + key + '"' +
       ' step="' + (key === 'years' ? '1' : '0.1') + '" min="' + (key === 'terminal' ? '-5' : key === 'years' ? '1' : key === 'growth' ? '-50' : '0.1') + '"' +
       (max ? ' max="' + max + '"' : '') + ' value="' + esc(String(value)) + '" />' +
       (unit ? '<i>' + unit + '</i>' : '') + '</label>' + (extra || '') +
-      '<em class="fin-dcf-hint">' + esc(t.dcfHints[key] || '') + '</em></div>';
+      '<em class="fin-dcf-hint">' + esc(t.dcfHints[hintKey] || '') + '</em></div>';
   };
   const up = dcf.upside;
   const tone = up == null ? '' : up >= 0 ? 'up' : 'down';
@@ -334,7 +336,7 @@ function finDcfHtml(dcf, t) {
     '<div class="fin-dcf-rows">' +
       row(dcf.basis === 'ni' ? t.dcfBaseNi : t.dcfBaseFcf, compactNum(dcf.base, dcf.currency) + ' · FY' + dcf.baseYear) +
       row(t.dcfShares, compactNum(dcf.shares, '')) +
-      inputRow(t.dcfGrowth, 'growth', growthText, '% per year', null,
+      inputRow(dcf.basis === 'ni' ? t.dcfGrowthNi : t.dcfGrowth, 'growth', growthText, '% per year', null,
         '<em class="fin-dcf-hint" id="finDcfGrowthHint"></em>') +
       inputRow(t.dcfDiscount, 'discount', (dcf.discount * 100).toFixed(1), '%', null) +
       inputRow(t.dcfTerminal, 'terminal', (dcf.terminal * 100).toFixed(1), '%', null) +

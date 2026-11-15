@@ -130,13 +130,14 @@ const I18N = {
       noData: 'No report available for this company.',
       note: 'Reported figures · Yahoo Finance · not investment advice',
       dcfTitle: 'Intrinsic value', dcfValue: 'Value per share', dcfVs: 'vs price',
-      dcfBaseFcf: 'Base free cash flow', dcfGrowth: 'FCF growth', dcfDiscount: 'Discount rate',
+      dcfBaseFcf: 'Base free cash flow', dcfGrowth: 'FCF growth', dcfGrowthNi: 'Net income growth', dcfDiscount: 'Discount rate',
       dcfTerminal: 'Terminal growth', dcfYears: 'Forecast', dcfShares: 'Shares',
       dcfNetDebt: 'Net debt', dcfNetCash: 'Net cash',
       dcfPerYear: 'a year', dcfYearsUnit: 'years', dcfAssumed: 'from revenue growth',
       dcfCapped: 'capped', dcfSpan: n => n + 'y',
       dcfHints: {
         growth: 'Yearly rise in the cash flow being projected.',
+        niGrowth: 'Yearly rise in the net income being projected.',
         discount: 'Return you require each year; higher gives a lower value.',
         terminal: 'Growth assumed to continue after the forecast ends.',
         years: 'Years projected before the terminal value.'
@@ -313,13 +314,14 @@ const I18N = {
       noData: 'Laporan tidak tersedia untuk emiten ini.',
       note: 'Angka laporan · Yahoo Finance · bukan saran investasi',
       dcfTitle: 'Nilai intrinsik', dcfValue: 'Nilai per saham', dcfVs: 'vs harga',
-      dcfBaseFcf: 'Arus kas bebas dasar', dcfGrowth: 'Pertumbuhan FCF', dcfDiscount: 'Tingkat diskonto',
+      dcfBaseFcf: 'Arus kas bebas dasar', dcfGrowth: 'Pertumbuhan FCF', dcfGrowthNi: 'Pertumbuhan laba bersih', dcfDiscount: 'Tingkat diskonto',
       dcfTerminal: 'Pertumbuhan terminal', dcfYears: 'Proyeksi', dcfShares: 'Saham',
       dcfNetDebt: 'Utang neto', dcfNetCash: 'Kas neto',
       dcfPerYear: 'per tahun', dcfYearsUnit: 'tahun', dcfAssumed: 'dari pertumbuhan pendapatan',
       dcfCapped: 'dibatasi', dcfSpan: n => n + 'th',
       dcfHints: {
         growth: 'Kenaikan arus kas per tahun yang diproyeksikan.',
+        niGrowth: 'Kenaikan laba bersih per tahun yang diproyeksikan.',
         discount: 'Imbal hasil yang Anda minta per tahun; makin tinggi, nilainya makin rendah.',
         terminal: 'Pertumbuhan yang diasumsikan berlanjut setelah proyeksi berakhir.',
         years: 'Jumlah tahun proyeksi sebelum nilai terminal.'
