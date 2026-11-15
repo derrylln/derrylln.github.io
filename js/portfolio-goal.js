@@ -98,7 +98,14 @@ function pfGoalHtml(target) {
     </div>`;
 
   if (!c.goal || c.months <= 0) {
-    return form + `<div class="pf-empty-sm">${esc(p.goalEmpty)}</div>`;
+    /* The card keeps its full height with nothing set, so the row it sits in
+       does not collapse and leave a hole beside a longer card. */
+    return form + `<div class="pf-goal-stats">
+      <div class="pf-risk-cell"><span>${esc(p.goalNow)}</span><strong>${money(c.value)}</strong><em>${esc(p.goalOfGoal.replace('{goal}', '—'))}</em></div>
+      <div class="pf-risk-cell"><span>${esc(p.goalProg)}</span><strong>—</strong><em>${esc(p.goalInYears.replace('{years}', String(pfGoalState.years)))}</em></div>
+      <div class="pf-risk-cell"><span>${esc(p.goalProj)}</span><strong>—</strong><em>${esc(p.goalEmpty)}</em></div>
+      <div class="pf-risk-cell"><span>${esc(p.goalNeed)}</span><strong>—</strong><em>${esc(p.goalYouAdd.replace('{amount}', money(recent.perMonth)))}</em></div>
+    </div>`;
   }
 
   const projectedNote = c.gap >= 0

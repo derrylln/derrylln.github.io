@@ -203,7 +203,7 @@
 /* --- goal: the only forward-looking block on the page --- */
 .pf-goal-form {
   display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px;
-  max-width: 760px; margin-bottom: 12px;
+  margin-bottom: 12px;
 }
 .pf-goal-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .pf-goal-field span {
@@ -392,13 +392,21 @@
    Same proportions as the reference the layout was asked to follow: tight
    12px gutters, cards that fill their row instead of trailing off early. */
 .pf-dash-row { display: grid; gap: 12px; align-items: stretch; }
-/* The chart column is tall and the two smaller cards are not, so they stack
-   beside it instead of stretching to a height they have nothing to fill. */
-.pf-row-a { grid-template-columns: minmax(0, 2.05fr) minmax(0, 1fr); align-items: start; }
+/* Rows stretch, so a row is never two cards of different heights with page
+   showing underneath the shorter one. The side column carries two cards, and
+   the last of them grows into whatever height is left over. */
+.pf-row-a { grid-template-columns: minmax(0, 2.05fr) minmax(0, 1fr); align-items: stretch; }
 .pf-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.pf-side > .mkt-card:last-child { flex: 1; }
 /* Contributors and activity hold different amounts, so neither is stretched
    into empty space; each card ends where its content does. */
-.pf-row-b { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); align-items: start; }
+/* one card on this row now, so it takes the width */
+.pf-row-b { grid-template-columns: 1fr; align-items: stretch; }
+/* the contributors block under the donut: same card, second section */
+.pf-sub-block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--rule-2); }
+.pf-sub-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.pf-sub-head span { font-size: 11px; font-weight: 800; letter-spacing: .01em; color: var(--ink); }
+.pf-sub-head em { font-style: normal; font-size: 10px; color: var(--muted); }
 .pf-dash-row > .mkt-card { display: flex; flex-direction: column; }
 .pf-row-a #pfTrendChart { flex: 1; min-height: 0; }
 .pf-hero-value {
