@@ -2470,6 +2470,22 @@ body, html {
    and the full text stays in the link's title. */
 .buzz-cols .pf-buzz-head { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pf-buzz-meta { display: block; margin-top: 3px; font-size: 10px; color: var(--muted); }
+.pf-buzz-ai {
+  flex: none; padding: 2px 7px; border: 1px solid var(--rule); border-radius: 999px;
+  background: transparent; color: var(--muted); font-size: 9px; font-weight: 800;
+  letter-spacing: .05em; text-transform: uppercase; cursor: pointer; white-space: nowrap;
+  line-height: 1.5; transition: color .12s, border-color .12s;
+}
+.pf-buzz-ai:hover, .pf-buzz-ai:focus-visible { color: var(--ink); border-color: var(--ink); outline: none; }
+.pf-buzz-read {
+  margin-top: 6px; padding: 6px 9px; border-left: 3px solid var(--rule);
+  border-radius: 0 8px 8px 0; background: var(--bg-soft);
+  font-size: 11.5px; line-height: 1.45; color: var(--ink-2); white-space: pre-line;
+}
+.pf-buzz-read.is-good { border-left-color: var(--green); }
+.pf-buzz-read.is-bad { border-left-color: var(--red); }
+.pf-buzz-read.is-mixed { border-left-color: var(--ink); }
+.pf-buzz-read.is-unclear { border-left-color: var(--muted); color: var(--muted); }
 
 .pf-msg { font-size: 12px; font-weight: 600; color: var(--red); margin: 0 0 12px; }
 .pf-msg:empty { display: none; }
@@ -3580,6 +3596,6 @@ body, html {
 @media (max-width: 720px) {
   .pf-hero-value { font-size: 26px; }
   .pf-hero-stats { flex-wrap: wrap; }
-  .pf-hero-stats > span { flex: 1 1 33%; }
+  .pf-hero-stats > span { flex: 1 1 50%; }
   .mkt-tiles { gap: 8px; }
 }

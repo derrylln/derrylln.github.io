@@ -184,7 +184,7 @@ const I18N = {
       notePh: 'Why this trade? (optional)', exportHoldings: 'Holdings CSV', exportEvents: 'Events CSV',
       ledgerEmpty: 'No trades yet. Add one above and the ledger starts here.',
       ledgerOpening: 'opening',
-      xirr: 'Annual return', xirrNote: 'Money-weighted return: each trade is a dated cash flow, converted at the rate that held on its own day, and today\u2019s value closes the series.',
+      xirr: 'Annual return (XIRR)', xirrNote: 'Money-weighted return, as a yearly rate: each trade is a dated cash flow, converted at the rate that held on its own day, and today\u2019s value closes the series. A book held for a few months annualises to a large figure, so read it beside the net gain above.',
       curLabel: 'Show in', curAuto: 'Auto', costIn: 'Cost in',
       notFound: 'No price found for {sym}. Check the ticker — IDX stocks need .JK, e.g. CUAN.JK.',
       unresolved: 'No price found',
@@ -193,9 +193,11 @@ const I18N = {
       loadingFund: 'Loading fundamentals…', newsTitle: 'News on your holdings',
       whyNoNews: 'No news about {sym} today. Check the company filings for the reason.',
       whyFailed: 'No analysis came back. Try again.',
-      totalValue: 'Total value', invested: 'Invested capital', netPl: 'Net gain / loss',
-      perfTitle: 'Portfolio performance', perfSub: 'Portfolio and benchmarks, indexed to 100 at the start of the period',
-      portfolio: 'Portfolio', benchmark: 'IHSG',
+      totalValue: 'Total value', invested: 'Invested capital', netPl: 'Net gain / loss \u00b7 since purchase',
+      held: 'Held for', heldDay: '1 day', heldDays: '{n} days', heldMonths: '{n} months', heldYears: '{n} years', heldSince: 'first trade {date}',
+      perfTitle: 'Portfolio performance', perfSub: 'Portfolio and benchmarks, indexed to 100 at the first day every holding has a price in this window, so the line measures the window, not what the whole book has gained',
+      perfSubOn: 'Portfolio and benchmarks, indexed to 100 on {date}, the first day every holding has a price in this window, so the line measures the window, not what the whole book has gained',
+      portfolio: 'Portfolio this window', benchmark: 'IHSG',
       allocTitle: 'Allocation', allocSub: 'By asset class',
       classIdx: 'IDX equities', classUs: 'US equities', classEtf: 'ETFs', classCrypto: 'Crypto',
       moveTitle: 'Contributors', moveSub: 'Profit and loss by holding', gaining: 'Gaining', losing: 'Losing',
@@ -278,7 +280,10 @@ const I18N = {
       buzzTitle: 'Most talked about', buzzSub: 'News mentions in the last 7 days, across the stories this page has cached',
       buzzUs: 'United States', buzzIdx: 'Indonesia', buzzTop: 'Top 10',
       buzzEmpty: 'No name in this market appeared in the cached stories.',
-      buzzMentions: n => n + (n === 1 ? ' mention' : ' mentions')
+      buzzMentions: n => n + (n === 1 ? ' mention' : ' mentions'),
+      buzzAi: 'AI read',
+      buzzAiNoNews: 'No cached headline for this name yet.',
+      buzzAiNote: 'Gemini reads the cached headlines once a day, per name. It is a read of the news, not advice.'
     }
   },
   id: {
@@ -327,7 +332,7 @@ const I18N = {
       notePh: 'Alasan transaksi ini? (opsional)', exportHoldings: 'CSV kepemilikan', exportEvents: 'CSV transaksi',
       ledgerEmpty: 'Belum ada transaksi. Catat di atas dan buku ini akan terisi.',
       ledgerOpening: 'saldo awal',
-      xirr: 'Imbal hasil tahunan', xirrNote: 'Imbal hasil berbobot uang: tiap transaksi jadi arus kas bertanggal, dikonversi dengan kurs hari itu, dan nilai hari ini menutup rangkaiannya.',
+      xirr: 'Imbal hasil tahunan (XIRR)', xirrNote: 'Imbal hasil berbobot uang sebagai laju per tahun: tiap transaksi jadi arus kas bertanggal, dikonversi dengan kurs hari itu, dan nilai hari ini menutup rangkaiannya. Portofolio yang baru berjalan beberapa bulan akan tampil sangat besar saat disetahunkan, jadi bacalah bersama laba bersih di atas.',
       curLabel: 'Tampilkan dalam', curAuto: 'Otomatis', costIn: 'Harga dalam',
       notFound: 'Harga {sym} tidak ditemukan. Periksa ticker — saham IDX perlu .JK, mis. CUAN.JK.',
       unresolved: 'Harga tidak ditemukan',
@@ -336,9 +341,11 @@ const I18N = {
       loadingFund: 'Memuat fundamental…', newsTitle: 'Berita emiten Anda',
       whyNoNews: 'Belum ada berita {sym} hari ini. Periksa laporan perusahaan untuk penyebabnya.',
       whyFailed: 'Analisis tidak tersedia. Coba lagi.',
-      totalValue: 'Nilai total', invested: 'Modal', netPl: 'Laba / rugi bersih',
-      perfTitle: 'Kinerja portofolio', perfSub: 'Portofolio dan pembanding, diindeks ke 100 di awal periode',
-      portfolio: 'Portofolio', benchmark: 'IHSG',
+      totalValue: 'Nilai total', invested: 'Modal', netPl: 'Laba / rugi bersih \u00b7 sejak pembelian',
+      held: 'Sudah dipegang', heldDay: '1 hari', heldDays: '{n} hari', heldMonths: '{n} bulan', heldYears: '{n} tahun', heldSince: 'transaksi pertama {date}',
+      perfTitle: 'Kinerja portofolio', perfSub: 'Portofolio dan pembanding, diindeks ke 100 pada hari pertama semua kepemilikan punya harga di rentang ini, jadi garis ini mengukur rentang tersebut, bukan total keuntungan buku',
+      perfSubOn: 'Portofolio dan pembanding, diindeks ke 100 pada {date}, hari pertama semua kepemilikan punya harga di rentang ini, jadi garis ini mengukur rentang tersebut, bukan total keuntungan buku',
+      portfolio: 'Portofolio di rentang ini', benchmark: 'IHSG',
       allocTitle: 'Alokasi', allocSub: 'Menurut kelas aset',
       classIdx: 'Saham IDX', classUs: 'Saham AS', classEtf: 'ETF', classCrypto: 'Kripto',
       moveTitle: 'Kontributor', moveSub: 'Laba dan rugi per posisi', gaining: 'Menguat', losing: 'Melemah',
@@ -421,7 +428,10 @@ const I18N = {
       buzzTitle: 'Paling diperbincangkan', buzzSub: 'Jumlah sebutan berita 7 hari terakhir, dari berita yang tersimpan di halaman ini',
       buzzUs: 'Amerika Serikat', buzzIdx: 'Indonesia', buzzTop: '10 teratas',
       buzzEmpty: 'Tidak ada nama di pasar ini yang muncul di berita tersimpan.',
-      buzzMentions: n => n + ' sebutan'
+      buzzMentions: n => n + ' sebutan',
+      buzzAi: 'Analisis AI',
+      buzzAiNoNews: 'Belum ada berita tersimpan untuk nama ini.',
+      buzzAiNote: 'Gemini membaca berita tersimpan sekali sehari per nama. Ini tafsiran berita, bukan saran.'
     }
   }
 };
@@ -3134,6 +3144,18 @@ function pfHeldShares(symbol) {
   return hit ? hit.shares : 0;
 }
 
+/* Shares on the book on a given day, from the dated trades rather than from
+   today's total. A trade dated the payment day does not count: the feed gives
+   a date, not a time, so the reader was not holding before that morning. */
+function pfSharesBefore(symbol, day) {
+  let shares = 0;
+  pfLedger.forEach(function (e) {
+    if (e.symbol !== symbol || !e.date || e.date >= day) return;
+    shares += e.side === 'sell' ? -e.qty : e.qty;
+  });
+  return shares > 1e-9 ? shares : 0;
+}
+
 let pfLedger = pfLedgerInit();
 let portfolio = pfLedgerHoldings(pfLedger);
 
@@ -3216,6 +3238,29 @@ function pfXirr(flows) {
     prev = value;
   }
   return null;
+}
+
+/* How long the book has actually been held: the first dated trade, not the
+   first day a price was stored, so an annualised rate can be read against the
+   time behind it. */
+function pfFirstTradeDate() {
+  let first = null;
+  pfLedger.forEach(function (e) {
+    if (e.date && (!first || e.date < first)) first = e.date;
+  });
+  return first;
+}
+
+function pfHeldText(p) {
+  const first = pfFirstTradeDate();
+  if (!first) return null;
+  const then = Date.parse(first + 'T00:00:00Z');
+  if (!isFinite(then)) return null;
+  const days = Math.max(0, Math.floor((Date.now() - then) / 864e5));
+  if (days <= 1) return p.heldDay;
+  if (days < 60) return p.heldDays.replace('{n}', String(days));
+  if (days < 730) return p.heldMonths.replace('{n}', String(Math.round(days / 30.44)));
+  return p.heldYears.replace('{n}', String(Math.round(days / 365.25)));
 }
 
 function pfBookXirr(target, value) {
@@ -3544,18 +3589,23 @@ function pfBuzzSpark(days) {
 }
 
 function pfBuzzRowHtml(r, i) {
+  const t = I18N[state.lang].mkt;
   const a = r.latest;
   const meta = a ? [a.sourceLabel || 'FINWIRE', a.ts ? timeAgo(a.ts, state.lang) : ''].filter(Boolean).join(' · ') : '';
+  const read = buzzAiCached(r.symbol);
+  const tone = read ? pfBuzzTone(read) : '';
   return `<li class="pf-buzz-row">
       <span class="pf-buzz-rank">${i + 1}</span>
       <div class="pf-buzz-body">
         <div class="pf-buzz-top">
           <b class="pf-buzz-sym">${esc(r.code)}</b>
           <span class="pf-buzz-count">${esc(pfBuzzMentions(r.total))}</span>
+          <button type="button" class="pf-buzz-ai" data-buzz-ai="${esc(r.symbol)}">✨ ${esc(t.buzzAi)}</button>
           ${pfBuzzSpark(r.days)}
         </div>
         ${a ? `<a class="pf-buzz-head" href="${esc(a.link || '#')}" target="_blank" rel="noopener noreferrer" title="${esc(a.title || '')}">${esc(a.title || '')}</a>
         <span class="pf-buzz-meta">${esc(meta)}</span>` : ''}
+        <div class="pf-buzz-read${tone ? ' is-' + tone : ''}"${read ? '' : ' hidden'}>${esc(read)}</div>
       </div>
     </li>`;
 }
@@ -3563,6 +3613,114 @@ function pfBuzzRowHtml(r, i) {
 function pfBuzzMentions(count) {
   const t = I18N[state.lang].mkt;
   return typeof t.buzzMentions === 'function' ? t.buzzMentions(count) : String(count);
+}
+
+/* ONE AI READ PER NAME PER DAY
+   A row asks the model at most once a day, and the answer is kept in
+   localStorage keyed by symbol and the reader's local day, so a repaint, a
+   reload, a second click or a language switch costs nothing — the same rule
+   the article summaries follow. */
+const BUZZ_AI_KEY = 'finwire.ai.buzz.v1';
+const BUZZ_AI_LIMIT = 200;
+let buzzAiCache = (function () {
+  const stored = loadJSON(BUZZ_AI_KEY, {});
+  const out = {};
+  Object.keys(stored || {}).forEach(function (key) {
+    const entry = stored[key];
+    if (entry && typeof entry.text === 'string' && entry.at) out[key] = entry;
+  });
+  return out;
+})();
+
+function buzzAiKey(symbol) { return symbol + '|' + pfToday(); }
+
+function buzzAiCached(symbol) {
+  const hit = buzzAiCache[buzzAiKey(symbol)];
+  return hit ? hit.text : '';
+}
+
+function buzzAiSave() {
+  const keys = Object.keys(buzzAiCache);
+  if (keys.length > BUZZ_AI_LIMIT) {
+    keys.sort(function (a, b) { return (buzzAiCache[b].at || 0) - (buzzAiCache[a].at || 0); });
+    keys.slice(BUZZ_AI_LIMIT).forEach(function (key) { delete buzzAiCache[key]; });
+  }
+  saveJSON(BUZZ_AI_KEY, buzzAiCache);
+}
+
+/* The same seven days of stories the row is counting, as plain lines the model
+   can read: title first, publisher in brackets. */
+function pfBuzzNews(symbol, limit) {
+  const unit = buzzCandidates().filter(function (u) { return u.symbol === symbol; })[0];
+  if (!unit) return [];
+  const since = Date.now() - PF_BUZZ_DAYS * 864e5;
+  const seen = Object.create(null);
+  return state.articles.filter(function (a) {
+    if (!a || !a.ts || a.ts < since) return false;
+    const key = String(a.title || '').toLowerCase();
+    if (!key || seen[key]) return false;
+    seen[key] = 1;
+    const raw = String(a.title || '') + ' ' + String(a.summary || '');
+    return pfBuzzHit(unit, raw.toLowerCase(), raw);
+  }).sort(function (a, b) { return b.ts - a.ts; }).slice(0, limit || 8)
+    .map(function (a) { return '- ' + String(a.title || '') + ' [' + (a.sourceLabel || 'FINWIRE') + ']'; });
+}
+
+/* The verdict word decides the colour; the rest of the answer is shown as the
+   model wrote it. Models decorate the first word ("**GOOD**", "“Bad.”", "- GOOD -"),
+   so markdown, quotes and stray punctuation are stripped before the word is
+   read. Only the first word is looked at, never one later in a sentence. */
+function pfBuzzTone(text) {
+  const clean = String(text || '')
+    .replace(/[*_`#>{}\[\]()]/g, ' ')
+    .replace(/["'\u2018\u2019\u201c\u201d\u00ab\u00bb]/g, ' ')
+    .replace(/[\u2013\u2014\u2022\u00b7]/g, ' ')
+    .trim()
+    .toLowerCase();
+  const word = clean.replace(/^[^a-z]+/, '').match(/^[a-z]+/);
+  if (!word) return '';
+  const verdict = word[0];
+  return (verdict === 'good' || verdict === 'bad' || verdict === 'mixed' || verdict === 'unclear') ? verdict : '';
+}
+
+function paintBuzzRead(el, text) {
+  if (!el) return;
+  const tone = pfBuzzTone(text);
+  el.textContent = text;
+  el.className = 'pf-buzz-read' + (tone ? ' is-' + tone : '');
+  el.hidden = false;
+}
+
+async function runBuzzAi(btn) {
+  const symbol = btn.getAttribute('data-buzz-ai');
+  const body = btn.closest('.pf-buzz-body');
+  const slot = body ? body.querySelector('.pf-buzz-read') : null;
+  if (!symbol || !slot) return;
+  const t = I18N[state.lang].mkt;
+  const cached = buzzAiCached(symbol);
+  if (cached) { paintBuzzRead(slot, cached); return; }
+  if (!slot.hidden && slot.textContent) return;
+
+  const news = pfBuzzNews(symbol);
+  if (!news.length) { paintBuzzRead(slot, t.buzzAiNoNews); return; }
+  if (!aiSpend()) { paintBuzzRead(slot, aiBlockText()); return; }
+
+  const stop = startClock(slot, '✨ ' + t.buzzAi + '…');
+  try {
+    const data = await aiRequest('/ai-sentiment', {
+      symbol: symbol, name: buzzNames[symbol] || '', newsText: news.join('\n'), lang: state.lang
+    });
+    const text = (data && data.summary ? String(data.summary) : '').trim();
+    if (!text) throw new Error('Empty AI read');
+    buzzAiCache[buzzAiKey(symbol)] = { text: text, at: Date.now() };
+    buzzAiSave();
+    stop();
+    paintBuzzRead(slot, text);
+  } catch (err) {
+    stop();
+    if (aiMissingEndpoint(err)) aiRefund();
+    paintBuzzRead(slot, aiErrorText(err));
+  }
 }
 
 function buzzBoardHtml() {
@@ -3591,7 +3749,7 @@ function renderBuzzBoard() {
   const slot = document.getElementById('buzzBoard');
   if (!slot) return;
   const key = [state.lang, state.articles.length, (state.articles[0] && state.articles[0].ts) || 0,
-    Object.keys(buzzNames).length].join('|');
+    Object.keys(buzzNames).length, Object.keys(buzzAiCache).length].join('|');
   if (pfBuzzCache.key !== key) {
     pfBuzzCache.key = key;
     pfBuzzCache.html = buzzBoardHtml();
@@ -3870,7 +4028,12 @@ function pfHoldingDividends(months) {
     if (!row || !row.events) return;
     row.events.forEach(function (ev) {
       if (!ev.ts || ev.ts < since || !isFinite(ev.amount)) return;
-      out.push({ ts: ev.ts, symbol: h.symbol, perShare: ev.amount, shares: h.shares, currency: pfCurrency(h.symbol) });
+      /* A payment made before the first trade is not income this book earned,
+         and one paid while only part of the position was open is not paid on
+         today's share count either. */
+      const shares = pfSharesBefore(h.symbol, new Date(ev.ts).toISOString().slice(0, 10));
+      if (!(shares > 0)) return;
+      out.push({ ts: ev.ts, symbol: h.symbol, perShare: ev.amount, shares: shares, currency: pfCurrency(h.symbol) });
     });
   });
   return out;
@@ -4120,7 +4283,9 @@ async function pfLoadTrend(range, target) {
     return { id: b.id, label: b.label, color: b.color, idx: idx, pct: pfLastPct(idx) };
   }).filter(function (b) { return b.idx.length > 1; });
 
-  const data = { portIdx: portIdx, portPct: pfLastPct(portIdx), benches: benches };
+  const baseDay = calendar.filter(function (day) { return day.k === baseKey; })[0];
+  const data = { portIdx: portIdx, portPct: pfLastPct(portIdx), benches: benches,
+    baseDate: baseDay ? baseDay.k : null };
   pfTrendState.key = key;
   pfTrendState.data = data;
   return data;
@@ -4139,6 +4304,17 @@ function pfRenderTrend(target) {
       el.textContent = (value > 0 ? '+' : '') + value.toFixed(2) + '%';
       el.className = value >= 0 ? 'up' : 'down';
     };
+    /* The line rebases on a day this card cannot know until the history
+       lands, so the sub-line names that day rather than saying "the period". */
+    const sub = document.getElementById('pfPerfSub');
+    if (sub) {
+      const locale = state.lang === 'id' ? 'id-ID' : 'en-GB';
+      /* The base is a calendar day from the feed, so format it in UTC: in a
+         timezone behind it the same day would otherwise print as the day before. */
+      sub.textContent = (data && data.baseDate)
+        ? p.perfSubOn.replace('{date}', new Date(data.baseDate + 'T00:00:00Z').toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))
+        : p.perfSub;
+    }
     paint(document.getElementById('pfTrendPort'), data ? data.portPct : null);
     PF_BENCH.forEach(function (b) {
       const chip = document.querySelector('#pfTrendLegend [data-pf-bench="' + b.id + '"]');
@@ -4319,10 +4495,18 @@ function renderPortfolio() {
   const xirr = pfBookXirr(primaryCur, book.value);
   const xirrClass = xirr == null ? '' : (xirr >= 0 ? 'up' : 'down');
   const xirrText = xirr == null ? '—' : pfPctText(xirr * 100);
+  /* Beside the annualised rate, the time it is annualised over. */
+  const heldText = pfHeldText(p);
+  const heldFirst = pfFirstTradeDate();
+  const heldTitle = heldFirst
+    ? p.heldSince.replace('{date}', new Date(heldFirst + 'T00:00:00Z').toLocaleDateString(
+        state.lang === 'id' ? 'id-ID' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }))
+    : '';
   const heroStats = `<div class="pf-hero-stats">
       <span><em>${esc(p.invested)}</em><strong>${book.costed ? pfMoney(book.cost, primaryCur) : '—'}</strong></span>
       <span><em>${esc(p.today)}</em><strong class="${dayClass}">${book.dayed ? pfSignedMoney(book.day, primaryCur) + '<i>' + pfPctText(bookDayPct) + '</i>' : '—'}</strong></span>
       <span><em>${esc(p.xirr)}</em><strong class="${xirrClass}">${xirrText}</strong></span>
+      ${heldText ? `<span title="${esc(heldTitle)}"><em>${esc(p.held)}</em><strong>${esc(heldText)}</strong></span>` : ''}
     </div>
     <p class="pf-xirr-note">${esc(p.xirrNote)}</p>`;
 
@@ -4374,7 +4558,7 @@ function renderPortfolio() {
         <div class="mkt-card-head">
           <div>
             <h2 class="mkt-title">${esc(p.perfTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
-            <p class="mkt-sub">${esc(p.perfSub)}</p>
+            <p class="mkt-sub" id="pfPerfSub">${esc(p.perfSub)}</p>
             <div class="pf-hero-value">${book.priced ? pfMoney(book.value, primaryCur) : '—'}</div>
             ${heroDelta}
           </div>
@@ -4652,6 +4836,14 @@ function aiSpend() {
   return true;
 }
 
+/* A route that is not deployed never reaches Gemini, so refusing it must not
+   consume one of the tab's calls: give the slot back and leave the cooldown
+   alone, which still stops a visitor hammering an endpoint that is not there. */
+function aiRefund() {
+  if (aiSessionCalls > 0) aiSessionCalls -= 1;
+  try { sessionStorage.setItem(AI_SESSION_KEY, String(aiSessionCalls)); } catch (e) {}
+}
+
 function aiBlockText() {
   const t = I18N[state.lang] || I18N.en;
   return aiBlockReason === 'slow' ? t.aiSlow : t.aiCap;
@@ -4755,6 +4947,13 @@ function startClock(el, label) {
 }
 
 function bindUI() {
+  /* Delegated, so it survives every repaint of the board. */
+  document.addEventListener('click', function (ev) {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('[data-buzz-ai]') : null;
+    if (!btn) return;
+    ev.preventDefault();
+    runBuzzAi(btn);
+  });
   if ($('#navNews')) $('#navNews').addEventListener('click', () => switchView('news'));
   if ($('#navStocks')) $('#navStocks').addEventListener('click', () => switchView('stocks'));
 

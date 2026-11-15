@@ -5,6 +5,7 @@
  *   GET  /?url=<encoded>   CORS proxy for RSS feeds, article HTML and Yahoo JSON
  *   POST /ai-summarize     Gemini summary { text, lang, isBriefing }
  *   POST /ai-explain-move  Gemini explanation { symbol, pct, isUp, newsText }
+ *   POST /ai-sentiment     Gemini read of whether cached headlines look good or bad { symbol, name, newsText, lang }
  *   GET  /health           Simple liveness check used by the deploy script
  *
  * The upstream body is read exactly once into an ArrayBuffer. Every Response we
@@ -86,6 +87,7 @@ export default {
 
     if (url.pathname === "/ai-summarize") return handleSummarize(request, env);
     if (url.pathname === "/ai-explain-move") return handleExplainMove(request, env);
+    if (url.pathname === "/ai-sentiment") return handleSentiment(request, env);
     if (url.pathname === "/ai-fundamentals") return handleFundamentals(request, env);
     if (url.pathname === "/health") return json({ ok: true, model: GEMINI_MODEL });
 
@@ -407,6 +409,48 @@ Every one of these rules is mandatory:
     return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
   }
 }
+
+/* A verdict on cached headlines, asked once per name per day. The prompt pins
+   the answer shape so the client can colour the line without parsing prose,
+   and lets the model say UNCLEAR rather than invent a direction. */
+async function handleSentiment(request, env) {
+  if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
+  if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
+  if (aiRateLimited(request)) return json(AI_LIMIT_BODY, 429);
+
+  const body = await readJsonBody(request);
+  if (!body) return json({ error: "Invalid JSON body" }, 400);
+
+  const symbol = readText(body.symbol, 32);
+  if (!symbol) return json({ error: "Missing 'symbol'" }, 400);
+  const name = readText(body.name, 80);
+  const newsText = readText(body.newsText, 8000);
+  if (!newsText) return json({ error: "Missing 'newsText'" }, 400);
+
+  const targetLang = body.lang === "id" ? "Indonesian (Bahasa Indonesia)" : "English";
+
+  const prompt = `You are an equity analyst judging whether the news below looks good or bad for ${symbol}${name ? ` (${name})` : ""}.
+
+Headlines about this company, newest first. The publisher is in brackets:
+${newsText}
+
+Answer in ${targetLang}. Every rule is mandatory:
+1. First line: exactly one of GOOD, BAD, MIXED or UNCLEAR, then " - ", then at most 12 words giving the reason.
+2. Second line: at most 20 words on what would change that read.
+3. Use only the headlines above. Name the publisher in brackets when you lean on a story, e.g. [Reuters].
+4. Judge the company's business and reported events, not the share price. Routine price movement, index news, macro commentary or a passing mention are not a reason on their own.
+5. If the headlines do not say enough about this company, first line must be "UNCLEAR - the cached headlines do not say enough about this company to judge." and nothing else.
+6. Never invent events, people or numbers. No preamble, no disclaimer, no investment advice.`;
+
+  try {
+    const summary = await callGemini(prompt, env.GEMINI_API_KEY);
+    return json({ summary });
+  } catch (error) {
+    const failure = aiFailure(error);
+    return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
+  }
+}
+
 async function handleFundamentals(request, env) {
   if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
   if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
