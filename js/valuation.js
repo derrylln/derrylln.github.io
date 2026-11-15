@@ -167,7 +167,7 @@ function fundDcf(fund, price, priceCur, edits) {
     price: comparable ? price : null, priceCur: priceCur || currency,
     upside: (comparable && perShare != null) ? (perShare / price - 1) * 100 : null,
     base: base, baseYear: String(basePeriod.end).slice(0, 4),
-    basis: basis, growthEdited: isFinite(e.growth),
+    basis: basis, growthEdited: e.growthEdited === true,
     growth: g, growthRaw: growthRaw,
     assumed: assumed, capped: capped, histYears: histYears,
     discount: r, terminal: tg, years: years,
@@ -389,7 +389,7 @@ function finDcfPatch(dcf) {
   if (note) note.textContent = finDcfCaveat(dcf);
 }
 
-function finDcfRecalc() {
+function finDcfRecalc(touched) {
   const card = document.getElementById('finDcf');
   if (!card || !finState.fund) return;
   const edits = {};
@@ -400,6 +400,10 @@ function finDcfRecalc() {
   });
   const prev = finDcfEdits[finState.symbol];
   if (prev && prev.basis) edits.basis = prev.basis;
+  /* Every field is read back so a blank one can fall back to the model, but
+     only growth being typed in means the growth note is stale: it describes
+     the model's own default, so it has to survive edits to the other fields. */
+  if (touched === 'growth' || (prev && prev.growthEdited)) edits.growthEdited = true;
   finDcfEdits[finState.symbol] = edits;
   const quote = finState.quote || {};
   const dcf = fundDcf(finState.fund, quote.price, quote.currency, edits);

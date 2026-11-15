@@ -132,7 +132,7 @@ function finModal() {
   });
   wrap.addEventListener('input', function (e) {
     const field = e.target.closest ? e.target.closest('[data-dcf]') : null;
-    if (field) finDcfRecalc();
+    if (field) finDcfRecalc(field.getAttribute('data-dcf'));
   });
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && finModalEl && finModalEl.classList.contains('open')) closeFinancials();
