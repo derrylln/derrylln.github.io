@@ -123,6 +123,41 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+<!--
+  ============================ SCRIPT ORDER ============================
+  These are plain classic scripts, not modules: all of them share one global
+  scope and run top to bottom. A function or const declared in an earlier
+  file is visible to every later file, and two files declaring the same name
+  is a hard error. So the order below is a dependency chain, not a taste:
+
+    apexcharts          chart library, must stay first
+    config.js           timers, feed list, symbol pools
+    i18n.js             every string, both languages
+    core.js             state, esc(), storage and formatting helpers
+    feeds.js            CORS proxies, RSS parsing, lead images
+    news.js             news page, ticker, filters, view switching
+    market-data.js      quotes, history, benchmark series
+    stock.js            search and the financials modal
+    valuation.js        the DCF model behind that modal
+    dividends.js        dividend scan, leaders, market breadth
+    world.js            the world index board
+    markets.js          the explore board
+    portfolio.js        ledger, XIRR, CSV export, fx helpers
+    buzz.js             news mention ranking
+    portfolio-quotes.js portfolio quotes, fx conversion, holdings news
+    portfolio-views.js  activity, allocation, trend, risk, dividend income
+    portfolio-render.js paints the portfolio page
+    shell.js            boot, AI requests, UI wiring (always last: it calls init())
+
+  ADDING A FEATURE: put its code in js/<feature>.js and insert its <script>
+  tag after the files it reads at parse time (at minimum core.js, plus
+  anything it calls while loading) and before shell.js. Never append it after
+  shell.js, because init() runs there and would reach for the feature before
+  it exists. Nothing else needs registering: no build step, no manifest, no
+  import list. Editing a file already in this list is safe; only new files
+  need a new tag, and it must go in the right place.
+  =====================================================================
+-->
 <script src="js/config.js"></script>
 <script src="js/i18n.js"></script>
 <script src="js/core.js"></script>
