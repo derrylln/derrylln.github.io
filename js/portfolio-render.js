@@ -128,7 +128,6 @@ function renderPortfolio() {
           <div id="pfMsg" class="pf-msg"></div>
         </section>
         <div id="portfolioBody"></div>
-        <div id="pfNewsPanel"></div>
       </div>`;
     host.dataset.ready = '1';
   }
@@ -278,6 +277,8 @@ function renderPortfolio() {
   }).join('');
 
   body.innerHTML = `
+    <div class="pf-band"><span>${esc(p.bandOverview)}</span></div>
+
     <div class="pf-dash-row pf-row-a">
 <section class="mkt-card">
         <div class="mkt-card-head">
@@ -351,7 +352,9 @@ function renderPortfolio() {
 
 
 
-    <section class="mkt-card">
+        <div class="pf-band"><span>${esc(p.bandHoldings)}</span></div>
+
+<section class="mkt-card">
       <div class="mkt-card-head">
         <div>
           <h2 class="mkt-title">${esc(p.holdingsTitle)}</h2>
@@ -371,7 +374,7 @@ function renderPortfolio() {
       <p class="pf-note">${esc(p.note)}</p>
     </section>
 
-    <section class="mkt-card">
+    <section class="mkt-card pf-soft">
       <div class="mkt-card-head">
         <div>
           <h2 class="mkt-title">${esc(p.divTitle)}<span class="pf-cur-badge">${esc(primaryCur)}</span></h2>
@@ -381,7 +384,10 @@ function renderPortfolio() {
       <div id="pfDivSlot"></div>
     </section>
 
-    <section class="mkt-card">
+        <div class="pf-band"><span>${esc(p.bandRecord)}</span></div>
+
+    <div class="pf-dash-row pf-row-c">
+<section class="mkt-card">
       <div class="mkt-card-head">
         <div>
           <h2 class="mkt-title">${esc(p.ledgerTitle)}</h2>
@@ -393,7 +399,10 @@ function renderPortfolio() {
         </div>
       </div>
       ${pfLedgerHtml(p)}
-    </section>`;
+    </section>
+
+      <div id="pfNewsPanel" class="pf-news-slot"></div>
+    </div>`;
 
   pfActTarget = primaryCur;
   pfDivTarget = primaryCur;

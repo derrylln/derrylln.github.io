@@ -4,7 +4,12 @@
 function renderHoldingsNews() {
   const host = $('#pfNewsPanel'); if (!host) return;
   const p = (I18N[state.lang] || I18N.en).portfolio;
-  if (!portfolio.length) { host.innerHTML = ''; return; }
+  if (!portfolio.length) {
+    host.innerHTML = '';
+    const row = host.closest ? host.closest('.pf-dash-row') : null;
+    if (row) row.classList.add('pf-row-solo');
+    return;
+  }
   const terms = pfHoldingTerms();
   const seen = new Set(); const items = [];
   state.articles.forEach(function (a) {
@@ -16,10 +21,22 @@ function renderHoldingsNews() {
     seen.add(key);
     items.push({ a: a, symbol: hit.symbol });
   });
-  if (!items.length) { host.innerHTML = ''; return; }
+  if (!items.length) {
+    host.innerHTML = '';
+    const row = host.closest ? host.closest('.pf-dash-row') : null;
+    if (row) row.classList.add('pf-row-solo');
+    return;
+  }
   items.sort(function (x, y) { return (y.a.ts || 0) - (x.a.ts || 0); });
-  host.innerHTML = `<div class="modern-card pf-news-card">
-    <div class="card-title"><span>${esc(p.newsTitle)}</span></div>
+  const row = host.closest ? host.closest('.pf-dash-row') : null;
+  if (row) row.classList.remove('pf-row-solo');
+  host.innerHTML = `<section class="mkt-card pf-news-card">
+    <div class="mkt-card-head">
+      <div>
+        <h2 class="mkt-title">${esc(p.newsTitle)}</h2>
+        <p class="mkt-sub">${esc(p.newsSub)}</p>
+      </div>
+    </div>
     <ul class="pf-news-list">${items.slice(0, 5).map(function (it) {
       const a = it.a;
       const meta = [a.sourceLabel || 'FINWIRE', a.ts ? timeAgo(a.ts, state.lang) : ''].filter(Boolean).join(' · ');
@@ -27,7 +44,7 @@ function renderHoldingsNews() {
         <span class="pf-news-sym">${esc(it.symbol.replace(/\.JK$/i, ''))}</span>${esc(a.title || '')}</a>
         <span class="pf-news-meta">${esc(meta)}</span></li>`;
     }).join('')}</ul>
-  </div>`;
+  </section>`;
 }
 
 function pfRate() { return (pfFx && isFinite(pfFx.rate) && pfFx.rate > 0) ? pfFx.rate : null; }

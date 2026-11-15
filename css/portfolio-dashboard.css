@@ -391,7 +391,33 @@
 /* --- portfolio dashboard: one wide value+chart card, one narrow split ------
    Same proportions as the reference the layout was asked to follow: tight
    12px gutters, cards that fill their row instead of trailing off early. */
+/* --- page bands: three groups instead of one long stack of cards --- */
+.pf-band { display: flex; align-items: center; gap: 12px; margin: 26px 0 12px; }
+.pf-band:first-child { margin-top: 6px; }
+.pf-band span {
+  font-size: 9.5px; font-weight: 800; letter-spacing: .16em;
+  text-transform: uppercase; color: var(--muted); white-space: nowrap;
+}
+.pf-band::after { content: ''; flex: 1; height: 1px; background: var(--rule); }
+
 .pf-dash-row { display: grid; gap: 12px; align-items: stretch; }
+.pf-row-c { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+.pf-row-c.pf-row-solo { grid-template-columns: 1fr; }
+
+.pf-table tbody tr:hover,
+.pf-ledger tbody tr:hover { background: rgba(15, 23, 42, .025); }
+[data-theme="dark"] .pf-table tbody tr:hover,
+[data-theme="dark"] .pf-ledger tbody tr:hover { background: rgba(148, 163, 184, .07); }
+.pf-table thead th, .pf-ledger thead th {
+  font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase;
+  color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--rule);
+}
+.pf-news-slot { min-width: 0; display: flex; }
+.pf-news-slot > .mkt-card { flex: 1; }
+
+/* a second surface, so the income card is not one more white box */
+.pf-soft { background: #f7f8fa; border-color: #eceff3; }
+[data-theme="dark"] .pf-soft { background: rgba(148, 163, 184, .07); border-color: rgba(148, 163, 184, .12); }
 /* Rows stretch, so a row is never two cards of different heights with page
    showing underneath the shorter one. The side column carries two cards, and
    the last of them grows into whatever height is left over. */
@@ -433,7 +459,7 @@
 .pf-hero-stats strong i { font-style: normal; font-size: 10.5px; margin-left: 4px; opacity: .85; }
 
 @media (max-width: 1024px) {
-  .pf-row-a, .pf-row-b { grid-template-columns: 1fr; }
+  .pf-row-a, .pf-row-b, .pf-row-c, .pf-row-c.pf-row-solo { grid-template-columns: 1fr; }
   .pf-hero-value { font-size: 28px; }
 }
 @media (max-width: 720px) {
