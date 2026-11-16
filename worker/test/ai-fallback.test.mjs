@@ -17,7 +17,7 @@ import { fileURLToPath } from "url";
 const here = dirname(fileURLToPath(import.meta.url));
 const copy = join(mkdtempSync(join(tmpdir(), "finwire-worker-")), "index.mjs");
 copyFileSync(join(here, "..", "src", "index.js"), copy);
-const worker = (await import("file://" + copy)).default;
+const { default: worker, AiIpGuard } = await import("file://" + copy);
 
 const logs = [];
 const realLog = console.log;
@@ -179,6 +179,54 @@ for (const [path, payload] of [
   const res = await ask(ENV, path, payload);
   assert.deepStrictEqual([res.status, res.body.provider, logs.length], [200, "groq", 1], path);
 }
+
+// 13. Durable Object counters: the sixth hit in a minute is refused.
+const mem = new Map();
+const state = {
+  storage: {
+    get: async (key) => mem.get(key),
+    put: async (key, value) => {
+      mem.set(key, value);
+    },
+  },
+};
+const guard = new AiIpGuard(state);
+const guardHit = async () =>
+  (await guard.fetch(new Request("https://ai-guard/check", { headers: { "CF-Connecting-IP": "1.2.3.4" } }))).json();
+const allowed = [];
+for (let i = 0; i < 6; i++) allowed.push((await guardHit()).allowed);
+assert.deepStrictEqual(allowed, [true, true, true, true, true, false]);
+assert.strictEqual(mem.get("hits").length, 5, "refused hits are not stored");
+
+// 14. The minute window rolls off, the hour window does not.
+mem.set("hits", Array.from({ length: 5 }, () => Date.now() - 120000));
+assert.strictEqual((await guardHit()).allowed, true, "minute window should be clear");
+mem.set("hits", Array.from({ length: 20 }, (_, i) => Date.now() - 60000 * (i + 1.1)));
+assert.strictEqual((await guardHit()).allowed, false, "hour window should block");
+
+// 15. The Worker asks the object, and a refusal never reaches a provider.
+const refusing = { idFromName: (name) => name, get: () => ({ fetch: async () => Response.json({ allowed: false }) }) };
+reset();
+gemini = () => {
+  throw new Error("must not be called");
+};
+r = await ask({ ...ENV, AI_IP_GUARD: refusing });
+assert.deepStrictEqual([r.status, r.body.code, calls.join(",")], [429, "limit", ""]);
+
+// 16. A broken object degrades to local counters instead of failing the route.
+const broken = {
+  idFromName: (name) => name,
+  get: () => ({
+    fetch: async () => {
+      throw new Error("boom");
+    },
+  }),
+};
+gemini = () => new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "gemini answer" }] } }] }), { status: 200 });
+reset();
+r = await ask({ ...ENV, AI_IP_GUARD: broken });
+assert.deepStrictEqual([r.status, r.body.provider], [200, "gemini"]);
+assert.ok(logs.some((line) => line.includes("AI guard: durable limiter failed (boom)")), logs.join(" | "));
 
 // 12. /health reports the fallback only when its key is present.
 let health = await worker.fetch(new Request("https://w.dev/health"), ENV, {});

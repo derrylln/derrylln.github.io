@@ -10,3 +10,14 @@ workers_dev = true
 # Logs for proxy failures: `npx wrangler tail finwire-smart-proxy`
 [observability]
 enabled = true
+
+# Per-IP AI counters, shared by every isolate. `wrangler deploy` creates the
+# namespace from the migration on the first deploy that carries it; SQLite is
+# the backend available on the Workers Free plan.
+[[durable_objects.bindings]]
+name = "AI_IP_GUARD"
+class_name = "AiIpGuard"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AiIpGuard"]

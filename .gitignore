@@ -1,5 +1,9 @@
 # Wrangler local state
 worker/.wrangler/
+# Local secrets for `wrangler dev` — never commit these
+worker/.dev.vars
+worker/.dev.vars.*
+worker/.env
 worker/node_modules/
 node_modules/
 

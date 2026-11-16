@@ -49,20 +49,45 @@ clears the summary cache.
 | 24 hours | 60 | `AI_IP_LIMITS.day` |
 
 Keyed on `CF-Connecting-IP`. A blocked request returns 429 before Gemini is
-called, so it spends no quota. Hits older than 24 hours are dropped, and the
-map prunes itself once it holds more than 1,000 addresses.
+called, so it spends no quota. Hits older than 24 hours are dropped, so an
+address that goes quiet costs nothing.
 
-These counters live in isolate memory. Cloudflare runs several isolates per
-location, so a visitor rotating IPs can still get through; treat this as burst
-protection, not a hard global quota. This was measured, not assumed: a burst of
-twelve requests from one address came back as ten 400s, one 429, then another
-400. The throttle fired on the isolate that saw the middle of the burst, and the
-next request landed on a different one with its own empty counter.
+The counters live in a Durable Object (`AiIpGuard`), one instance per address,
+which Cloudflare routes to a single instance worldwide: every isolate and every
+location reads the same hit list, so the limits are real rather than a burst
+hint. The binding is in `wrangler.toml`:
 
-For a hard quota, move the counter to D1, KV or a Durable Object, keyed the same
-way. The client-side cap and cooldown in `app.js`/`js/shell.js` are the other
-line of defence, and they are per tab, so neither layer is a substitute for the
-other.
+```toml
+[[durable_objects.bindings]]
+name = "AI_IP_GUARD"
+class_name = "AiIpGuard"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["AiIpGuard"]
+```
+
+`npx wrangler deploy` creates the namespace on the first deploy that carries
+this config — there is no separate resource to create, and SQLite-backed
+objects are available on the Workers Free plan. Each AI call costs one object
+request plus one small read and write; at most 60 timestamps are kept per
+address.
+
+If the binding is missing, or the object throws, the Worker falls back to the
+old in-memory map and logs `AI guard: durable limiter …`. That keeps the AI
+routes up under a bad deploy, but the counts are per isolate again, so check
+`npx wrangler tail` if the limits look loose. The in-memory map also prunes
+itself once it holds more than 1,000 addresses.
+
+The per-isolate version was measured, not assumed: a burst of twelve requests
+from one address came back as ten 400s, one 429, then another 400, because the
+throttle fired on the isolate that saw the middle of the burst and the next
+request landed on a different one with its own empty counter. One object per
+address removes that hole, and keeps one reader from spending another's
+allowance.
+
+The client-side cap and cooldown in `app.js`/`js/shell.js` are the other line of
+defence, and they are per tab, so neither layer is a substitute for the other.
 
 ### Groq fallback
 

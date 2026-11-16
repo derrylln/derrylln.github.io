@@ -51,28 +51,82 @@ const MAX_AI_INPUT_CHARS = 20000;
 // request look like a normal browser navigation from a real Chrome build.
 /* AI ABUSE GUARD
    Anything enforced in the browser can be bypassed by opening a new tab, so the
-   real throttle lives here. Counters are per-isolate memory: Cloudflare runs
-   several isolates, so this is a burst limiter rather than a hard quota. It is
-   what stops someone holding down an AI button (and it costs no storage). */
+   real throttle lives here. Counters have to be shared by every isolate that
+   serves the site, or each one hands out the full allowance and the limit is
+   decorative: the hit list lives in a Durable Object keyed by client IP, which
+   Cloudflare routes to a single instance worldwide.
+
+   The in-memory map stays as the local (`wrangler dev`) and degraded path, so a
+   missing binding or a failing object cannot take the AI routes down — it only
+   costs accuracy, and both paths share aiTakeHit, so their rules cannot drift. */
 const AI_IP_LIMITS = { minute: 5, hour: 20, day: 60 };
 const AI_IP_WINDOW_MS = 24 * 60 * 60 * 1000;
 const aiIpHits = new Map();
 
-function aiRateLimited(request) {
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  const now = Date.now();
-  const list = (aiIpHits.get(ip) || []).filter(function (t) { return now - t < AI_IP_WINDOW_MS; });
-  const count = function (ms) { return list.filter(function (t) { return now - t < ms; }).length; };
+/* One window check for both backends. Returns the updated hit list when this
+   request is allowed, or null when the client is over a limit. */
+function aiTakeHit(list, now) {
+  const recent = list.filter(function (t) { return now - t < AI_IP_WINDOW_MS; });
+  const count = function (ms) { return recent.filter(function (t) { return now - t < ms; }).length; };
   const blocked = count(60000) >= AI_IP_LIMITS.minute ||
     count(3600000) >= AI_IP_LIMITS.hour ||
-    list.length >= AI_IP_LIMITS.day;
-  if (!blocked) { list.push(now); aiIpHits.set(ip, list); }
+    recent.length >= AI_IP_LIMITS.day;
+  if (blocked) return null;
+  recent.push(now);
+  return recent;
+}
+
+function aiRateLimitedLocally(request) {
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const now = Date.now();
+  const next = aiTakeHit(aiIpHits.get(ip) || [], now);
+  if (next) aiIpHits.set(ip, next);
   if (aiIpHits.size > 1000) {
     aiIpHits.forEach(function (v, key) {
       if (!v.length || now - v[v.length - 1] > AI_IP_WINDOW_MS) aiIpHits.delete(key);
     });
   }
-  return blocked;
+  return next === null;
+}
+
+/* One object per client IP, so a burst from one reader cannot spend another
+   reader's allowance, and every isolate sees the same numbers. Only the last
+   24 h of timestamps are kept (at most 60), and a day of silence empties it. */
+export class AiIpGuard {
+  constructor(state) {
+    this.storage = state.storage;
+  }
+
+  async fetch(request) {
+    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+    const now = Date.now();
+    const stored = await this.storage.get("hits");
+    const next = aiTakeHit(Array.isArray(stored) ? stored : [], now);
+    if (!next) return Response.json({ allowed: false });
+    await this.storage.put("hits", next);
+    return Response.json({ allowed: true });
+  }
+}
+
+async function aiRateLimited(request, env) {
+  if (env.AI_IP_GUARD) {
+    try {
+      const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+      const stub = env.AI_IP_GUARD.get(env.AI_IP_GUARD.idFromName(ip));
+      const response = await stub.fetch("https://ai-guard/check", {
+        headers: { "CF-Connecting-IP": ip },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data && typeof data.allowed === "boolean") return !data.allowed;
+      }
+      console.log(`AI guard: durable limiter answered ${response.status}, using local counters`);
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      console.log(`AI guard: durable limiter failed (${message}), using local counters`);
+    }
+  }
+  return aiRateLimitedLocally(request);
 }
 
 const AI_LIMIT_BODY = {
@@ -469,7 +523,7 @@ async function readJsonBody(request) {
 async function handleSummarize(request, env) {
   if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
   if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
-  if (aiRateLimited(request)) return json(AI_LIMIT_BODY, 429);
+  if (await aiRateLimited(request, env)) return json(AI_LIMIT_BODY, 429);
 
   const body = await readJsonBody(request);
   if (!body) return json({ error: "Invalid JSON body" }, 400);
@@ -501,7 +555,7 @@ ${input}`
 async function handleExplainMove(request, env) {
   if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
   if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
-  if (aiRateLimited(request)) return json(AI_LIMIT_BODY, 429);
+  if (await aiRateLimited(request, env)) return json(AI_LIMIT_BODY, 429);
 
   const body = await readJsonBody(request);
   if (!body) return json({ error: "Invalid JSON body" }, 400);
@@ -535,7 +589,7 @@ Every one of these rules is mandatory:
 async function handleSentiment(request, env) {
   if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
   if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
-  if (aiRateLimited(request)) return json(AI_LIMIT_BODY, 429);
+  if (await aiRateLimited(request, env)) return json(AI_LIMIT_BODY, 429);
 
   const body = await readJsonBody(request);
   if (!body) return json({ error: "Invalid JSON body" }, 400);
@@ -567,7 +621,7 @@ Answer in ${targetLang}. Every rule is mandatory:
 async function handleFundamentals(request, env) {
   if (request.method !== "POST") return plain("Method not allowed: use POST", 405);
   if (!env.GEMINI_API_KEY) return json({ error: "Missing GEMINI_API_KEY in Cloudflare" }, 500);
-  if (aiRateLimited(request)) return json(AI_LIMIT_BODY, 429);
+  if (await aiRateLimited(request, env)) return json(AI_LIMIT_BODY, 429);
 
   const body = await readJsonBody(request);
   if (!body) return json({ error: "Invalid JSON body" }, 400);
