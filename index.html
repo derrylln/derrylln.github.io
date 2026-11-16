@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="css/portfolio-detail.css" />
 <link rel="stylesheet" href="css/markets.css" />
 <link rel="stylesheet" href="css/portfolio-dashboard.css" />
+<link rel="stylesheet" href="css/ipos.css" />
 </head>
 <body>
 
@@ -96,6 +97,7 @@
     <div class="mkt-view-tabs" id="mktViewTabs" role="tablist">
       <button type="button" class="mkt-view-tab active" data-mkt-view="holdings" role="tab" aria-selected="true" data-i18n="mktTabHoldings">My holdings</button>
       <button type="button" class="mkt-view-tab" data-mkt-view="explore" role="tab" aria-selected="false" data-i18n="mktTabExplore">Explore markets</button>
+      <button type="button" class="mkt-view-tab" data-mkt-view="ipos" role="tab" aria-selected="false" data-i18n="mktTabIpos">IPOs</button>
     </div>
   </div>
 
@@ -111,6 +113,12 @@
       <button type="button" id="stockSearchBtn" data-i18n="searchBtn">Search</button>
     </div>
     <div id="stockDashboard"></div>
+  </div>
+
+  <!-- IPOs: deals with a public filing or a priced range, drawn from
+       js/ipos-data.js when this tab is first opened -->
+  <div id="iposView" hidden>
+    <div id="ipoBoard"></div>
   </div>
 </main>
 
@@ -142,6 +150,8 @@
     dividends.js        dividend scan, leaders, market breadth
     world.js            the world index board
     markets.js          the explore board
+    ipos-data.js        the curated IPO pipeline (facts, sources, unknowns)
+    ipos.js             the IPO board and its filing dossier
     portfolio.js        ledger, XIRR, CSV export, fx helpers
     buzz.js             news mention ranking
     portfolio-quotes.js portfolio quotes, fx conversion, holdings news
@@ -170,6 +180,8 @@
 <script src="js/dividends.js"></script>
 <script src="js/world.js"></script>
 <script src="js/markets.js"></script>
+<script src="js/ipos-data.js"></script>
+<script src="js/ipos.js"></script>
 <script src="js/portfolio.js"></script>
 <script src="js/buzz.js"></script>
 <script src="js/portfolio-quotes.js"></script>

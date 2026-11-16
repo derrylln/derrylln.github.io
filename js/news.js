@@ -152,6 +152,10 @@ function applyLang() {
   $$('[data-i18n-title]').forEach(el => { const key = el.getAttribute('data-i18n-title'); if (t[key]) el.setAttribute('title', t[key]); });
   $$('.lang-toggle button').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-lang') === state.lang));
   renderFilters(); renderTicker(state.ticker); renderPortfolio(); render(); refreshTimes();
+  /* The IPO board carries long prose, so it has to be redrawn in the new
+     language rather than left in whichever one it was opened with. */
+  const ipoBoard = document.getElementById('ipoBoard');
+  if (ipoBoard && ipoBoard.dataset.loaded) renderIpoBoard();
 }
 
 /* MARKET DASHBOARD LOGIC */
@@ -159,11 +163,13 @@ function applyLang() {
    is out there — so it holds two views instead of one long scroll. The
    explore board only fetches once, when it is first opened. */
 function setMarketView(view) {
-  state.marketView = view === 'explore' ? 'explore' : 'holdings';
+  state.marketView = view === 'explore' ? 'explore' : view === 'ipos' ? 'ipos' : 'holdings';
   const hold = document.getElementById('holdingsView');
   const explore = document.getElementById('exploreView');
+  const ipos = document.getElementById('iposView');
   if (hold) hold.hidden = state.marketView !== 'holdings';
   if (explore) explore.hidden = state.marketView !== 'explore';
+  if (ipos) ipos.hidden = state.marketView !== 'ipos';
   const tabs = document.querySelectorAll('#mktViewTabs [data-mkt-view]');
   Array.prototype.forEach.call(tabs, function (btn) {
     const on = btn.getAttribute('data-mkt-view') === state.marketView;
@@ -173,6 +179,11 @@ function setMarketView(view) {
   if (state.marketView === 'explore') {
     const dash = document.getElementById('stockDashboard');
     if (dash && !dash.dataset.loaded) loadMarketDashboard();
+  } else if (state.marketView === 'ipos') {
+    /* Curated data, no network: the board is drawn once and then kept, so
+       switching tabs does not rebuild the dossier a reader was reading. */
+    const board = document.getElementById('ipoBoard');
+    if (board && !board.dataset.loaded) renderIpoBoard();
   } else {
     /* A chart built while its panel was hidden measures zero width, so the
        trend is drawn again the moment the holdings view is back on screen. */
