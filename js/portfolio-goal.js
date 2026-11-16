@@ -75,7 +75,7 @@ function pfGoalField(key, label, value) {
   const money = key === 'amount' || key === 'monthly';
   const attrs = money
     ? 'type="text" inputmode="numeric" autocomplete="off" data-pf-money="1"'
-    : `type="number" min="0" step="${key === 'years' ? '0.5' : '0.5'}"`;
+    : 'type="number" min="0" step="0.5"';
   return `<label class="pf-goal-field">
       <span>${esc(label)}</span>
       <input ${attrs} value="${esc(pfGoalDisplay(key, value))}" data-pf-goal="${key}">

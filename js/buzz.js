@@ -201,7 +201,16 @@ let buzzAiCache = (function () {
   return out;
 })();
 
-function buzzAiKey(symbol) { return symbol + '|' + pfToday(); }
+/* The key follows the reader's calendar day, not UTC. At 07:00 in Jakarta the
+   UTC date is still yesterday, so a UTC key would hand back yesterday's read
+   for this morning's headlines. */
+function pfLocalDay() {
+  const d = new Date();
+  const pad = function (n) { return (n < 10 ? '0' : '') + n; };
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+}
+
+function buzzAiKey(symbol) { return symbol + '|' + pfLocalDay(); }
 
 function buzzAiCached(symbol) {
   const hit = buzzAiCache[buzzAiKey(symbol)];

@@ -1,6 +1,6 @@
 # FINWIRE smart proxy (Cloudflare Worker)
 
-The static site in the repo root calls this Worker for three things:
+The static site in the repo root calls this Worker for four things:
 
 | Route | Used for |
 | --- | --- |
@@ -48,8 +48,15 @@ map prunes itself once it holds more than 1,000 addresses.
 
 These counters live in isolate memory. Cloudflare runs several isolates per
 location, so a visitor rotating IPs can still get through; treat this as burst
-protection, not a hard global quota. For a hard quota, move the counter to D1,
-KV or a Durable Object, keyed the same way.
+protection, not a hard global quota. This was measured, not assumed: a burst of
+twelve requests from one address came back as ten 400s, one 429, then another
+400. The throttle fired on the isolate that saw the middle of the burst, and the
+next request landed on a different one with its own empty counter.
+
+For a hard quota, move the counter to D1, KV or a Durable Object, keyed the same
+way. The client-side cap and cooldown in `app.js`/`js/shell.js` are the other
+line of defence, and they are per tab, so neither layer is a substitute for the
+other.
 
 ### Error codes
 
