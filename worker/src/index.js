@@ -448,7 +448,11 @@ function aiFailure(error) {
   if (/\b429\b|resource_exhausted|quota|rate.?limit/.test(lower)) {
     return { status: 429, code: "quota", message: "The AI quota for this site is used up right now." };
   }
-  if (/\b503\b|overloaded|unavailable|deadline/.test(lower)) {
+  // Any 5xx is a server-side fault, not something the caller caused: Gemini
+  // returning 500/502/504 is as transient as a 503, so it reads as busy and
+  // that in turn lets the Groq fallback try. Keeping both decisions here means
+  // the reader-facing code and the retry rule cannot disagree.
+  if (/\b5\d\d\b|overloaded|unavailable|deadline/.test(lower)) {
     return { status: 503, code: "busy", message: "The AI service is busy right now." };
   }
   return { status: 502, code: "upstream", message: "The AI service could not answer.", detail: message.slice(0, 300) };

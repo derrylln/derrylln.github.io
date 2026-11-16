@@ -84,15 +84,16 @@ npx wrangler secret put GROQ_API_KEY
 Only a transient Gemini failure is retried once on Groq before the reader sees a
 message. The test is `aiFailure()`'s own classification, not a second regex
 list: anything it reports as `quota` (429 / `RESOURCE_EXHAUSTED`) or `busy`
-(503 / overloaded / unavailable / deadline) falls back, and everything it calls
-`upstream` does not. The one case it cannot see is the fetch timeout, which is
-detected separately as an `AbortError`.
+(any 5xx / overloaded / unavailable / deadline) falls back, and everything it
+calls `upstream` does not. The one case it cannot see is the fetch timeout,
+which is detected separately as an `AbortError`.
 
-So a rejected or missing key, a malformed request, an empty candidate list and a
-Gemini 500 are **not** retried — they come back as `upstream` with the real
-message, so a broken deploy is visible instead of being quietly served by Groq.
-If you want 5xx besides 503 to count as transient, widen the `busy` branch in
-`aiFailure()`; the fallback and the reader-facing code follow it automatically.
+A 5xx counts as transient because it is a server-side fault Groq can answer,
+not something the caller caused. A rejected or missing key, a malformed request
+and an empty candidate list are **not** retried — they come back as `upstream`
+with the real message, so a broken deploy is visible instead of being quietly
+served by Groq. Changing what is transient means changing the `busy` branch of
+`aiFailure()`; the fallback and the reader-facing message follow it.
 
 Each fallback answer logs one line, which is how you see Groq earning its keep in
 `npx wrangler tail`:
@@ -131,7 +132,7 @@ present) carries the raw upstream message.
 | --- | --- | --- | --- |
 | `limit` | 429 | This IP exceeded the Worker limits above | "AI generation is paused because too much was requested…" |
 | `quota` | 429 | Gemini's quota is exhausted and Groq could not answer either (or no `GROQ_API_KEY` is set) | "The free AI quota is used up for now…" |
-| `busy` | 503 | Gemini is overloaded or timed out | "The AI service is busy right now…" |
+| `busy` | 503 | Gemini returned a 5xx, is overloaded, or timed out — and Groq could not answer either | "The AI service is busy right now…" |
 | `upstream` | 502 | A rejected or missing key, a malformed request, an empty candidate list, or both providers failing | "Could not reach the AI service." |
 | — | 500 | `GEMINI_API_KEY` is not set | Setup error, never shown to readers |
 
@@ -257,4 +258,13 @@ npx wrangler dev --port 8787 --var GEMINI_API_KEY:dummy-key --var GROQ_API_KEY:d
 ```
 
 `--var` is only for exercising the proxy locally; use
-`npx wrangler secret put GEMINI_API_KEY` for the real key.
+`npx wrangler secret put GEMINI_API_KEY` and `npx wrangler secret put GROQ_API_KEY`
+for the real keys.
+
+The fallback contract — which Gemini failures fall back, which surface to the
+reader, and the log line — is covered with `fetch` mocked, so it needs no keys
+and no network:
+
+```bash
+node worker/test/ai-fallback.test.mjs
+```
