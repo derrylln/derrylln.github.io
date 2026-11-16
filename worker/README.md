@@ -81,14 +81,37 @@ npx wrangler secret put GROQ_API_KEY
 | Free plan | 30 RPM, 1,000 RPD, 8K TPM, 200K TPD, per organisation |
 | Price if outgrown | $0.075 / 1M input, $0.30 / 1M output |
 
-A Gemini quota error, overload or timeout is retried once on Groq before the
-reader sees a message. The browser aborts after 30 s (`AI_TIMEOUT_MS` in
-`js/feeds.js`) and the fallback only starts once Gemini has failed, so with a
-fallback key present Gemini's budget drops from 25 s to 14 s
-(`GEMINI_FALLBACK_TIMEOUT_MS`): 14 s + 12 s still fits inside the browser's
-window. Without the key, Gemini keeps the full 25 s. The Worker never falls back on its own rate limit: an IP
-that is throttled is refused before either provider is called, so the fallback
-cannot be used to spend more quota.
+Only a transient Gemini failure is retried once on Groq before the reader sees a
+message. The test is `aiFailure()`'s own classification, not a second regex
+list: anything it reports as `quota` (429 / `RESOURCE_EXHAUSTED`) or `busy`
+(503 / overloaded / unavailable / deadline) falls back, and everything it calls
+`upstream` does not. The one case it cannot see is the fetch timeout, which is
+detected separately as an `AbortError`.
+
+So a rejected or missing key, a malformed request, an empty candidate list and a
+Gemini 500 are **not** retried — they come back as `upstream` with the real
+message, so a broken deploy is visible instead of being quietly served by Groq.
+If you want 5xx besides 503 to count as transient, widen the `busy` branch in
+`aiFailure()`; the fallback and the reader-facing code follow it automatically.
+
+Each fallback answer logs one line, which is how you see Groq earning its keep in
+`npx wrangler tail`:
+
+```
+AI fallback: groq answered (openai/gpt-oss-20b) after gemini quota
+```
+
+The last word is `quota`, `busy` or `timeout`. Nothing is logged when Gemini
+answers, so a tail full of these lines means the primary is the one struggling.
+
+The browser aborts after 30 s (`AI_TIMEOUT_MS` in `js/feeds.js`) and the fallback
+only starts once Gemini has failed, so with a fallback key present Gemini's
+budget drops from 25 s to 14 s (`GEMINI_FALLBACK_TIMEOUT_MS`): 14 s + 12 s still
+fits inside the browser's window. Without the key, Gemini keeps the full 25 s.
+
+The Worker never falls back on its own rate limit: an IP that is throttled is
+refused before either provider is called, so the fallback cannot be used to
+spend more quota.
 
 The free plan's real ceiling is **8K tokens per minute**, roughly four of these
 calls a minute across all visitors, well below the 1,000 requests a day. If the
@@ -109,7 +132,7 @@ present) carries the raw upstream message.
 | `limit` | 429 | This IP exceeded the Worker limits above | "AI generation is paused because too much was requested…" |
 | `quota` | 429 | Gemini's quota is exhausted and Groq could not answer either (or no `GROQ_API_KEY` is set) | "The free AI quota is used up for now…" |
 | `busy` | 503 | Gemini is overloaded or timed out | "The AI service is busy right now…" |
-| `upstream` | 502 | Any other Gemini failure | "Could not reach the AI service." |
+| `upstream` | 502 | A rejected or missing key, a malformed request, an empty candidate list, or both providers failing | "Could not reach the AI service." |
 | — | 500 | `GEMINI_API_KEY` is not set | Setup error, never shown to readers |
 
 `limit` is checked before `quota` on the client, so a throttled visitor is told

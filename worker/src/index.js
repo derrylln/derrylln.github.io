@@ -381,23 +381,50 @@ async function callGroq(prompt, apiKey) {
   }
 }
 
-/* Gemini first, Groq second. A missing GROQ_API_KEY means no fallback at all, so
-   the Gemini error is rethrown untouched. When both fail, the two messages are
-   joined: aiFailure then classifies the pair (a Groq 429 means the free plan's
-   tokens ran out, which reads to the visitor as the site's quota). */
+/* Only a transient Gemini failure earns a second provider. A rejected key, a
+   malformed request or an empty candidate list would fail the same way on Groq,
+   and answering from the fallback would hide a broken deploy, so those errors
+   are returned instead of masked.
+
+   The classification is aiFailure's, not a second opinion: whatever it reports
+   as 'quota' or 'busy' is retried, and everything it calls 'upstream' is not,
+   so the reader-facing code and this decision can never drift apart. A timeout
+   is the one case aiFailure cannot see, because the abort happens in fetch.
+   Returns the reason, or "" to skip Groq. */
+function geminiRetryable(error) {
+  const code = aiFailure(error).code;
+  if (code === "quota" || code === "busy") return code;
+  if (error && error.name === "AbortError") return "timeout";
+  return "";
+}
+
+/* Gemini first, Groq second, and only for a failure Groq could actually answer.
+   A missing GROQ_API_KEY means no fallback at all, so the Gemini error is
+   rethrown untouched. When both fail, the two messages are joined: aiFailure
+   then classifies the pair (a Groq 429 means the free plan's tokens ran out,
+   which reads to the visitor as the site's quota). */
 async function callAI(prompt, env) {
+  const budget = env.GROQ_API_KEY ? GEMINI_FALLBACK_TIMEOUT_MS : GEMINI_TIMEOUT_MS;
+  let geminiError;
   try {
-    const budget = env.GROQ_API_KEY ? GEMINI_FALLBACK_TIMEOUT_MS : GEMINI_TIMEOUT_MS;
     return { text: await callGemini(prompt, env.GEMINI_API_KEY, budget), provider: "gemini" };
-  } catch (geminiError) {
-    if (!env.GROQ_API_KEY) throw geminiError;
-    try {
-      return { text: await callGroq(prompt, env.GROQ_API_KEY), provider: "groq" };
-    } catch (groqError) {
-      const first = geminiError && geminiError.message ? geminiError.message : String(geminiError);
-      const second = groqError && groqError.message ? groqError.message : String(groqError);
-      throw new Error(`Gemini failed: ${first} | Groq fallback failed: ${second}`);
-    }
+  } catch (error) {
+    geminiError = error;
+  }
+
+  const reason = geminiRetryable(geminiError);
+  if (!reason || !env.GROQ_API_KEY) throw geminiError;
+
+  try {
+    const text = await callGroq(prompt, env.GROQ_API_KEY);
+    // One line per fallback answer, so `wrangler tail` shows when Groq is the
+    // provider actually serving readers.
+    console.log(`AI fallback: groq answered (${GROQ_MODEL}) after gemini ${reason}`);
+    return { text, provider: "groq" };
+  } catch (groqError) {
+    const first = geminiError && geminiError.message ? geminiError.message : String(geminiError);
+    const second = groqError && groqError.message ? groqError.message : String(groqError);
+    throw new Error(`Gemini failed: ${first} | Groq fallback failed: ${second}`);
   }
 }
 
