@@ -8,6 +8,10 @@
  *   POST /ai-sentiment     Gemini read of whether cached headlines look good or bad { symbol, name, newsText, lang }
  *   GET  /health           Simple liveness check used by the deploy script
  *
+ * Every AI route tries Gemini first. If GROQ_API_KEY is set, a Gemini failure is
+ * retried once on Groq's OpenAI-compatible endpoint before the reader sees an
+ * error; see callAI below.
+ *
  * The upstream body is read exactly once into an ArrayBuffer. Every Response we
  * build (client copy, cache copy, HEAD copy) is created from that buffer, never
  * from the live ReadableStream — a stream can only be consumed once, and feeding
@@ -26,8 +30,20 @@ const GEMINI_MODEL = "gemini-3.5-flash-lite";
 const GEMINI_ENDPOINT =
   `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
+/* Gemini's free tier runs dry under real traffic, so a second provider answers
+   when it does. Groq speaks the OpenAI chat format: the whole prompt becomes one
+   user message. openai/gpt-oss-20b is the cheapest self-serve model there and
+   the only one worth putting behind a personal project's free plan. */
+const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = "openai/gpt-oss-20b";
+const GROQ_TIMEOUT_MS = 12000;
+
 const UPSTREAM_TIMEOUT_MS = 7000;
 const GEMINI_TIMEOUT_MS = 25000;
+/* js/feeds.js aborts the browser request after 30 s, and the fallback runs only
+   after Gemini has failed, so the two budgets have to fit in that window. When
+   a fallback key is present Gemini gets a shorter leash: 14 s + 12 s = 26 s. */
+const GEMINI_FALLBACK_TIMEOUT_MS = 14000;
 const MAX_UPSTREAM_BYTES = 5 * 1024 * 1024;
 const MAX_AI_INPUT_CHARS = 20000;
 
@@ -89,7 +105,13 @@ export default {
     if (url.pathname === "/ai-explain-move") return handleExplainMove(request, env);
     if (url.pathname === "/ai-sentiment") return handleSentiment(request, env);
     if (url.pathname === "/ai-fundamentals") return handleFundamentals(request, env);
-    if (url.pathname === "/health") return json({ ok: true, model: GEMINI_MODEL });
+    if (url.pathname === "/health") {
+      return json({
+        ok: true,
+        model: GEMINI_MODEL,
+        fallback: env.GROQ_API_KEY ? GROQ_MODEL : null,
+      });
+    }
 
     return handleProxy(request, url, ctx);
   },
@@ -269,9 +291,9 @@ function readText(value, max = MAX_AI_INPUT_CHARS) {
   return value.trim().slice(0, max);
 }
 
-async function callGemini(prompt, apiKey) {
+async function callGemini(prompt, apiKey, timeoutMs = GEMINI_TIMEOUT_MS) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(GEMINI_ENDPOINT, {
       method: "POST",
@@ -308,6 +330,84 @@ async function callGemini(prompt, apiKey) {
     return text;
   } finally {
     clearTimeout(timer);
+  }
+}
+
+async function callGroq(prompt, apiKey) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GROQ_TIMEOUT_MS);
+  try {
+    const response = await fetch(GROQ_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+      }),
+      signal: controller.signal,
+    });
+
+    const raw = await response.text();
+    if (!response.ok) {
+      // A 429 here is the free plan's token or request cap. retry-after is the
+      // only part of the response worth keeping in the log line.
+      const retry = response.headers.get("retry-after");
+      throw new Error(
+        `Groq HTTP ${response.status}${retry ? ` (retry after ${retry}s)` : ""}: ${raw.slice(0, 300)}`
+      );
+    }
+
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      throw new Error("Groq returned a non-JSON response");
+    }
+
+    const choice = data && data.choices && data.choices[0];
+    const message = choice && choice.message;
+    const text = message && typeof message.content === "string" ? message.content.trim() : "";
+    if (!text) {
+      const reason = choice && choice.finish_reason ? ` (finish_reason: ${choice.finish_reason})` : "";
+      throw new Error(`Groq returned an empty answer${reason}`);
+    }
+    return text;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/* Gemini first, Groq second. A missing GROQ_API_KEY means no fallback at all, so
+   the Gemini error is rethrown untouched. When both fail, the two messages are
+   joined: aiFailure then classifies the pair (a Groq 429 means the free plan's
+   tokens ran out, which reads to the visitor as the site's quota). */
+async function callAI(prompt, env) {
+  try {
+    const budget = env.GROQ_API_KEY ? GEMINI_FALLBACK_TIMEOUT_MS : GEMINI_TIMEOUT_MS;
+    return { text: await callGemini(prompt, env.GEMINI_API_KEY, budget), provider: "gemini" };
+  } catch (geminiError) {
+    if (!env.GROQ_API_KEY) throw geminiError;
+    try {
+      return { text: await callGroq(prompt, env.GROQ_API_KEY), provider: "groq" };
+    } catch (groqError) {
+      const first = geminiError && geminiError.message ? geminiError.message : String(geminiError);
+      const second = groqError && groqError.message ? groqError.message : String(groqError);
+      throw new Error(`Gemini failed: ${first} | Groq fallback failed: ${second}`);
+    }
+  }
+}
+
+async function aiReply(prompt, env) {
+  try {
+    const answer = await callAI(prompt, env);
+    return json({ summary: answer.text, provider: answer.provider });
+  } catch (error) {
+    const failure = aiFailure(error);
+    return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
   }
 }
 
@@ -364,13 +464,7 @@ NEWS:
 ${input}`
     : `Summarize the following financial news article in 2 to 3 concise sentences in ${targetLang}:\n\n${input}`;
 
-  try {
-    const summary = await callGemini(prompt, env.GEMINI_API_KEY);
-    return json({ summary });
-  } catch (error) {
-    const failure = aiFailure(error);
-    return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
-  }
+  return aiReply(prompt, env);
 }
 
 async function handleExplainMove(request, env) {
@@ -401,13 +495,7 @@ Every one of these rules is mandatory:
 4. If no headline plausibly explains the move, do not speculate. Reply with exactly: "No headline today explains this move. Most discussed story: <title of the most relevant headline>. Watch the company's filings and disclosures for the reason."
 5. No preamble, no title, no disclaimer.`;
 
-  try {
-    const summary = await callGemini(prompt, env.GEMINI_API_KEY);
-    return json({ summary });
-  } catch (error) {
-    const failure = aiFailure(error);
-    return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
-  }
+  return aiReply(prompt, env);
 }
 
 /* A verdict on cached headlines, asked once per name per day. The prompt pins
@@ -442,13 +530,7 @@ Answer in ${targetLang}. Every rule is mandatory:
 5. If the headlines do not say enough about this company, first line must be "UNCLEAR - the cached headlines do not say enough about this company to judge." and nothing else.
 6. Never invent events, people or numbers. No preamble, no disclaimer, no investment advice.`;
 
-  try {
-    const summary = await callGemini(prompt, env.GEMINI_API_KEY);
-    return json({ summary });
-  } catch (error) {
-    const failure = aiFailure(error);
-    return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
-  }
+  return aiReply(prompt, env);
 }
 
 async function handleFundamentals(request, env) {
@@ -483,11 +565,5 @@ These rules are mandatory:
 - Quote at most two numbers, and keep each currency marker exactly as written.
 - No buy, sell or hold recommendation, no disclaimer, no title, no preamble.`;
 
-  try {
-    const summary = await callGemini(prompt, env.GEMINI_API_KEY);
-    return json({ summary });
-  } catch (error) {
-    const failure = aiFailure(error);
-    return json({ error: failure.message, code: failure.code, detail: failure.detail }, failure.status);
-  }
+  return aiReply(prompt, env);
 }

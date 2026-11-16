@@ -10,11 +10,17 @@ The static site in the repo root calls this Worker for four things:
 | `POST /ai-fundamentals` | Gemini read of a company's reported figures (growth, margins, cash, one strength and one weakness) |
 | `POST /ai-sentiment` | Gemini read of whether the cached headlines look good or bad for one share (good / bad / mixed / unclear) |
 
-`GET /health` returns `{"ok":true}` and is only used to verify a deploy.
+`GET /health` returns `{"ok":true}` and is only used to verify a deploy. When
+`GROQ_API_KEY` is set it also reports the fallback model, so a deploy can be
+checked without spending an AI call:
+
+```json
+{ "ok": true, "model": "gemini-3.5-flash-lite", "fallback": "openai/gpt-oss-20b" }
+```
 
 ## AI limits and error codes
 
-Two independent gates protect the Gemini key. The browser gate is for user
+Two independent gates protect the Gemini and Groq keys. The browser gate is for user
 experience; the Worker gate is the one that actually stops abuse, because
 anything in `localStorage` / `sessionStorage` can be cleared.
 
@@ -58,6 +64,40 @@ way. The client-side cap and cooldown in `app.js`/`js/shell.js` are the other
 line of defence, and they are per tab, so neither layer is a substitute for the
 other.
 
+### Groq fallback
+
+Gemini stays the first choice; Groq only answers when Gemini fails. Set the key
+once and the fallback turns itself on:
+
+```bash
+npx wrangler secret put GROQ_API_KEY
+```
+
+| Thing | Value |
+| --- | --- |
+| Endpoint | `https://api.groq.com/openai/v1/chat/completions` |
+| Model | `openai/gpt-oss-20b` |
+| Timeout | 12 s (`GROQ_TIMEOUT_MS`) |
+| Free plan | 30 RPM, 1,000 RPD, 8K TPM, 200K TPD, per organisation |
+| Price if outgrown | $0.075 / 1M input, $0.30 / 1M output |
+
+A Gemini quota error, overload or timeout is retried once on Groq before the
+reader sees a message. The browser aborts after 30 s (`AI_TIMEOUT_MS` in
+`js/feeds.js`) and the fallback only starts once Gemini has failed, so with a
+fallback key present Gemini's budget drops from 25 s to 14 s
+(`GEMINI_FALLBACK_TIMEOUT_MS`): 14 s + 12 s still fits inside the browser's
+window. Without the key, Gemini keeps the full 25 s. The Worker never falls back on its own rate limit: an IP
+that is throttled is refused before either provider is called, so the fallback
+cannot be used to spend more quota.
+
+The free plan's real ceiling is **8K tokens per minute**, roughly four of these
+calls a minute across all visitors, well below the 1,000 requests a day. If the
+site ever outgrows that, the output is a plain `429` with `retry-after`, which
+`aiFailure` turns into the `quota` code like a Gemini exhaustion.
+
+The success body carries which provider answered, so a fallback that is quietly
+carrying the site is visible in the response: `{ "summary": "…", "provider": "groq" }`.
+
 ### Error codes
 
 `POST /ai-summarize`, `/ai-explain-move`, `/ai-fundamentals` and `/ai-sentiment` return
@@ -67,7 +107,7 @@ present) carries the raw upstream message.
 | Code | HTTP | Meaning | Reader sees |
 | --- | --- | --- | --- |
 | `limit` | 429 | This IP exceeded the Worker limits above | "AI generation is paused because too much was requested…" |
-| `quota` | 429 | Gemini's own free-tier quota is exhausted | "The free AI quota is used up for now…" |
+| `quota` | 429 | Gemini's quota is exhausted and Groq could not answer either (or no `GROQ_API_KEY` is set) | "The free AI quota is used up for now…" |
 | `busy` | 503 | Gemini is overloaded or timed out | "The AI service is busy right now…" |
 | `upstream` | 502 | Any other Gemini failure | "Could not reach the AI service." |
 | — | 500 | `GEMINI_API_KEY` is not set | Setup error, never shown to readers |
@@ -132,7 +172,8 @@ Other changes:
 - 7 s upstream timeout, 5 MB response cap, `http(s)` only targets, `HEAD`
   support, and CORS headers on every response (including errors).
 - AI routes validate input, cap prompt size at 20 000 characters, time out after
-  25 s, and return the real Gemini error message instead of a generic 500.
+  25 s (14 s when the Groq fallback is configured), and return the real provider
+  error instead of a generic 500.
 
 ## Deploy
 
@@ -147,7 +188,10 @@ npx wrangler login
 # 2. One-time: store the Gemini key as a secret (never in a file)
 npx wrangler secret put GEMINI_API_KEY
 
-# 3. Ship it
+# 3. One-time and optional: the Groq fallback key, same treatment
+npx wrangler secret put GROQ_API_KEY
+
+# 4. Ship it
 npx wrangler deploy
 ```
 
@@ -186,7 +230,7 @@ Every response must carry `Access-Control-Allow-Origin: *`; check with
 
 ```bash
 cd worker
-npx wrangler dev --port 8787 --var GEMINI_API_KEY:dummy-key
+npx wrangler dev --port 8787 --var GEMINI_API_KEY:dummy-key --var GROQ_API_KEY:dummy-key
 ```
 
 `--var` is only for exercising the proxy locally; use
