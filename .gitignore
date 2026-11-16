@@ -12,3 +12,6 @@ node_modules/
 
 # Local screenshots from chat sessions
 /artifacts/
+
+# Local artifact from running the EDGAR watcher by hand
+/edgar-ipo-watch.md

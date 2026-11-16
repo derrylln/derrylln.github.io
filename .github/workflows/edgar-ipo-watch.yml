@@ -1,0 +1,77 @@
+name: EDGAR IPO watch
+
+# Watches SEC EDGAR for newly filed IPO registrations and opens one issue
+# listing them, so a new deal is noticed without anyone checking a calendar.
+# Free: it needs no API key, no Cloudflare account and no secrets, though
+# SEC_CONTACT is worth setting (see the note under env below).
+
+on:
+  schedule:
+    # Mondays 06:17 UTC — after Friday's filings are indexed, before the week starts.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days back to scan (1-31)"
+        required: false
+        default: "7"
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: edgar-ipo-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Scan EDGAR's daily form index
+        id: scan
+        env:
+          # SEC wants a contact address in the User-Agent. The default is a
+          # GitHub noreply address, which is fine; set a SEC_CONTACT secret if
+          # you want SEC's fair-access team to be able to reach you.
+          SEC_CONTACT: ${{ secrets.SEC_CONTACT || format('{0}@users.noreply.github.com', github.repository_owner) }}
+          DAYS: ${{ github.event.inputs.days || '7' }}
+        run: node .github/scripts/edgar-watch.mjs
+
+      - name: Open an issue when something was filed
+        if: steps.scan.outputs.count != '0' && steps.scan.outputs.count != ''
+        uses: actions/github-script@v7
+        env:
+          BODY_FILE: ${{ steps.scan.outputs.body_file }}
+          ISSUE_TITLE: ${{ steps.scan.outputs.title }}
+        with:
+          script: |
+            const fs = require("fs");
+            const title = process.env.ISSUE_TITLE;
+            const body = fs.readFileSync(process.env.BODY_FILE, "utf8");
+
+            // One issue per day window: reruns replace nothing, they skip.
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            if (open.data.some((issue) => issue.title === title)) {
+              core.info(`Already open: ${title}`);
+              return;
+            }
+
+            const created = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+            });
+            core.info(`Opened #${created.data.number}: ${title}`);
